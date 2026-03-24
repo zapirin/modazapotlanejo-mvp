@@ -36,5 +36,6 @@ export function calculateAutoDiscount(
         tier,
         discount: Math.min(discount, subtotal),
         finalTotal: Math.max(0, subtotal - discount),
+        originalTotal: subtotal,
     };
 }
