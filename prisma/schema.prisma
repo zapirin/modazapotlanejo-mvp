@@ -1,0 +1,680 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------
+// CONFIGURACIÓN DE TIENDA Y SUCURSALES (RBAC & MULTI-LOCATION & SETTINGS)
+// ---------------------------------------------------------
+
+model StoreSettings {
+  id        String   @id @default(cuid())
+  storeName String   @default("Mi Punto de Venta")
+  logoUrl   String?
+  taxId     String? // RFC o Identificador Fiscal
+  legalName String? // Razón Social
+  address   String? // Dirección Fiscal Global
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sellerId String? @unique
+  seller   User?   @relation("UserStoreSettings", fields: [sellerId], references: [id])
+}
+
+model MarketplaceSettings {
+  id                 String   @id @default(cuid())
+  title              String   @default("Moda Zapotlanejo")
+  heroImage          String? // Imagen de fondo de la landing
+  logoUrl            String? // Logo del sitio
+  adminEmail         String? // Correo del administrador
+  sellerLabel        String  @default("Vendedor") // Etiqueta configurable
+  featuredSellerIds  String[] // IDs de vendedores destacados
+  featuredProductIds String[] // IDs de productos destacados
+  plans              Json?    // Planes de suscripción configurables
+  updatedAt          DateTime @updatedAt
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  CASHIER
+  BUYER
+  SELLER
+}
+
+model StoreLocation {
+  id                   String   @id @default(cuid())
+  name                 String
+  address              String?
+  isWebStore           Boolean  @default(false)
+  ticketHeader         String? // Mensaje en la parte alta del ticket
+  ticketFooter         String? // Mensaje despues del total (políticas)
+  showDateAndTimeToPos Boolean  @default(true) // Reloj en Interfaz
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  users     User[]
+  inventory InventoryLevel[]
+  sessions  CashRegisterSession[]
+  sales     Sale[]
+  movements InventoryMovement[]
+
+  sellerId String?
+  seller   User?   @relation("SellerLocations", fields: [sellerId], references: [id])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?
+  name         String
+  role         Role     @default(CASHIER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Multi-tier/Buyer fields
+  isWholesale  Boolean @default(false)
+  businessName String?
+  sellerSlug   String? @unique // URL slug para el POS público ej: "kalexa-fashion" 
+  taxId        String? // Seller commission fields
+  commission Float? @default(5) // Percentage
+  fixedFee   Float? @default(0) // Monthly fee or per sale fixed
+
+  isActive       Boolean @default(true)
+  adminNotes     String? // Private notes for administrators
+  phone          String? // Phone number
+  whatsapp       String? // WhatsApp number (may differ from phone)
+  minOrderAmount Float? // Minimum order amount for seller (nullable = no minimum)
+  logoUrl        String? // Logo del vendedor
+  // Permisos del vendedor (configurados por el admin)
+  posEnabled     Boolean @default(true)  // Puede usar el POS
+  maxProducts    Int?                    // Límite de productos (null = sin límite)
+  posRequested   Boolean @default(false) // El vendedor ha solicitado acceso al POS
+  // Plan del vendedor
+  planName       String  @default("Básico")
+  maxLocations   Int     @default(1)     // Locaciones POS permitidas
+  maxCashiers    Int     @default(1)     // Cajeros permitidos
+  // Cajero: referencia al vendedor que lo creó
+  managedBySellerId    String?
+  managedBySeller      User?     @relation("SellerCashiers", fields: [managedBySellerId], references: [id])
+  cashiers             User[]    @relation("SellerCashiers")
+  denominations        CurrencyDenomination[] @relation("SellerDenominations")
+  allowedLocationIds   String[]  // IDs de locaciones donde puede operar el cajero
+  // Permisos del cajero
+  canRefund         Boolean @default(true)
+  canDiscount       Boolean @default(true)
+  canViewReports    Boolean @default(false)
+  canCreateProducts Boolean @default(false)
+
+  locationId String?
+  location   StoreLocation? @relation(fields: [locationId], references: [id])
+
+  sales               Sale[]
+  sessions            CashRegisterSession[]
+  clients             Client[]
+  priceTiers          PriceTier[]
+  paymentMethods      PaymentMethod[]
+  suppliers           Supplier[]
+  tags                Tag[]
+  photographyRequests PhotographyRequest[]
+
+  // Inverse relations for isolation
+  ownedLocations    StoreLocation[]   @relation("SellerLocations")
+  ownedBrands       Brand[]
+  ownedProducts     Product[]
+  buyerSales        Sale[]            @relation("BuyerSales")
+  buyerOrders       Order[]           @relation("BuyerOrders")
+  sellerOrders      Order[]           @relation("SellerOrders")
+  sellerSettlements Settlement[]      @relation("SellerSettlements")
+  sentMessages      Message[]         @relation("SentMessages")
+  receivedMessages  Message[]         @relation("ReceivedMessages")
+  wishlistItems     Wishlist[]
+  shippingAddresses ShippingAddress[]
+  storeSettings     StoreSettings?    @relation("UserStoreSettings")
+
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
+}
+
+// ---------------------------------------------------------
+// PRODUCTOS E INVENTARIO
+// ---------------------------------------------------------
+
+model Category {
+  id            String        @id @default(cuid())
+  name          String
+  slug          String        @unique
+  image         String?
+  products      Product[]
+  subcategories Subcategory[]
+}
+
+model Subcategory {
+  id         String    @id @default(cuid())
+  name       String
+  slug       String
+  category   Category  @relation(fields: [categoryId], references: [id])
+  categoryId String
+  products   Product[]
+
+  @@unique([categoryId, slug])
+  @@unique([categoryId, name])
+}
+
+model Brand {
+  id       String    @id @default(cuid())
+  name     String
+  products Product[]
+
+  sellerId String?
+  seller   User?   @relation(fields: [sellerId], references: [id])
+
+  @@unique([sellerId, name])
+}
+
+model Product {
+  id                   String  @id @default(cuid())
+  name                 String
+  description          String?
+  price                Float // Base price (Retail)
+  wholesalePrice       Float? // Optional wholesale price
+  cost                 Float? // Cost price for utility calculation
+  sellByPackage        Boolean @default(false)
+  packageSize          Int? // e.g., 6, 12 pieces
+  wholesaleComposition Json? // User defined variant breakdown for combos
+
+  // New Fields based on requirements
+  brand   Brand?  @relation(fields: [brandId], references: [id])
+  brandId String?
+
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+  supplierId String?
+
+  tags Tag[]
+
+  sellerId String?
+  seller   User?   @relation(fields: [sellerId], references: [id])
+
+  category      Category?    @relation(fields: [categoryId], references: [id])
+  categoryId    String?
+  subcategory   Subcategory? @relation(fields: [subcategoryId], references: [id])
+  subcategoryId String?
+
+  isOnline Boolean @default(true)
+  isPOS    Boolean @default(true)
+  isActive Boolean @default(true)
+
+  images         String[] // Array of image URLs
+  sku            String?   @unique
+  variantOptions Json? // Definition of dynamic attributes (e.g. [{"name": "Color", "values": ["Red"]}, {"name": "Size", "values": ["XL"]}])
+  variants       Variant[]
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  wishlists Wishlist[]
+}
+
+model Variant {
+  id                 String              @id @default(cuid())
+  product            Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId          String
+  color              String?
+  size               String?
+  attributes         Json? // Dynamic attributes values (e.g. {"Color": "Red", "Size": "XL"})
+  stock              Int                 @default(0) // Legacy or Total Stock
+  sku                String?             @unique
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  saleItems          SaleItem[]
+  inventoryMovements InventoryMovement[]
+  inventoryLevels    InventoryLevel[]
+  orderItems         OrderItem[]
+  wishlistItems      Wishlist[]
+
+  @@index([productId])
+}
+
+model Supplier {
+  id          String  @id @default(cuid())
+  name        String
+  contactName String?
+  email       String?
+  phone       String?
+  address     String?
+  notes       String?
+  isActive    Boolean @default(true)
+
+  sellerId String?
+  seller   User?   @relation(fields: [sellerId], references: [id])
+
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([sellerId, name])
+}
+
+model Tag {
+  id       String    @id @default(cuid())
+  name     String
+  products Product[]
+
+  sellerId String?
+  seller   User?   @relation(fields: [sellerId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([sellerId, name])
+}
+
+model InventoryLevel {
+  id         String        @id @default(cuid())
+  variantId  String
+  variant    Variant       @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  locationId String
+  location   StoreLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  stock      Int           @default(0)
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([variantId, locationId])
+}
+
+model InventoryMovement {
+  id        String  @id @default(cuid())
+  variant   Variant @relation(fields: [variantId], references: [id])
+  variantId String
+  type      String // "SALE", "RETURN", "RESTOCK", "ADJUSTMENT"
+  quantity  Int // Positive for restock, negative for sale
+  reason    String?
+
+  locationId String?
+  location   StoreLocation? @relation(fields: [locationId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------
+// CLIENTES (CRM BÁSICO)
+// ---------------------------------------------------------
+
+model Client {
+  id          String   @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  storeCredit Float    @default(0) // Positive = balance in favor, Negative = debt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sellerId String?
+  seller   User?   @relation(fields: [sellerId], references: [id])
+
+  sales                Sale[]
+  storeAccountPayments StoreAccountPayment[]
+}
+
+// ---------------------------------------------------------
+// CONFIGURACIÓN DE POS
+// ---------------------------------------------------------
+
+model PriceTier {
+  id                     String   @id @default(cuid())
+  name                   String
+  discountPercentage     Float?
+  costPlusPercentage     Float?
+  costPlusFixed          Float?
+  defaultPriceMinusFixed Float?
+  order                  Int      @default(0)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  // Cantidad mínima de piezas para activar el nivel
+  minQuantity            Int?     @default(0)
+
+  // Controles de aplicación
+  autoApplyMarketplace   Boolean  @default(false) // Se aplica automáticamente en marketplace
+  autoApplyPOS           Boolean  @default(false) // Se aplica automáticamente en POS al cumplir cantidad
+  manualPOS              Boolean  @default(true)  // Disponible para selección manual en POS
+
+  sellerId String?
+  seller   User?   @relation(fields: [sellerId], references: [id])
+
+  sales Sale[]
+  orders Order[]
+}
+
+model PaymentMethod {
+  id        String   @id @default(cuid())
+  name      String
+  type      String // "CASH", "CARD", "TRANSFER", "OTHER"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sellerId String?
+  seller   User?   @relation(fields: [sellerId], references: [id])
+
+  sales                Sale[]
+  layawayPayments      LayawayPayment[]
+  storeAccountPayments StoreAccountPayment[]
+
+  @@unique([sellerId, name])
+}
+
+// ---------------------------------------------------------
+// VENTAS Y CORTE DE CAJA
+// ---------------------------------------------------------
+
+model CashRegisterSession {
+  id             String    @id @default(cuid())
+  openedAt       DateTime  @default(now())
+  closedAt       DateTime?
+  openingBalance Float     @default(0)
+  closingBalance Float?
+  status         String    @default("OPEN") // "OPEN", "CLOSED"
+
+  locationId String?
+  location   StoreLocation? @relation(fields: [locationId], references: [id])
+  openedById String?
+  openedBy   User?          @relation(fields: [openedById], references: [id])
+
+  movements            CashMovement[]
+  sales                Sale[]
+  layawayPayments      LayawayPayment[]
+  storeAccountPayments StoreAccountPayment[]
+}
+
+model CashMovement {
+  id        String              @id @default(cuid())
+  session   CashRegisterSession @relation(fields: [sessionId], references: [id])
+  sessionId String
+  type      String // "IN" (Ingreso), "OUT" (Egreso/Retiro)
+  amount    Float
+  reason    String
+  createdAt DateTime            @default(now())
+}
+
+model Sale {
+  id            String @id @default(cuid())
+  receiptNumber Int    @default(autoincrement()) // For PDV1001, PDV1002 format
+  total         Float
+  subtotal      Float  @default(0)
+  discount      Float  @default(0) // Total discount applied
+
+  // Relations
+  client   Client? @relation(fields: [clientId], references: [id])
+  clientId String?
+
+  priceTier   PriceTier? @relation(fields: [priceTierId], references: [id])
+  priceTierId String?
+
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  paymentMethodId String?
+
+  cashSession   CashRegisterSession? @relation(fields: [cashSessionId], references: [id])
+  cashSessionId String?
+
+  locationId String?
+  location   StoreLocation? @relation(fields: [locationId], references: [id])
+
+  sellerId String?
+  seller   User?   @relation(fields: [sellerId], references: [id])
+
+  buyerId String?
+  buyer   User?   @relation("BuyerSales", fields: [buyerId], references: [id])
+
+  items SaleItem[]
+
+  status String @default("COMPLETED") // "COMPLETED", "REFUNDED", "SUSPENDED", "LAYAWAY", "STORE_CREDIT"
+
+  // Layaway specific fields
+  amountPaid Float     @default(0) // How much has been paid so far
+  balance    Float     @default(0) // Remaining balance (total - amountPaid)
+  dueDate    DateTime? // When the layaway expires or the final payment is due
+
+  layawayPayments LayawayPayment[]
+
+  notes     String?  // Nota breve para ventas suspendidas sin cliente
+  createdAt DateTime @default(now())
+}
+
+model LayawayPayment {
+  id              String               @id @default(cuid())
+  sale            Sale                 @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  saleId          String
+  amount          Float
+  paymentMethod   PaymentMethod?       @relation(fields: [paymentMethodId], references: [id])
+  paymentMethodId String?
+  cashSession     CashRegisterSession? @relation(fields: [cashSessionId], references: [id])
+  cashSessionId   String?
+  createdAt       DateTime             @default(now())
+}
+
+model SaleItem {
+  id        String  @id @default(cuid())
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  saleId    String
+  variant   Variant @relation(fields: [variantId], references: [id])
+  variantId String
+  quantity  Int
+  price     Float // Price at time of sale (after any manual adjustments)
+}
+
+model StoreAccountPayment {
+  id       String  @id @default(cuid())
+  client   Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String
+  amount   Float // Amount paid (usually reduces debt)
+  type     String  @default("PAYMENT") // "PAYMENT" (abono), "CHARGE" (cargo manual)
+  notes    String?
+
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  paymentMethodId String?
+
+  cashSession   CashRegisterSession? @relation(fields: [cashSessionId], references: [id])
+  cashSessionId String?
+
+  createdAt DateTime @default(now())
+}
+
+model PhotographyRequest {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  itemCount     Int
+  estimatedDate DateTime
+  notes         String?
+  status        String   @default("PENDING") // PENDING, APPROVED, COMPLETED, CANCELLED
+  createdAt     DateTime @default(now())
+}
+
+model SellerApplication {
+  id           String   @id @default(cuid())
+  storeName    String
+  contactName  String
+  email        String   @unique
+  phone        String
+  category     String
+  storeAddress String?  // Domicilio de la tienda o fábrica
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
+}
+
+// ---------------------------------------------------------
+// PEDIDOS ONLINE (MARKETPLACE)
+// ---------------------------------------------------------
+
+model Order {
+  id          String @id @default(cuid())
+  orderNumber Int    @default(autoincrement())
+
+  buyer   User   @relation("BuyerOrders", fields: [buyerId], references: [id])
+  buyerId String
+
+  seller   User   @relation("SellerOrders", fields: [sellerId], references: [id])
+  sellerId String
+
+  status      String  @default("PENDING") // PENDING, PENDING_PAYMENT, PAID, ACCEPTED, REJECTED, COMPLETED, CANCELLED
+  total       Float
+  discount    Float   @default(0) // Descuento aplicado por nivel de precio
+  notes       String? // Buyer notes for the seller
+  sellerNotes String? // Seller response notes
+
+  // Nivel de precio aplicado automáticamente
+  priceTier   PriceTier? @relation(fields: [priceTierId], references: [id])
+  priceTierId String?
+
+  items OrderItem[]
+
+  // Shipping
+  shippingAddress     ShippingAddress? @relation(fields: [shippingAddressId], references: [id])
+  shippingAddressId   String?
+  shippingCost        Float            @default(0)
+  skydropxRateId      String? // ID del rate seleccionado por el comprador
+  skydropxQuotationId String? // ID de la cotización asociada
+  shipment            Shipment?
+
+  // Commissions and Settlement
+  commissionRate   Float @default(0) // Percentage at time of order
+  commissionAmount Float @default(0) // Calculated amount (total * rate / 100)
+  sellerEarnings   Float @default(0) // Net for seller (total - commission)
+  isSettled        Boolean @default(false)
+  settlement       Settlement? @relation(fields: [settlementId], references: [id])
+  settlementId     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     String
+  variant     Variant @relation(fields: [variantId], references: [id])
+  variantId   String
+  quantity    Int
+  price       Float // Price at time of order
+  productName String // Denormalized for display
+  color       String?
+  size        String?
+}
+
+// ---------------------------------------------------------
+// ENVÍOS Y LOGÍSTICA
+// ---------------------------------------------------------
+
+model ShippingAddress {
+  id        String  @id @default(cuid())
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+  label     String  @default("Principal") // "Casa", "Oficina", etc.
+  name      String  // Nombre del destinatario
+  phone     String
+  street    String  // Calle y número
+  colonia   String  // Colonia
+  city      String
+  state     String
+  zip       String  // Código postal (5 dígitos México)
+  country   String  @default("MX")
+  isDefault Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  orders Order[]
+}
+
+model Shipment {
+  id             String   @id @default(cuid())
+  order          Order    @relation(fields: [orderId], references: [id])
+  orderId        String   @unique
+  carrier        String   // "fedex", "estafeta", "dhl", etc.
+  serviceName    String   // "Express", "Standard", etc.
+  trackingNumber String?
+  labelUrl       String?  // URL de la guía PDF
+  skydropxId     String?  // ID de Skydropx para consultas
+  shippingCost   Float
+  status         String   @default("PENDING") // PENDING, LABEL_CREATED, IN_TRANSIT, DELIVERED
+  estimatedDays  Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Settlement {
+  id              String   @id @default(cuid())
+  seller          User     @relation("SellerSettlements", fields: [sellerId], references: [id])
+  sellerId        String
+  amount          Float // Total amount paid to seller
+  commissionTotal Float // Total commissions deducted
+  ordersCount     Int
+  status          String   @default("PENDING") // PENDING, COMPLETED, CANCELLED
+  paymentMethod   String? // Transfer, Cash, etc.
+  reference       String? // Reference number or note
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  orders Order[]
+}
+
+// ---------------------------------------------------------
+// MENSAJERÍA INTERNA
+// ---------------------------------------------------------
+
+model Message {
+  id         String   @id @default(cuid())
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+  senderId   String
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  receiverId String
+  content    String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([senderId, receiverId])
+  @@index([receiverId, isRead])
+}
+
+// ---------------------------------------------------------
+// WISHLIST / FAVORITOS
+// ---------------------------------------------------------
+
+model Wishlist {
+  id                  String   @id @default(cuid())
+  user                User     @relation(fields: [userId], references: [id])
+  userId              String
+  product             Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId           String
+  createdAt           DateTime @default(now())
+  variant             Variant? @relation(fields: [variantId], references: [id])
+  variantId           String?
+  notifyOnRestock     Boolean  @default(true)
+  notifyOnPriceDown   Boolean  @default(true)
+  lastKnownPrice      Float?
+  lastKnownStock      Int?
+
+  @@unique([userId, productId])
+}
+
+model CurrencyDenomination {
+  id       String @id @default(cuid())
+  label    String // "$1,000", "$500", etc.
+  value    Float  // 1000, 500, 200...
+  sortOrder Int   @default(0)
+  sellerId String
+  seller   User   @relation("SellerDenominations", fields: [sellerId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([sellerId, value])
+}

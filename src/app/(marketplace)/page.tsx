@@ -1,0 +1,341 @@
+import React from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { getLatestProducts, getFeaturedCategories, getBestSellers, getNewArrivals, getLandingStats } from './actions';
+import { getMarketplaceSettings, getFeaturedContent } from '@/app/actions/marketplace';
+import { headers } from 'next/headers';
+import { getBrandConfig } from '@/lib/brand';
+import { getSessionUser } from '@/app/actions/auth';
+import RecentlyViewed from '@/components/RecentlyViewed';
+import ProductCard from './ProductCard';
+
+
+export default async function LandingPage() {
+    const headersList = await headers();
+    const host = headersList.get('host');
+    const brand = getBrandConfig(host);
+    
+    const [products, categories, user, bestSellers, newArrivals, stats, siteSettings, featured] = await Promise.all([
+        getLatestProducts(),
+        getFeaturedCategories(),
+        getSessionUser(),
+        getBestSellers(4),
+        getNewArrivals(8),
+        getLandingStats(),
+        getMarketplaceSettings(),
+        getFeaturedContent(),
+    ]);
+    const heroImageUrl = siteSettings?.data?.heroImage || null;
+
+    // @ts-ignore
+    const isWholesale = !!user?.isWholesale;
+    const nowMs = Date.now(); // calculado una sola vez en servidor
+    const month = new Date(nowMs).getMonth(); // usa el mismo nowMs para consistencia
+
+    // Temporada — calculada en servidor con nowMs fijo
+    const season = month >= 2 && month <= 4 ? { name: 'Primavera 2026', emoji: '🌸', color: 'from-rose-500 to-pink-500' }
+        : month >= 5 && month <= 7 ? { name: 'Verano 2026', emoji: '☀️', color: 'from-orange-500 to-amber-500' }
+        : month >= 8 && month <= 10 ? { name: 'Otoño 2026', emoji: '🍂', color: 'from-amber-600 to-orange-600' }
+        : { name: 'Invierno 2026', emoji: '❄️', color: 'from-blue-600 to-indigo-600' };
+
+    return (
+        <div className="flex flex-col">
+
+            {/* ── HERO ── */}
+            <section className="relative h-[90vh] flex items-end overflow-hidden" suppressHydrationWarning>
+                <div className="absolute inset-0 z-0">
+                    {heroImageUrl ? (
+                        heroImageUrl.startsWith('data:') || heroImageUrl.startsWith('http') || heroImageUrl.startsWith('/') ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={heroImageUrl} alt={`${brand.name} Fashion`}
+                                className="w-full h-full object-cover brightness-[0.85] dark:brightness-[0.7]"
+                                style={{ position: 'absolute', inset: 0 }}
+                                suppressHydrationWarning />
+                        ) : null
+                    ) : (
+                        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-900">
+                            <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, #3b82f6 0%, transparent 50%), radial-gradient(circle at 80% 20%, #8b5cf6 0%, transparent 40%), radial-gradient(circle at 60% 80%, #ec4899 0%, transparent 35%)' }} />
+                        </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/40 to-transparent" />
+                </div>
+
+                <div className="max-w-7xl mx-auto px-6 relative z-10 w-full pb-32 pt-24">
+                    <div className="max-w-2xl space-y-8">
+                        {/* Banner temporada */}
+                        <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r ${season.color} text-white text-xs font-black uppercase tracking-widest shadow-lg`}>
+                            <span>{season.emoji}</span>
+                            <span>Tendencias {season.name}</span>
+                            {stats.newThisWeek > 0 && (
+                                <span className="ml-1 px-2 py-0.5 bg-white/20 rounded-full text-[9px]">
+                                    +{stats.newThisWeek} esta semana
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="space-y-4">
+                            <h2 className="text-blue-400 font-black uppercase tracking-[0.3em] text-sm">{brand.name} Fashion Marketplace</h2>
+                            <h1 className="text-6xl md:text-8xl font-black tracking-tighter leading-[0.9] text-foreground">
+                                LA MODA <br />QUE MUEVE A <br />
+                                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">MÉXICO.</span>
+                            </h1>
+                        </div>
+                        <p className="text-xl text-gray-500 font-medium max-w-lg leading-relaxed">
+                            {brand.description} Calidad premium, precios de fábrica y envíos a todo el país.
+                        </p>
+                        <div className="flex flex-wrap gap-4 pt-4">
+                            <Link href="/catalog" className="px-8 py-4 bg-blue-600 text-white rounded-full text-sm font-black uppercase tracking-widest hover:bg-blue-700 hover:scale-105 transition-all shadow-xl shadow-blue-500/20">
+                                Explorar Catálogo
+                            </Link>
+
+                        </div>
+                    </div>
+                </div>
+
+                {/* Stats reales en tiempo real */}
+                <div className="absolute bottom-0 left-0 right-0 z-10 bg-background/80 backdrop-blur-md border-t border-border">
+                    <div className="max-w-7xl mx-auto px-6 py-5">
+                        <div className="flex flex-wrap gap-8 md:gap-16 items-center text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl font-black text-foreground">{stats.totalSellers}</span>
+                                <span>Vendedores<br/>verificados</span>
+                            </div>
+                            <div className="flex items-center gap-3 md:border-l md:border-border md:pl-16">
+                                <span className="text-2xl font-black text-foreground">{stats.totalProducts.toLocaleString()}</span>
+                                <span>Productos<br/>en catálogo</span>
+                            </div>
+                            <div className="flex items-center gap-3 md:border-l md:border-border md:pl-16">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                                <span className="text-2xl font-black text-emerald-500">{stats.newThisWeek}</span>
+                                <span>Nuevos<br/>esta semana</span>
+                            </div>
+                            <div className="flex items-center gap-3 md:border-l md:border-border md:pl-16">
+                                <span className="text-2xl font-black text-foreground">{stats.totalOrders.toLocaleString()}</span>
+                                <span>Pedidos<br/>completados</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* ── TICKER NOVEDADES ── */}
+            {newArrivals.length > 0 && (
+                <div className="bg-blue-600 text-white py-3 overflow-hidden">
+                    <div className="flex gap-12 animate-[marquee_30s_linear_infinite] whitespace-nowrap" suppressHydrationWarning>
+                        {[...newArrivals, ...newArrivals].map((p: any, i: number) => (
+                            <Link key={i} href={`/catalog/${p.id}`}
+                                className="flex items-center gap-3 hover:opacity-80 transition-opacity shrink-0">
+                                <span className="text-[9px] font-black uppercase tracking-widest opacity-60">NUEVO</span>
+                                <span className="text-xs font-bold uppercase tracking-wide">{p.name}</span>
+                                {p.wholesalePrice && (
+                                    <span className="text-[9px] font-black opacity-80">${p.wholesalePrice}/pz</span>
+                                )}
+                                <span className="opacity-30">·</span>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ── CATEGORÍAS ── */}
+            <section className="py-24 max-w-7xl mx-auto px-6 w-full">
+                <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+                    <div className="space-y-2">
+                        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">Nuestras Secciones</h3>
+                        <h2 className="text-4xl font-black tracking-tight uppercase">EXPLORA POR CATEGORÍA</h2>
+                    </div>
+                    <Link href="/categories" className="text-sm font-black uppercase tracking-widest border-b-2 border-blue-600 pb-1 hover:text-blue-600 transition-colors">
+                        Ver todas las categorías
+                    </Link>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                    {[...categories].sort((a: any, b: any) => {
+                            const ORDER = ['Damas', 'Caballeros', 'Niños', 'Accesorios', 'Calzado'];
+                            const ai = ORDER.indexOf(a.name);
+                            const bi = ORDER.indexOf(b.name);
+                            if (ai === -1 && bi === -1) return a.name.localeCompare(b.name);
+                            if (ai === -1) return 1;
+                            if (bi === -1) return -1;
+                            return ai - bi;
+                        }).map((category: any, idx: number) => {
+                        const gradients = ['from-rose-500 to-orange-500','from-blue-500 to-indigo-500','from-emerald-500 to-teal-500','from-violet-500 to-purple-500'];
+                        return (
+                            <Link key={category.id} href={`/catalog?category=${category.slug}`}
+                                className="group relative h-56 rounded-3xl overflow-hidden bg-gray-100 dark:bg-gray-900 border border-border transition-all hover:scale-[1.02] hover:shadow-2xl">
+                                {category.image ? (
+                                    <Image src={category.image} alt={category.name} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
+                                ) : (
+                                    <div className={`absolute inset-0 bg-gradient-to-br ${gradients[idx % gradients.length]} opacity-20 group-hover:opacity-40 transition-opacity`} />
+                                )}
+                                <div className="absolute inset-x-0 bottom-0 p-10 z-10">
+                                    <h4 className="text-xl font-black text-white drop-shadow-lg group-hover:-translate-y-1 transition-transform duration-500 leading-none mb-1">{category.name}</h4>
+                                    <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest">{category._count.products} Productos</span>
+                                </div>
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+                            </Link>
+                        );
+                    })}
+                </div>
+            </section>
+
+            {/* ── ÚLTIMOS MODELOS ── */}
+            <section className="py-24 bg-gray-50 dark:bg-gray-900/30 w-full">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+                        <div className="space-y-2">
+                            <h3 className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">Lo más reciente</h3>
+                            <h2 className="text-4xl font-black tracking-tight uppercase">NUEVOS MODELOS</h2>
+                        </div>
+                        <Link href="/catalog" className="px-6 py-3 bg-white dark:bg-gray-800 border border-border rounded-full text-[10px] font-black uppercase tracking-widest hover:shadow-lg transition-all">
+                            Ver todo el catálogo
+                        </Link>
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
+                        {products.map((product: any) => (
+                            <ProductCard key={`latest-${product.id}`} product={product} user={user} isWholesale={isWholesale} nowMs={nowMs} />
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* ── NOVEDADES + MÁS VENDIDOS ── */}
+            <section className="py-20 max-w-7xl mx-auto px-6 w-full">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+                    <div className="space-y-10">
+                        <div className="flex items-center justify-between border-b pb-6 border-border">
+                            <div className="space-y-1">
+                                <h2 className="text-3xl font-black tracking-tighter uppercase">Novedades</h2>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Lo más reciente en el catálogo</p>
+                            </div>
+                            <Link href="/catalog?sort=newest" className="px-5 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all">Ver todo</Link>
+                        </div>
+                        <div className="grid grid-cols-2 gap-6">
+                            {newArrivals.slice(0, 4).map((product: any) => (
+                                <ProductCard key={`new-${product.id}`} product={product} user={user} isWholesale={isWholesale} nowMs={nowMs} />
+                            ))}
+                        </div>
+                    </div>
+                    <div className="space-y-10">
+                        <div className="flex items-center justify-between border-b pb-6 border-border">
+                            <div className="space-y-1">
+                                <h2 className="text-3xl font-black tracking-tighter uppercase">Más Vendidos</h2>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Lo favorito de la comunidad</p>
+                            </div>
+                            <Link href="/catalog?sort=best_selling" className="px-5 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all">Explorar</Link>
+                        </div>
+                        <div className="grid grid-cols-2 gap-6">
+                            {bestSellers.map((product: any) => (
+                                <ProductCard key={`best-${product.id}`} product={product} user={user} isWholesale={isWholesale} badge="🔥 Hot" nowMs={nowMs} />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* ── DESTACADOS — Vendedores y Productos ── */}
+            {(featured.sellers.length > 0 || featured.products.length > 0) && (
+                <section className="py-16 max-w-7xl mx-auto px-6 w-full space-y-12">
+                    {featured.sellers.length > 0 && (
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-500">⭐ Vendedores Destacados</p>
+                                    <h2 className="text-3xl font-black tracking-tight uppercase">Fabricantes Verificados</h2>
+                                </div>
+                                <Link href="/vendors" className="text-xs font-black uppercase tracking-widest text-blue-600 hover:underline">Ver todos →</Link>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                                {(featured.sellers as any[]).map((seller: any) => (
+                                    <Link key={seller.id} href={`/vendor/${seller.id}`}
+                                        className="group p-6 bg-card rounded-3xl border border-border hover:border-amber-300 hover:shadow-xl transition-all hover:-translate-y-1 text-center space-y-3">
+                                        <div className="w-16 h-16 mx-auto rounded-2xl overflow-hidden border border-border bg-gray-50 flex items-center justify-center">
+                                            {seller.logoUrl ? (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img src={seller.logoUrl} alt={seller.businessName || seller.name}
+                                                    className="w-full h-full object-contain" suppressHydrationWarning />
+                                            ) : (
+                                                <span className="text-2xl font-black text-gray-400">
+                                                    {(seller.businessName || seller.name).charAt(0)}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <p className="font-black text-sm text-foreground uppercase group-hover:text-amber-600 transition-colors">
+                                                {seller.businessName || seller.name}
+                                            </p>
+                                            <p className="text-[10px] text-gray-400 font-bold">{seller._count.ownedProducts} productos</p>
+                                        </div>
+                                        <span className="inline-block px-2 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-600 text-[8px] font-black uppercase tracking-widest rounded-full">
+                                            ⭐ Destacado
+                                        </span>
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {featured.products.length > 0 && (
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">⭐ Productos Destacados</p>
+                                    <h2 className="text-3xl font-black tracking-tight uppercase">Selección del Editor</h2>
+                                </div>
+                                <Link href="/catalog" className="text-xs font-black uppercase tracking-widest text-blue-600 hover:underline">Ver catálogo →</Link>
+                            </div>
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
+                                {(featured.products as any[]).map((product: any) => (
+                                    <ProductCard key={`feat-${product.id}`} product={product} user={user} isWholesale={isWholesale} badge="⭐" nowMs={nowMs} />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </section>
+            )}
+
+            {/* ── BANNER TEMPORADA ── */}
+            <section className="py-16 px-6">
+                <div className="max-w-7xl mx-auto">
+                    <div className={`relative rounded-[40px] overflow-hidden bg-gradient-to-r ${season.color} p-12 md:p-20 text-white`}>
+                        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+                            <div className="space-y-4 max-w-lg">
+                                <p className="text-sm font-black uppercase tracking-[0.3em] opacity-80">Temporada Actual</p>
+                                <h2 className="text-5xl font-black tracking-tight">{season.emoji} {season.name}</h2>
+                                <p className="text-white/80 font-medium leading-relaxed">
+                                    Descubre los modelos más vendidos de esta temporada. Precios de mayoreo, envío rápido a todo México.
+                                </p>
+                            </div>
+                            <Link href="/catalog" className="shrink-0 px-10 py-5 bg-white text-gray-900 rounded-full text-sm font-black uppercase tracking-widest hover:scale-105 transition-all shadow-2xl">
+                                Ver Colección
+                            </Link>
+                        </div>
+                        {/* Decoración */}
+                        <div className="absolute -right-20 -top-20 w-80 h-80 rounded-full bg-white/10" />
+                        <div className="absolute -right-10 -bottom-10 w-48 h-48 rounded-full bg-white/5" />
+                    </div>
+                </div>
+            </section>
+
+            <RecentlyViewed />
+
+            {/* ── CTA ── */}
+            <section className="py-32 max-w-7xl mx-auto px-6 w-full text-center space-y-12">
+                <div className="max-w-3xl mx-auto space-y-6">
+                    <h2 className="text-5xl font-black tracking-tight italic uppercase">
+                        ¿LISTO PARA ESCALAR TU <span className="text-blue-600">NEGOCIO?</span>
+                    </h2>
+                    <p className="text-lg text-gray-500 font-medium leading-relaxed">
+                        Ya seas un comprador buscando las mejores tendencias o un fabricante queriendo digitalizar sus ventas mayoristas, {brand.name} es tu aliado.
+                    </p>
+                </div>
+                <div className="flex flex-wrap justify-center gap-6">
+                    <Link href="/register/buyer" className="px-10 py-5 bg-foreground text-background rounded-full text-sm font-black uppercase tracking-widest hover:scale-105 transition-all shadow-2xl shadow-foreground/20">
+                        Crear Cuenta Comprador
+                    </Link>
+                    <Link href="/register/seller" className="px-10 py-5 bg-white dark:bg-gray-800 border-2 border-border rounded-full text-sm font-black uppercase tracking-widest hover:border-blue-600 transition-all">
+                        Registrar mi Tienda
+                    </Link>
+                </div>
+            </section>
+        </div>
+    );
+}

@@ -1,0 +1,82 @@
+@import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #0f172a; /* Slate 900 for better contrast */
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --border: #e2e8f0;
+  --input: #f8fafc;
+}
+
+.dark {
+  --background: #0b0f19; /* Much darker midnight navy blue */
+  --foreground: #e2e8f0; /* Softer slate light text vs stark white */
+  --card: #111827; /* Rich dark card (Gray 900) */
+  --card-foreground: #f1f5f9;
+  --border: #1f2937; /* Very subtle borders */
+  --input: #111827;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Ensure inputs are always visible and distinct */
+input, textarea, select {
+  background-color: var(--input);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+
+input::placeholder, textarea::placeholder {
+  color: #94a3b8; /* Slate 400 */
+}
+
+/* Base custom classes for the Premium dark mode feel where absolute bg-white classes might be hardcoded */
+.dark .bg-white {
+    background-color: var(--card) !important;
+}
+
+.dark .text-gray-900, .dark .text-black {
+    color: var(--foreground) !important;
+}
+
+.dark .text-gray-800 {
+    color: #cbd5e1 !important; /* Slate 300 */
+}
+
+.dark .text-gray-600, .dark .text-gray-500 {
+    color: #94a3b8 !important; /* Slate 400 */
+}
+
+.dark .border-gray-200, .dark .border-gray-300 {
+    border-color: var(--border) !important;
+}
+
+.dark .bg-gray-50, .dark .bg-gray-100 {
+    background-color: rgba(30, 41, 59, 0.4) !important; /* Transparent Slate 800 */
+}
+
+.dark .hover\:bg-gray-50:hover, .dark .hover\:bg-gray-100:hover {
+    background-color: rgba(30, 41, 59, 0.8) !important;
+}
+
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}

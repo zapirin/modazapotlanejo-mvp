@@ -1,0 +1,47 @@
+import { Resend } from 'resend';
+
+const getResend = () => {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('RESEND_API_KEY is not defined in production');
+    }
+    return null;
+  }
+  return new Resend(apiKey);
+};
+
+export async function sendEmail({
+  to,
+  subject,
+  html,
+}: {
+  to: string | string[];
+  subject: string;
+  html: string;
+}) {
+  try {
+    const resend = getResend();
+    if (!resend) {
+      console.warn('Skipping email send: RESEND_API_KEY not configured.');
+      return { success: false, error: 'Email service not configured' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: 'Moda Zapotlanejo <onboarding@resend.dev>',
+      to,
+      subject,
+      html,
+    });
+
+    if (error) {
+      console.error('Error sending email:', error);
+      return { success: false, error };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('Email utility error:', error);
+    return { success: false, error };
+  }
+}
