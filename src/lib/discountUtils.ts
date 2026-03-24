@@ -5,7 +5,7 @@ export function calculateAutoDiscount(
     tiers: any[],
     totalQuantity: number,
     subtotal: number
-): { tier: any; discount: number; finalTotal: number } | null {
+): { tier: any; discount: number; finalTotal: number; originalTotal: number } | null {
     if (!tiers || tiers.length === 0 || totalQuantity === 0) return null;
 
     const eligible = tiers
