@@ -100,12 +100,20 @@ export async function getProductsSearch(query: string) {
 export async function deleteSellerPermanently(sellerId: string) {
     try {
         await checkAdmin();
-        // Desactivar en lugar de borrar para preservar historial de pedidos
-        await prisma.user.update({
-            where: { id: sellerId },
-            data: { isActive: false, role: 'BUYER' as any }
-        });
+        // Desactivar vendedor y ocultar todos sus productos del marketplace
+        await prisma.$transaction([
+            prisma.user.update({
+                where: { id: sellerId },
+                data: { isActive: false, role: 'BUYER' as any }
+            }),
+            prisma.product.updateMany({
+                where: { sellerId },
+                data: { isOnline: false }
+            }),
+        ]);
         revalidatePath('/admin/costs');
+        revalidatePath('/');
+        revalidatePath('/catalog');
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -116,7 +124,7 @@ export async function getInactiveSellers() {
     try {
         await checkAdmin();
         return await (prisma.user as any).findMany({
-            where: { isActive: false, role: { in: ['SELLER', 'BUYER'] }, planName: { not: null } },
+            where: { isActive: false },
             select: {
                 id: true, name: true, email: true, businessName: true,
                 isActive: true, planName: true, createdAt: true,
@@ -130,8 +138,20 @@ export async function getInactiveSellers() {
 export async function deleteSellerForever(sellerId: string) {
     try {
         await checkAdmin();
-        // Eliminar completamente — usar con cuidado
+        // Eliminar productos primero (cascade no siempre alcanza todo)
+        const products = await prisma.product.findMany({
+            where: { sellerId },
+            select: { id: true }
+        });
+        for (const p of products) {
+            // Borrar variantes e ítems relacionados antes del producto
+            await prisma.variant.deleteMany({ where: { productId: p.id } });
+            await prisma.product.delete({ where: { id: p.id } });
+        }
+        // Eliminar el vendedor
         await prisma.user.delete({ where: { id: sellerId } });
+        revalidatePath('/');
+        revalidatePath('/catalog');
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -141,11 +161,20 @@ export async function deleteSellerForever(sellerId: string) {
 export async function reactivateSeller(sellerId: string) {
     try {
         await checkAdmin();
-        await (prisma.user as any).update({
-            where: { id: sellerId },
-            data: { isActive: true, role: 'SELLER' }
-        });
+        // Reactivar vendedor y volver a publicar sus productos
+        await prisma.$transaction([
+            (prisma.user as any).update({
+                where: { id: sellerId },
+                data: { isActive: true, role: 'SELLER' }
+            }),
+            prisma.product.updateMany({
+                where: { sellerId },
+                data: { isOnline: true }
+            }),
+        ]);
         revalidatePath('/admin/marketplace');
+        revalidatePath('/');
+        revalidatePath('/catalog');
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message };
