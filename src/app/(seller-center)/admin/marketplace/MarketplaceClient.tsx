@@ -499,7 +499,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                     )}
 
                     {/* Lista de activos */}
-                    {sellerSubTab === 'active' && <div className="flex items-center justify-between flex-wrap gap-3">
+                    {sellerSubTab === 'active' && <><div className="flex items-center justify-between flex-wrap gap-3">
                         <h2 className="text-xl font-black">🏭 Gestión de Vendedores</h2>
                         <div className="flex items-center gap-3">
                             <span className="text-xs text-gray-400 font-bold">{sellers.length} vendedores</span>
@@ -648,7 +648,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                         </div>
                     ))}
                 </div>
-            </div>}
+            </>}
             )}
 
             {/* ── TAB: DESTACADOS ── */}
