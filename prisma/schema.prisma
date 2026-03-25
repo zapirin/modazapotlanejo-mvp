@@ -50,6 +50,24 @@ model MarketplaceSettings {
   updatedAt          DateTime @updatedAt
 }
 
+
+model BrandConfig {
+  id                 String   @id @default(cuid())
+  domain             String   @unique // ej: modazapotlanejo.com
+  name               String   // Nombre de la marca
+  tagline            String?  // Slogan
+  description        String?  // Descripción para el hero
+  logoUrl            String?  // Logo
+  heroImage          String?  // Imagen de fondo del hero
+  primaryColor       String   @default("blue") // blue, emerald, violet, amber, rose
+  featuredSellerIds  String[] // Vendedores destacados para este dominio
+  featuredProductIds String[] // Productos destacados para este dominio
+  featuredCategories String[] // Categorías a mostrar primero
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
 enum Role {
   ADMIN
   MANAGER
