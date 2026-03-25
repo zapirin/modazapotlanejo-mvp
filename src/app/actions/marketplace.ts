@@ -202,6 +202,9 @@ export async function updateMarketplaceSettingsFull(data: {
     sellerLabel?: string;
     featuredSellerIds?: string[];
     featuredProductIds?: string[];
+    privacyUrl?: string;
+    termsUrl?: string;
+    photographyPrices?: any;
 }) {
     try {
         await checkAdmin();

@@ -44,6 +44,9 @@ model MarketplaceSettings {
   featuredSellerIds  String[] // IDs de vendedores destacados
   featuredProductIds String[] // IDs de productos destacados
   plans              Json?    // Planes de suscripción configurables
+  privacyUrl         String?  // URL de la página de privacidad
+  termsUrl           String?  // URL de la página de términos
+  photographyPrices  Json?    // Precios del servicio de fotografía
   updatedAt          DateTime @updatedAt
 }
 

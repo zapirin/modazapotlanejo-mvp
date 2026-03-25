@@ -76,8 +76,8 @@ export default async function MarketplaceLayout({
                     <div className="space-y-4">
                         <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600">Legal</h4>
                         <ul className="space-y-2 text-sm text-gray-500 font-bold uppercase tracking-widest">
-                            <li><Link href="/privacy" className="hover:text-blue-600 transition-colors">Privacidad</Link></li>
-                            <li><Link href="/terms" className="hover:text-blue-600 transition-colors">Términos</Link></li>
+                            <li><Link href={(brand as any).privacyUrl || "/privacy"} className="hover:text-blue-600 transition-colors">Privacidad</Link></li>
+                            <li><Link href={(brand as any).termsUrl || "/terms"} className="hover:text-blue-600 transition-colors">Términos</Link></li>
                         </ul>
                     </div>
 

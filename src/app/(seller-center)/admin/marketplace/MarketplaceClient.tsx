@@ -63,6 +63,14 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
 
     // Tab: Admin
     const [adminEmail, setAdminEmail] = useState(initialSettings?.adminEmail || '');
+    const [privacyUrl, setPrivacyUrl] = useState(initialSettings?.privacyUrl || '');
+    const [termsUrl, setTermsUrl] = useState(initialSettings?.termsUrl || '');
+    const [photoPrices, setPhotoPrices] = useState(initialSettings?.photographyPrices || [
+        { paquete: 'Básico', piezas: '1–10 piezas', precio: '$800', includes: 'Fondo blanco · 1 toma/pieza' },
+        { paquete: 'Estándar', piezas: '11–30 piezas', precio: '$1,500', includes: 'Fondo blanco · 2 tomas/pieza' },
+        { paquete: 'Pro', piezas: '31–60 piezas', precio: '$2,500', includes: 'Fondo blanco+ambiente · 3 tomas/pieza' },
+        { paquete: 'Full', piezas: '60+ piezas', precio: 'Cotizar', includes: 'Personalizado · Modelo incluido' },
+    ]);
 
     const handleSavePlans = async () => {
         setSavingPlans(true);
@@ -158,7 +166,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
 
     const handleSaveSite = async () => {
         setLoading(true);
-        const res = await updateMarketplaceSettingsFull({ title, heroImage, logoUrl, sellerLabel });
+        const res = await updateMarketplaceSettingsFull({ title, heroImage, logoUrl, sellerLabel, privacyUrl, termsUrl });
         if (res.success) { toast.success('Configuración guardada'); setSettings(res.data); }
         else toast.error(res.error || 'Error al guardar');
         setLoading(false);
@@ -307,6 +315,22 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                             </label>
                             <input type="text" value={sellerLabel} onChange={e => setSellerLabel(e.target.value)}
                                 className="w-full px-4 py-3 bg-input border border-border rounded-xl font-bold focus:ring-2 focus:ring-blue-500/50 outline-none" />
+                        </div>
+
+                        {/* URLs legales */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">URL Política de Privacidad</label>
+                                <input type="url" value={privacyUrl} onChange={e => setPrivacyUrl(e.target.value)}
+                                    placeholder="https://... o /privacy"
+                                    className="w-full px-4 py-3 bg-input border border-border rounded-xl font-bold text-sm focus:ring-2 focus:ring-blue-500/50 outline-none" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">URL Términos y Condiciones</label>
+                                <input type="url" value={termsUrl} onChange={e => setTermsUrl(e.target.value)}
+                                    placeholder="https://... o /terms"
+                                    className="w-full px-4 py-3 bg-input border border-border rounded-xl font-bold text-sm focus:ring-2 focus:ring-blue-500/50 outline-none" />
+                            </div>
                         </div>
 
                         {/* Hero image */}
@@ -534,27 +558,46 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                         <h2 className="text-xl font-black">📸 Solicitudes de Fotografía</h2>
                     </div>
 
-                    {/* Precios del servicio */}
+                    {/* Precios del servicio — editables */}
                     <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
-                        <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">💰 Precios del Servicio de Fotografía</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {[
-                                { paquete: 'Básico', piezas: '1–10 piezas', precio: '$800', includes: 'Fondo blanco · 1 toma/pieza' },
-                                { paquete: 'Estándar', piezas: '11–30 piezas', precio: '$1,500', includes: 'Fondo blanco · 2 tomas/pieza' },
-                                { paquete: 'Pro', piezas: '31–60 piezas', precio: '$2,500', includes: 'Fondo blanco+ambiente · 3 tomas/pieza' },
-                                { paquete: 'Full', piezas: '60+ piezas', precio: 'Cotizar', includes: 'Personalizado · Modelo incluido' },
-                            ].map(pkg => (
-                                <div key={pkg.paquete} className="p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900/30 rounded-2xl space-y-2">
-                                    <p className="font-black text-blue-700 dark:text-blue-300 uppercase text-xs tracking-widest">{pkg.paquete}</p>
-                                    <p className="text-xl font-black text-foreground">{pkg.precio}</p>
-                                    <p className="text-[10px] font-bold text-blue-600">{pkg.piezas}</p>
-                                    <p className="text-[10px] text-gray-500">{pkg.includes}</p>
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">💰 Precios del Servicio</h3>
+                            <button onClick={async () => {
+                                const res = await updateMarketplaceSettingsFull({ photographyPrices: photoPrices });
+                                if (res.success) toast.success('Precios guardados');
+                                else toast.error('Error al guardar');
+                            }} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition">
+                                💾 Guardar precios
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {photoPrices.map((pkg: any, i: number) => (
+                                <div key={i} className="p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900/30 rounded-2xl space-y-2">
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="text-[9px] font-black uppercase text-gray-400">Paquete</label>
+                                            <input value={pkg.paquete} onChange={e => setPhotoPrices((prev: any[]) => prev.map((p, j) => j === i ? {...p, paquete: e.target.value} : p))}
+                                                className="w-full px-2 py-1.5 bg-white dark:bg-gray-900 border border-border rounded-lg text-xs font-black focus:ring-1 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-black uppercase text-gray-400">Precio</label>
+                                            <input value={pkg.precio} onChange={e => setPhotoPrices((prev: any[]) => prev.map((p, j) => j === i ? {...p, precio: e.target.value} : p))}
+                                                className="w-full px-2 py-1.5 bg-white dark:bg-gray-900 border border-border rounded-lg text-xs font-black focus:ring-1 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-[9px] font-black uppercase text-gray-400">Rango de piezas</label>
+                                        <input value={pkg.piezas} onChange={e => setPhotoPrices((prev: any[]) => prev.map((p, j) => j === i ? {...p, piezas: e.target.value} : p))}
+                                            className="w-full px-2 py-1.5 bg-white dark:bg-gray-900 border border-border rounded-lg text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[9px] font-black uppercase text-gray-400">Incluye</label>
+                                        <input value={pkg.includes} onChange={e => setPhotoPrices((prev: any[]) => prev.map((p, j) => j === i ? {...p, includes: e.target.value} : p))}
+                                            className="w-full px-2 py-1.5 bg-white dark:bg-gray-900 border border-border rounded-lg text-xs font-medium focus:ring-1 focus:ring-blue-500 outline-none" />
+                                    </div>
                                 </div>
                             ))}
                         </div>
-                        <p className="text-[10px] text-gray-400 font-medium">
-                            Estos precios son de referencia. Puedes cotizar directamente con el vendedor desde la solicitud.
-                        </p>
                     </div>
 
                     <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">Solicitudes Recibidas</h3>

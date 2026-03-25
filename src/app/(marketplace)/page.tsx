@@ -74,13 +74,13 @@ export default async function LandingPage() {
                         </div>
 
                         <div className="space-y-4">
-                            <h2 className="text-blue-400 font-black uppercase tracking-[0.3em] text-sm">{brand.name} Fashion Marketplace</h2>
-                            <h1 className="text-6xl md:text-8xl font-black tracking-tighter leading-[0.9] text-foreground">
+                            <h2 className="text-blue-400 font-black uppercase tracking-[0.2em] text-xs md:text-sm drop-shadow-sm">{brand.name} Fashion Marketplace</h2>
+                            <h1 className="text-5xl md:text-8xl font-black tracking-tighter leading-[0.9] text-foreground drop-shadow-sm">
                                 LA MODA <br />QUE MUEVE A <br />
                                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">MÉXICO.</span>
                             </h1>
                         </div>
-                        <p className="text-xl text-gray-500 font-medium max-w-lg leading-relaxed">
+                        <p className="text-lg md:text-xl text-foreground/80 dark:text-white/80 font-medium max-w-lg leading-relaxed drop-shadow-sm">
                             {brand.description} Calidad premium, precios de fábrica y envíos a todo el país.
                         </p>
                         <div className="flex flex-wrap gap-4 pt-4">
