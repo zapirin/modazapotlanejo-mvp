@@ -15,6 +15,7 @@ export default function SellerRegistrationForm({ plans }: { plans: any[] }) {
         categories: [] as string[],
         storeAddress: '',
     });
+    const [selectedPlan, setSelectedPlan] = useState('');
 
     const categories = [
         { id: 'damas', name: 'Damas' },
@@ -48,11 +49,12 @@ export default function SellerRegistrationForm({ plans }: { plans: any[] }) {
             ...formData,
             category: formData.categories,
             storeAddress: formData.storeAddress,
+            planName: selectedPlan,
         });
 
         if (result.success) {
             setStatus({ type: 'success', message: '¡Solicitud enviada! Nos pondremos en contacto contigo pronto.' });
-            setFormData({ storeName: '', contactName: '', email: '', phone: '', categories: [], storeAddress: '' });
+            setFormData({ storeName: '', contactName: '', email: '', phone: '', categories: [], storeAddress: '' }); setSelectedPlan('');
         } else {
             setStatus({ type: 'error', message: result.error || 'Ocurrió un error.' });
         }
@@ -64,7 +66,7 @@ export default function SellerRegistrationForm({ plans }: { plans: any[] }) {
             <div className="w-full max-w-2xl space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
                 <div className="space-y-4 text-center">
                     <h1 className="text-6xl font-black tracking-tighter uppercase italic text-foreground">Vende en el Marketplace</h1>
-                    <p className="text-blue-600 font-bold uppercase tracking-[0.3em] text-xs">Escala tu fábrica al siguiente nivel digital</p>
+                    <p className="text-blue-600 font-bold uppercase tracking-[0.3em] text-xs">Escala tu fábrica/Tienda al siguiente nivel digital</p>
                 </div>
 
                 {/* Planes */}
@@ -75,7 +77,9 @@ export default function SellerRegistrationForm({ plans }: { plans: any[] }) {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {(plans || []).map((plan: any) => (
-                            <div key={plan.name} className={`relative p-6 rounded-3xl text-white bg-gradient-to-br ${plan.color} ${plan.highlight ? 'ring-4 ring-blue-400 ring-offset-2' : ''} space-y-3`}>
+                            <div key={plan.name}
+                                onClick={() => setSelectedPlan(plan.name)}
+                                className={`relative p-6 rounded-3xl text-white bg-gradient-to-br ${plan.color} cursor-pointer transition-all ${selectedPlan === plan.name ? 'ring-4 ring-white ring-offset-4 ring-offset-gray-100 scale-[1.02]' : plan.highlight ? 'ring-4 ring-blue-400 ring-offset-2' : 'opacity-90 hover:opacity-100'} space-y-3`}>
                                 {plan.badge && (
                                     <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-white text-gray-900 text-[9px] font-black uppercase tracking-widest rounded-full shadow-lg whitespace-nowrap">
                                         {plan.badge}

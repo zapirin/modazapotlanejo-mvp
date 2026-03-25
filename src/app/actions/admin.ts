@@ -15,6 +15,7 @@ export async function applyAsSeller(data: {
     phone: string;
     category: string[];
     storeAddress?: string;
+    planName?: string;
 }) {
     try {
                 const existing = await prisma.sellerApplication.findUnique({
@@ -51,6 +52,7 @@ export async function applyAsSeller(data: {
                     <p><strong>Teléfono:</strong> ${data.phone}</p>
                     <p><strong>Categorías:</strong> ${data.category.join(', ')}</p>
                     <p><strong>Domicilio:</strong> ${data.storeAddress || 'No especificado'}</p>
+                    <p><strong>Plan solicitado:</strong> ${data.planName || 'No especificado'}</p>
                     <div style="margin-top: 30px;">
                         <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/admin/applications" 
                            style="background: #2563eb; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">

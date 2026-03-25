@@ -17,6 +17,8 @@ import {
     savePlans,
     getPlans,
 } from '@/app/actions/marketplace';
+import { getSellerApplications, updateApplicationStatus } from '@/app/(seller-center)/admin/applications/actions';
+import { requestPasswordReset } from '@/app/actions/auth';
 import { validateImageFile } from '@/lib/uploadImage';
 import { processImage } from '@/lib/imageUtils';
 import { toast } from 'sonner';
@@ -47,6 +49,8 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     const [sellers, setSellers] = useState<any[]>([]);
     const [loadingSellers, setLoadingSellers] = useState(false);
     const [compressing, setCompressing] = useState(false);
+    const [applications, setApplications] = useState<any[]>([]);
+    const [loadingApps, setLoadingApps] = useState(false);
     const [plans, setPlans] = useState<any[]>([]);
     const [savingPlans, setSavingPlans] = useState(false);
     const [compressionResult, setCompressionResult] = useState<{savedMB: string; compressed: number} | null>(null);
@@ -118,7 +122,11 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     // useEffect va DESPUÉS de declarar las funciones para evitar hoisting issues
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
-        if (activeTab === 'sellers') loadSellers();
+        if (activeTab === 'sellers') {
+            loadSellers();
+            setLoadingApps(true);
+            getSellerApplications().then(apps => { setApplications(apps); setLoadingApps(false); });
+        }
         if (activeTab === 'featured') loadAllSellers();
         if (activeTab === 'photos') loadPhotos();
         if (activeTab === 'plans') {
@@ -366,7 +374,49 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
 
             {/* ── TAB: VENDEDORES ── */}
             {activeTab === 'sellers' && (
-                <div className="space-y-4">
+                <div className="space-y-6">
+
+                    {/* Solicitudes pendientes */}
+                    {(applications.length > 0 || loadingApps) && (
+                        <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-2xl p-5 space-y-4">
+                            <h3 className="text-sm font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                                📬 Solicitudes Pendientes
+                                <span className="px-2 py-0.5 bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 rounded-full text-[9px] font-black">{applications.length}</span>
+                            </h3>
+                            {loadingApps ? (
+                                <div className="flex justify-center p-4"><div className="w-6 h-6 border-4 border-amber-200 border-t-amber-600 rounded-full animate-spin" /></div>
+                            ) : applications.map((app: any) => (
+                                <div key={app.id} className="bg-white dark:bg-gray-900 rounded-xl p-4 flex flex-col md:flex-row md:items-center gap-4 border border-border">
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-black text-foreground">{app.storeName}</p>
+                                        <p className="text-xs text-gray-500">{app.contactName} · {app.email} · {app.phone}</p>
+                                        {app.storeAddress && <p className="text-xs text-blue-500">📍 {app.storeAddress.replace('|', ' — ')}</p>}
+                                        <p className="text-[10px] text-gray-400 mt-1">{app.category} {app.planName ? `· Plan: ${app.planName}` : ''}</p>
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                        <button onClick={async () => {
+                                            await updateApplicationStatus(app.id, 'APPROVED');
+                                            setApplications(prev => prev.filter(a => a.id !== app.id));
+                                            toast.success(`${app.storeName} aprobado`);
+                                        }} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black hover:bg-emerald-700 transition">
+                                            ✓ Aprobar
+                                        </button>
+                                        <button onClick={async () => {
+                                            await updateApplicationStatus(app.id, 'REJECTED');
+                                            setApplications(prev => prev.filter(a => a.id !== app.id));
+                                            toast.success('Solicitud rechazada');
+                                        }} className="px-4 py-2 bg-red-100 dark:bg-red-900/20 text-red-600 rounded-xl text-xs font-black hover:bg-red-200 transition">
+                                            ✕ Rechazar
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                            {!loadingApps && applications.length === 0 && (
+                                <p className="text-xs text-amber-600 font-bold">No hay solicitudes pendientes.</p>
+                            )}
+                        </div>
+                    )}
+
                     <div className="flex items-center justify-between flex-wrap gap-3">
                         <h2 className="text-xl font-black">🏭 Gestión de Vendedores</h2>
                         <div className="flex items-center gap-3">
@@ -415,10 +465,20 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                         )}
                                     </div>
                                 </div>
-                                <button onClick={() => handleDeleteSeller(seller)}
-                                    className="px-3 py-1.5 text-xs font-black text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl hover:bg-red-100 transition">
-                                    Desactivar
-                                </button>
+                                <div className="flex gap-2">
+                                    <button onClick={async () => {
+                                        if (!confirm(`¿Enviar email de reseteo de contraseña a ${seller.email}?`)) return;
+                                        const res = await requestPasswordReset(seller.email);
+                                        if (res.success) toast.success('Email de reseteo enviado');
+                                        else toast.error('Error al enviar email');
+                                    }} className="px-3 py-1.5 text-xs font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-100 transition">
+                                        🔑 Resetear acceso
+                                    </button>
+                                    <button onClick={() => handleDeleteSeller(seller)}
+                                        className="px-3 py-1.5 text-xs font-black text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl hover:bg-red-100 transition">
+                                        Desactivar
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="space-y-3 pt-3 border-t border-border">

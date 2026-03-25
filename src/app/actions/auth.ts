@@ -191,6 +191,15 @@ export async function registerBuyer(data: {
     isWholesale: boolean;
     businessName?: string;
     taxId?: string;
+    shippingAddress?: {
+        name: string;
+        phone: string;
+        street: string;
+        colonia: string;
+        city: string;
+        state: string;
+        zip: string;
+    };
 }) {
     try {
         const normalizedEmail = data.email.toLowerCase().trim();
@@ -214,6 +223,24 @@ export async function registerBuyer(data: {
                 taxId: data.taxId
             }
         });
+
+        // Guardar dirección de envío si se proporcionó
+        if (data.shippingAddress?.street && data.shippingAddress?.city) {
+            await prisma.shippingAddress.create({
+                data: {
+                    userId: user.id,
+                    label: 'Principal',
+                    name: data.shippingAddress.name || data.name,
+                    phone: data.shippingAddress.phone || '',
+                    street: data.shippingAddress.street,
+                    colonia: data.shippingAddress.colonia || '',
+                    city: data.shippingAddress.city,
+                    state: data.shippingAddress.state,
+                    zip: data.shippingAddress.zip || '',
+                    isDefault: true,
+                }
+            });
+        }
 
         // Email de bienvenida (async, no bloquea el registro)
         sendWelcomeToBuyer({
