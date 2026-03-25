@@ -23,7 +23,6 @@ import {
 import { updateApplicationStatus } from '@/app/(seller-center)/admin/applications/actions';
 import { getSellerApplications } from '@/app/actions/admin';
 import { requestPasswordReset } from '@/app/actions/auth';
-import { getAllBrands, saveBrandConfig } from '@/app/actions/brand';
 import { validateImageFile } from '@/lib/uploadImage';
 import { processImage } from '@/lib/imageUtils';
 import { toast } from 'sonner';
@@ -34,7 +33,6 @@ const TABS = [
     { key: 'featured', label: '⭐ Destacados', icon: '⭐' },
     { key: 'photos', label: '📸 Fotografía', icon: '📸' },
     { key: 'plans', label: '💼 Planes', icon: '💼' },
-    { key: 'brands', label: '🌐 Marcas', icon: '🌐' },
     { key: 'admin', label: '⚙️ Mi Cuenta', icon: '⚙️' },
 ];
 
@@ -78,8 +76,6 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     const [adminEmail, setAdminEmail] = useState(initialSettings?.adminEmail || '');
     const [privacyUrl, setPrivacyUrl] = useState(initialSettings?.privacyUrl || '');
     const [termsUrl, setTermsUrl] = useState(initialSettings?.termsUrl || '');
-    const [brands, setBrands] = useState<any[]>([]);
-    const [editingBrand, setEditingBrand] = useState<any>(null);
     const [photoPrices, setPhotoPrices] = useState(initialSettings?.photographyPrices || [
         { paquete: 'Básico', piezas: '1–10 piezas', precio: '$800', includes: 'Fondo blanco · 1 toma/pieza' },
         { paquete: 'Estándar', piezas: '11–30 piezas', precio: '$1,500', includes: 'Fondo blanco · 2 tomas/pieza' },
@@ -125,10 +121,8 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
 
     const loadSellers = async () => {
         setLoadingSellers(true);
-        try {
-            const data = await getSellersWithPermissions();
-            setSellers(data || []);
-        } catch { setSellers([]); }
+        const data = await getSellersWithPermissions();
+        setSellers(data);
         setLoadingSellers(false);
     };
 
@@ -138,23 +132,14 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
         if (activeTab === 'sellers') {
             loadSellers();
             setLoadingApps(true);
-            getSellerApplications().then(apps => { setApplications(apps || []); setLoadingApps(false); }).catch(() => setLoadingApps(false));
+            getSellerApplications().then(apps => { setApplications(apps); setLoadingApps(false); });
             setLoadingInactive(true);
-            getInactiveSellers().then(list => { setInactiveSellers(list || []); setLoadingInactive(false); }).catch(() => setLoadingInactive(false));
+            getInactiveSellers().then(list => { setInactiveSellers(list); setLoadingInactive(false); });
         }
         if (activeTab === 'featured') loadAllSellers();
         if (activeTab === 'photos') loadPhotos();
-        if (activeTab === 'brands') {
-            const defaultBrands = [
-                { domain: 'modazapotlanejo.com', name: 'Moda Zapotlanejo', tagline: 'Fashion Marketplace', description: 'El marketplace mayorista líder de Zapotlanejo.', primaryColor: 'blue', logoUrl: '', heroImage: '' },
-                { domain: 'zonadelvestir.com', name: 'Zona del Vestir', tagline: 'Tu Zona Mayorista', description: 'La zona mayorista de moda más grande de México.', primaryColor: 'violet', logoUrl: '', heroImage: '' },
-            ];
-            getAllBrands().then(b => {
-                setBrands(b && b.length > 0 ? b : defaultBrands);
-            }).catch(() => setBrands(defaultBrands));
-        }
         if (activeTab === 'plans') {
-            getPlans().then(p => setPlans(p || [])).catch(() => setPlans([]));
+            getPlans().then(setPlans);
         }
     }, [activeTab]);
 
@@ -871,79 +856,6 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                             ))}
                         </div>
                     )}
-                </div>
-            )}
-
-            {/* ── TAB: MARCAS ── */}
-            {activeTab === 'brands' && (
-                <div className="space-y-6">
-                    <div>
-                        <h2 className="text-xl font-black">🌐 Configuración de Marcas</h2>
-                        <p className="text-xs text-gray-400 mt-1">Personaliza cada dominio — logo, nombre, colores y contenido destacado.</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {brands.map((brand: any, idx: number) => (
-                            <div key={brand.domain} className="bg-card border border-border rounded-2xl p-6 space-y-4">
-                                {/* Preview header */}
-                                <div className={`p-4 rounded-2xl ${brand.primaryColor === 'violet' ? 'bg-violet-600' : brand.primaryColor === 'emerald' ? 'bg-emerald-600' : brand.primaryColor === 'amber' ? 'bg-amber-600' : brand.primaryColor === 'rose' ? 'bg-rose-600' : 'bg-blue-600'} text-white`}>
-                                    <p className="font-black text-lg">{brand.name}</p>
-                                    <p className="text-xs opacity-80">{brand.tagline}</p>
-                                    <p className="text-[10px] opacity-60 mt-1">{brand.domain}</p>
-                                </div>
-                                {/* Campos */}
-                                <div className="space-y-3">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-black uppercase text-gray-400">Nombre</label>
-                                            <input value={brand.name}
-                                                onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? {...b, name: e.target.value} : b))}
-                                                className="w-full px-3 py-2 bg-input border border-border rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-black uppercase text-gray-400">Slogan</label>
-                                            <input value={brand.tagline || ''}
-                                                onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? {...b, tagline: e.target.value} : b))}
-                                                className="w-full px-3 py-2 bg-input border border-border rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[9px] font-black uppercase text-gray-400">Descripción (hero)</label>
-                                        <textarea rows={2} value={brand.description || ''}
-                                            onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? {...b, description: e.target.value} : b))}
-                                            className="w-full px-3 py-2 bg-input border border-border rounded-xl text-sm font-medium resize-none focus:ring-2 focus:ring-blue-500 outline-none" />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-black uppercase text-gray-400">URL del Logo</label>
-                                            <input value={brand.logoUrl || ''}
-                                                onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? {...b, logoUrl: e.target.value} : b))}
-                                                placeholder="https://... o /logo.png"
-                                                className="w-full px-3 py-2 bg-input border border-border rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-black uppercase text-gray-400">Color principal</label>
-                                            <select value={brand.primaryColor || 'blue'}
-                                                onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? {...b, primaryColor: e.target.value} : b))}
-                                                className="w-full px-3 py-2 bg-input border border-border rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none">
-                                                <option value="blue">🔵 Azul</option>
-                                                <option value="violet">🟣 Violeta</option>
-                                                <option value="emerald">🟢 Esmeralda</option>
-                                                <option value="amber">🟡 Ámbar</option>
-                                                <option value="rose">🌸 Rosa</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-                                <button onClick={async () => {
-                                    const res = await saveBrandConfig(brand);
-                                    if (res.success) toast.success(`Marca ${brand.name} guardada`);
-                                    else toast.error(res.error || 'Error al guardar');
-                                }} className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition">
-                                    💾 Guardar {brand.name}
-                                </button>
-                            </div>
-                        ))}
-                    </div>
                 </div>
             )}
 
