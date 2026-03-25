@@ -16,6 +16,9 @@ import {
     assignSellerSlug,
     savePlans,
     getPlans,
+    getInactiveSellers,
+    deleteSellerForever,
+    reactivateSeller,
 } from '@/app/actions/marketplace';
 import { updateApplicationStatus } from '@/app/(seller-center)/admin/applications/actions';
 import { getSellerApplications } from '@/app/actions/admin';
@@ -52,6 +55,9 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     const [compressing, setCompressing] = useState(false);
     const [applications, setApplications] = useState<any[]>([]);
     const [loadingApps, setLoadingApps] = useState(false);
+    const [sellerSubTab, setSellerSubTab] = useState<'active' | 'inactive'>('active');
+    const [inactiveSellers, setInactiveSellers] = useState<any[]>([]);
+    const [loadingInactive, setLoadingInactive] = useState(false);
     const [plans, setPlans] = useState<any[]>([]);
     const [savingPlans, setSavingPlans] = useState(false);
     const [compressionResult, setCompressionResult] = useState<{savedMB: string; compressed: number} | null>(null);
@@ -127,6 +133,8 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
             loadSellers();
             setLoadingApps(true);
             getSellerApplications().then(apps => { setApplications(apps); setLoadingApps(false); });
+            setLoadingInactive(true);
+            getInactiveSellers().then(list => { setInactiveSellers(list); setLoadingInactive(false); });
         }
         if (activeTab === 'featured') loadAllSellers();
         if (activeTab === 'photos') loadPhotos();
@@ -423,7 +431,75 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                         </div>
                     )}
 
-                    <div className="flex items-center justify-between flex-wrap gap-3">
+                    {/* Subpestañas activos / desactivados */}
+                    <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl w-fit">
+                        <button onClick={() => setSellerSubTab('active')}
+                            className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${sellerSubTab === 'active' ? 'bg-white dark:bg-gray-700 text-foreground shadow-sm' : 'text-gray-500 hover:text-foreground'}`}>
+                            ✅ Activos ({sellers.length})
+                        </button>
+                        <button onClick={() => setSellerSubTab('inactive')}
+                            className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${sellerSubTab === 'inactive' ? 'bg-white dark:bg-gray-700 text-foreground shadow-sm' : 'text-gray-500 hover:text-foreground'}`}>
+                            🚫 Desactivados ({inactiveSellers.length})
+                        </button>
+                    </div>
+
+                    {/* Lista de desactivados */}
+                    {sellerSubTab === 'inactive' && (
+                        <div className="space-y-4">
+                            {loadingInactive ? (
+                                <div className="flex justify-center p-10"><div className="w-8 h-8 border-4 border-gray-200 border-t-gray-600 rounded-full animate-spin" /></div>
+                            ) : inactiveSellers.length === 0 ? (
+                                <div className="p-12 text-center bg-card border border-dashed border-border rounded-3xl opacity-50">
+                                    <p className="text-3xl mb-2">✅</p>
+                                    <p className="text-sm font-black uppercase tracking-widest text-gray-400">No hay vendedores desactivados</p>
+                                </div>
+                            ) : inactiveSellers.map((seller: any) => (
+                                <div key={seller.id} className="bg-card border border-border rounded-2xl p-5 flex flex-col md:flex-row md:items-center gap-4 opacity-70 hover:opacity-100 transition">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-9 h-9 rounded-xl bg-gray-200 dark:bg-gray-700 flex items-center justify-center font-black text-sm text-gray-500">
+                                                {(seller.businessName || seller.name || '?').charAt(0).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <p className="font-black text-foreground">{seller.businessName || seller.name}</p>
+                                                <p className="text-xs text-gray-400">{seller.email}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-3 mt-2 text-[10px] text-gray-400 font-bold">
+                                            <span>{seller._count?.ownedProducts || 0} productos</span>
+                                            {seller.planName && <span>· Plan: {seller.planName}</span>}
+                                            <span>· Desactivado</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                        <button onClick={async () => {
+                                            const res = await reactivateSeller(seller.id);
+                                            if (res.success) {
+                                                setInactiveSellers(prev => prev.filter(s => s.id !== seller.id));
+                                                loadSellers();
+                                                toast.success(`${seller.businessName || seller.name} reactivado`);
+                                            } else toast.error(res.error || 'Error');
+                                        }} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black hover:bg-emerald-700 transition">
+                                            ✓ Reactivar
+                                        </button>
+                                        <button onClick={async () => {
+                                            if (!confirm(`¿ELIMINAR PERMANENTEMENTE a ${seller.businessName || seller.name}? Se borrarán TODOS sus datos. Esta acción es irreversible.`)) return;
+                                            const res = await deleteSellerForever(seller.id);
+                                            if (res.success) {
+                                                setInactiveSellers(prev => prev.filter(s => s.id !== seller.id));
+                                                toast.success('Vendedor eliminado permanentemente');
+                                            } else toast.error(res.error || 'No se pudo eliminar — tiene datos relacionados');
+                                        }} className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black hover:bg-red-700 transition">
+                                            🗑 Eliminar
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Lista de activos */}
+                    {sellerSubTab === 'active' && <div className="flex items-center justify-between flex-wrap gap-3">
                         <h2 className="text-xl font-black">🏭 Gestión de Vendedores</h2>
                         <div className="flex items-center gap-3">
                             <span className="text-xs text-gray-400 font-bold">{sellers.length} vendedores</span>
@@ -572,6 +648,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                         </div>
                     ))}
                 </div>
+            </div>}
             )}
 
             {/* ── TAB: DESTACADOS ── */}

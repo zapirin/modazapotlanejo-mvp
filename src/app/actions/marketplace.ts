@@ -112,6 +112,46 @@ export async function deleteSellerPermanently(sellerId: string) {
     }
 }
 
+export async function getInactiveSellers() {
+    try {
+        await checkAdmin();
+        return await (prisma.user as any).findMany({
+            where: { isActive: false, role: { in: ['SELLER', 'BUYER'] }, planName: { not: null } },
+            select: {
+                id: true, name: true, email: true, businessName: true,
+                isActive: true, planName: true, createdAt: true,
+                _count: { select: { ownedProducts: true } }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+    } catch { return []; }
+}
+
+export async function deleteSellerForever(sellerId: string) {
+    try {
+        await checkAdmin();
+        // Eliminar completamente — usar con cuidado
+        await prisma.user.delete({ where: { id: sellerId } });
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function reactivateSeller(sellerId: string) {
+    try {
+        await checkAdmin();
+        await (prisma.user as any).update({
+            where: { id: sellerId },
+            data: { isActive: true, role: 'SELLER' }
+        });
+        revalidatePath('/admin/marketplace');
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 export async function updateSellerPermissions(sellerId: string, data: {
     posEnabled?: boolean;
     maxProducts?: number | null;
