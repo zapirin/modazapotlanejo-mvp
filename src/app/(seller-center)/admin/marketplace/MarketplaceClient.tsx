@@ -410,14 +410,14 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                     <div className="flex gap-2 shrink-0">
                                         <button onClick={async () => {
                                             await updateApplicationStatus(app.id, 'APPROVED');
-                                            setApplications(prev => prev.filter(a => a.id !== app.id));
+                                            setApplications(prev => prev.filter((a: any) => a.id !== app.id));
                                             toast.success(`${app.storeName} aprobado`);
                                         }} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black hover:bg-emerald-700 transition">
                                             ✓ Aprobar
                                         </button>
                                         <button onClick={async () => {
                                             await updateApplicationStatus(app.id, 'REJECTED');
-                                            setApplications(prev => prev.filter(a => a.id !== app.id));
+                                            setApplications(prev => prev.filter((a: any) => a.id !== app.id));
                                             toast.success('Solicitud rechazada');
                                         }} className="px-4 py-2 bg-red-100 dark:bg-red-900/20 text-red-600 rounded-xl text-xs font-black hover:bg-red-200 transition">
                                             ✕ Rechazar
@@ -425,9 +425,6 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                     </div>
                                 </div>
                             ))}
-                            {!loadingApps && applications.length === 0 && (
-                                <p className="text-xs text-amber-600 font-bold">No hay solicitudes pendientes.</p>
-                            )}
                         </div>
                     )}
 
@@ -468,14 +465,13 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                         <div className="flex gap-3 mt-2 text-[10px] text-gray-400 font-bold">
                                             <span>{seller._count?.ownedProducts || 0} productos</span>
                                             {seller.planName && <span>· Plan: {seller.planName}</span>}
-                                            <span>· Desactivado</span>
                                         </div>
                                     </div>
                                     <div className="flex gap-2 shrink-0">
                                         <button onClick={async () => {
                                             const res = await reactivateSeller(seller.id);
                                             if (res.success) {
-                                                setInactiveSellers(prev => prev.filter(s => s.id !== seller.id));
+                                                setInactiveSellers(prev => prev.filter((s: any) => s.id !== seller.id));
                                                 loadSellers();
                                                 toast.success(`${seller.businessName || seller.name} reactivado`);
                                             } else toast.error(res.error || 'Error');
@@ -483,12 +479,12 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             ✓ Reactivar
                                         </button>
                                         <button onClick={async () => {
-                                            if (!confirm(`¿ELIMINAR PERMANENTEMENTE a ${seller.businessName || seller.name}? Se borrarán TODOS sus datos. Esta acción es irreversible.`)) return;
+                                            if (!confirm(`¿ELIMINAR PERMANENTEMENTE a ${seller.businessName || seller.name}? Esta acción es irreversible.`)) return;
                                             const res = await deleteSellerForever(seller.id);
                                             if (res.success) {
-                                                setInactiveSellers(prev => prev.filter(s => s.id !== seller.id));
+                                                setInactiveSellers(prev => prev.filter((s: any) => s.id !== seller.id));
                                                 toast.success('Vendedor eliminado permanentemente');
-                                            } else toast.error(res.error || 'No se pudo eliminar — tiene datos relacionados');
+                                            } else toast.error(res.error || 'No se pudo eliminar');
                                         }} className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black hover:bg-red-700 transition">
                                             🗑 Eliminar
                                         </button>
@@ -500,157 +496,145 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
 
                     {/* Lista de activos */}
                     {sellerSubTab === 'active' && (
-                    <><div className="flex items-center justify-between flex-wrap gap-3">
-                        <h2 className="text-xl font-black">🏭 Gestión de Vendedores</h2>
-                        <div className="flex items-center gap-3">
-                            <span className="text-xs text-gray-400 font-bold">{sellers.length} vendedores</span>
-                            <button
-                                onClick={handleCompressImages}
-                                disabled={compressing}
-                                className="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 text-amber-700 rounded-xl text-xs font-black hover:bg-amber-100 transition disabled:opacity-50 flex items-center gap-2"
-                            >
-                                {compressing ? '⏳ Comprimiendo...' : '🗜️ Comprimir Imágenes BD'}
-                            </button>
-                            {compressionResult && (
-                                <span className="text-xs font-bold text-emerald-600">
-                                    ✅ {compressionResult.compressed} imgs · -{compressionResult.savedMB}MB
-                                </span>
-                            )}
-                        </div>
-                    </div>
-                    {loadingSellers ? (
-                        <div className="flex justify-center p-10"><div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"/></div>
-                    ) : sellers.map((seller: any) => (
-                        <div key={seller.id} className="bg-card border border-border rounded-2xl p-5 space-y-4">
-                            <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between flex-wrap gap-3">
+                                <h2 className="text-xl font-black">🏭 Gestión de Vendedores</h2>
                                 <div className="flex items-center gap-3">
-                                    {seller.logoUrl
-                                        ? <Image src={seller.logoUrl} alt={seller.name} width={40} height={40} className="w-10 h-10 rounded-xl object-contain border border-border" />
-                                        : <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center font-black text-lg">{seller.name.charAt(0)}</div>
-                                    }
-                                    <div>
-                                        <p className="font-black text-foreground">{seller.businessName || seller.name}</p>
-                                        <p className="text-xs text-gray-400 font-medium">{seller.email} · {seller._count?.ownedProducts || 0} productos</p>
-                                        {seller.sellerSlug ? (
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <p className="text-[10px] font-mono text-blue-500">/acceso/{seller.sellerSlug}</p>
-                                                <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/acceso/${seller.sellerSlug}`); toast.success('URL copiada'); }}
-                                                    className="text-[9px] font-black text-gray-400 hover:text-blue-600 transition uppercase">Copiar</button>
-                                            </div>
-                                        ) : (
-                                            <button onClick={async () => {
-                                                const res = await assignSellerSlug(seller.id);
-                                                if (res.success) { setSellers(prev => prev.map((s: any) => s.id === seller.id ? { ...s, sellerSlug: res.slug } : s)); toast.success('URL generada'); }
-                                                else toast.error(res.error || 'Error');
-                                            }} className="text-[9px] font-black text-orange-500 hover:text-orange-600 uppercase tracking-wide mt-0.5 block">
-                                                ⚡ Generar URL del POS
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button onClick={async () => {
-                                        if (!confirm(`¿Enviar email de reseteo de contraseña a ${seller.email}?`)) return;
-                                        const res = await requestPasswordReset(seller.email);
-                                        if (res.success) toast.success('Email de reseteo enviado');
-                                        else toast.error('Error al enviar email');
-                                    }} className="px-3 py-1.5 text-xs font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-100 transition">
-                                        🔑 Resetear acceso
+                                    <span className="text-xs text-gray-400 font-bold">{sellers.length} vendedores</span>
+                                    <button onClick={handleCompressImages} disabled={compressing}
+                                        className="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 text-amber-700 rounded-xl text-xs font-black hover:bg-amber-100 transition disabled:opacity-50 flex items-center gap-2">
+                                        {compressing ? '⏳ Comprimiendo...' : '🗜️ Comprimir Imágenes BD'}
                                     </button>
-                                    <button onClick={() => handleDeleteSeller(seller)}
-                                        className="px-3 py-1.5 text-xs font-black text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl hover:bg-red-100 transition">
-                                        Desactivar
-                                    </button>
+                                    {compressionResult && (
+                                        <span className="text-xs font-bold text-emerald-600">✅ {compressionResult.compressed} imgs · -{compressionResult.savedMB}MB</span>
+                                    )}
                                 </div>
                             </div>
-
-                            <div className="space-y-3 pt-3 border-t border-border">
-                                {/* Fila 1: POS + Comisión + Plan */}
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                    <div className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${seller.posEnabled ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gray-50 dark:bg-gray-800/30 border-border'}`}>
-                                        <span className="text-base">🖥️</span>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Acceso POS</p>
-                                            {seller.posRequested && !seller.posEnabled && (
-                                                <p className="text-[9px] text-orange-500 font-black">⚠️ Solicitud pendiente</p>
-                                            )}
-                                        </div>
-                                        <button onClick={() => handleTogglePOS(seller)}
-                                            className={`relative w-9 h-5 rounded-full transition-all shrink-0 ${seller.posEnabled ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${seller.posEnabled ? 'left-4' : 'left-0.5'}`} />
-                                        </button>
-                                    </div>
-                                    <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-gray-50 dark:bg-gray-800/30">
-                                        <span className="text-base">💰</span>
-                                        <div className="flex-1">
-                                            <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Comisión %</p>
-                                            <div className="flex items-center gap-1 mt-0.5">
-                                                <input
-                                                    type="number" min={0} max={100} step={0.5}
-                                                    defaultValue={seller.commission || 0}
-                                                    onBlur={async (e) => {
-                                                        const val = parseFloat(e.target.value);
-                                                        if (isNaN(val) || val < 0 || val > 100) return;
-                                                        const res = await updateSellerPermissions(seller.id, { commission: val });
-                                                        if (res.success) toast.success(`Comisión actualizada a ${val}%`);
+                            {loadingSellers ? (
+                                <div className="flex justify-center p-10"><div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" /></div>
+                            ) : sellers.map((seller: any) => (
+                                <div key={seller.id} className="bg-card border border-border rounded-2xl p-5 space-y-4">
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="flex items-center gap-3">
+                                            {seller.logoUrl
+                                                ? <Image src={seller.logoUrl} alt={seller.name} width={40} height={40} className="w-10 h-10 rounded-xl object-contain border border-border" />
+                                                : <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center font-black text-lg">{seller.name.charAt(0)}</div>
+                                            }
+                                            <div>
+                                                <p className="font-black text-foreground">{seller.businessName || seller.name}</p>
+                                                <p className="text-xs text-gray-400 font-medium">{seller.email} · {seller._count?.ownedProducts || 0} productos</p>
+                                                {seller.sellerSlug ? (
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <p className="text-[10px] font-mono text-blue-500">/acceso/{seller.sellerSlug}</p>
+                                                        <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/acceso/${seller.sellerSlug}`); toast.success('URL copiada'); }}
+                                                            className="text-[9px] font-black text-gray-400 hover:text-blue-600 transition uppercase">Copiar</button>
+                                                    </div>
+                                                ) : (
+                                                    <button onClick={async () => {
+                                                        const res = await assignSellerSlug(seller.id);
+                                                        if (res.success) { setSellers(prev => prev.map((s: any) => s.id === seller.id ? { ...s, sellerSlug: res.slug } : s)); toast.success('URL generada'); }
                                                         else toast.error(res.error || 'Error');
-                                                    }}
-                                                    className="w-16 px-2 py-1 text-sm font-black text-blue-600 bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded-lg text-center focus:ring-2 focus:ring-blue-500 outline-none"
-                                                />
-                                                <span className="text-sm font-black text-blue-600">%</span>
+                                                    }} className="text-[9px] font-black text-orange-500 hover:text-orange-600 uppercase tracking-wide mt-0.5 block">
+                                                        ⚡ Generar URL del POS
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={async () => {
+                                                if (!confirm(`¿Enviar email de reseteo a ${seller.email}?`)) return;
+                                                const res = await requestPasswordReset(seller.email);
+                                                if (res.success) toast.success('Email de reseteo enviado');
+                                                else toast.error('Error al enviar email');
+                                            }} className="px-3 py-1.5 text-xs font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-100 transition">
+                                                🔑 Resetear acceso
+                                            </button>
+                                            <button onClick={() => handleDeleteSeller(seller)}
+                                                className="px-3 py-1.5 text-xs font-black text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl hover:bg-red-100 transition">
+                                                Desactivar
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-3 pt-3 border-t border-border">
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <div className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${seller.posEnabled ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gray-50 dark:bg-gray-800/30 border-border'}`}>
+                                                <span className="text-base">🖥️</span>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Acceso POS</p>
+                                                    {seller.posRequested && !seller.posEnabled && (
+                                                        <p className="text-[9px] text-orange-500 font-black">⚠️ Solicitud pendiente</p>
+                                                    )}
+                                                </div>
+                                                <button onClick={() => handleTogglePOS(seller)}
+                                                    className={`relative w-9 h-5 rounded-full transition-all shrink-0 ${seller.posEnabled ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                                                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${seller.posEnabled ? 'left-4' : 'left-0.5'}`} />
+                                                </button>
+                                            </div>
+                                            <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-gray-50 dark:bg-gray-800/30">
+                                                <span className="text-base">💰</span>
+                                                <div className="flex-1">
+                                                    <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Comisión %</p>
+                                                    <div className="flex items-center gap-1 mt-0.5">
+                                                        <input type="number" min={0} max={100} step={0.5}
+                                                            defaultValue={seller.commission || 0}
+                                                            onBlur={async (e) => {
+                                                                const val = parseFloat(e.target.value);
+                                                                if (isNaN(val) || val < 0 || val > 100) return;
+                                                                const res = await updateSellerPermissions(seller.id, { commission: val });
+                                                                if (res.success) toast.success(`Comisión actualizada a ${val}%`);
+                                                                else toast.error(res.error || 'Error');
+                                                            }}
+                                                            className="w-16 px-2 py-1 text-sm font-black text-blue-600 bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded-lg text-center focus:ring-2 focus:ring-blue-500 outline-none" />
+                                                        <span className="text-sm font-black text-blue-600">%</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3 p-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+                                                <span className="text-base">🏷️</span>
+                                                <div className="flex-1">
+                                                    <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Plan actual</p>
+                                                    <p className="text-sm font-black text-blue-600">{seller.planName || 'Básico'}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="p-3 rounded-xl border border-border bg-gray-50 dark:bg-gray-800/30 space-y-2">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Asignar Plan Rápido</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {PLANS.map((plan: any) => (
+                                                    <button key={plan.name} onClick={() => applyPlan(seller, plan)}
+                                                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black border transition-all ${seller.planName === plan.name ? 'bg-blue-600 text-white border-blue-600' : 'border-border text-gray-500 hover:border-blue-400 hover:text-blue-600'}`}>
+                                                        {plan.name} <span className="opacity-60">{plan.maxLocations}loc · {plan.maxCashiers}caj · {plan.maxProducts ? `${plan.maxProducts}prod` : '∞prod'}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                            {[
+                                                { label: 'Locaciones POS', field: 'maxLocations', icon: '📍', val: seller.maxLocations ?? 1, current: seller._count?.ownedLocations ?? 0 },
+                                                { label: 'Cajeros', field: 'maxCashiers', icon: '👤', val: seller.maxCashiers ?? 1, current: seller._count?.cashiers ?? 0 },
+                                                { label: 'Productos', field: 'maxProducts', icon: '📦', val: seller.maxProducts ?? '', current: seller._count?.ownedProducts ?? 0 },
+                                            ].map((item: any) => (
+                                                <div key={item.field} className="flex flex-col gap-1 p-3 rounded-xl border border-border bg-white dark:bg-gray-900">
+                                                    <p className="text-[9px] font-black uppercase tracking-wide text-gray-400">{item.icon} {item.label}</p>
+                                                    <p className="text-[9px] text-gray-400">Usando: {item.current}</p>
+                                                    <input type="number" min="0" value={item.val} placeholder="∞"
+                                                        onChange={e => item.field === 'maxProducts' ? handleMaxProducts(seller, e.target.value) : handlePlanChange(seller, item.field, e.target.value)}
+                                                        className="w-full px-2 py-1 text-center text-sm font-black bg-gray-50 dark:bg-gray-800 border border-border rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50" />
+                                                </div>
+                                            ))}
+                                            <div className="flex flex-col gap-1 p-3 rounded-xl border border-border bg-white dark:bg-gray-900">
+                                                <p className="text-[9px] font-black uppercase tracking-wide text-gray-400">🏷️ Nombre del plan</p>
+                                                <input type="text" value={seller.planName || 'Básico'}
+                                                    onChange={e => handlePlanName(seller, e.target.value)}
+                                                    className="w-full px-2 py-1 text-xs font-black bg-gray-50 dark:bg-gray-800 border border-border rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50 mt-auto" />
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3 p-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
-                                        <span className="text-base">🏷️</span>
-                                        <div className="flex-1">
-                                            <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Plan actual</p>
-                                            <p className="text-sm font-black text-blue-600">{seller.planName || 'Básico'}</p>
-                                        </div>
-                                    </div>
                                 </div>
-
-                                {/* Fila 2: Botones de plan rápido */}
-                                <div className="p-3 rounded-xl border border-border bg-gray-50 dark:bg-gray-800/30 space-y-2">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Asignar Plan Rápido</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {PLANS.map((plan: any) => (
-                                            <button key={plan.name} onClick={() => applyPlan(seller, plan)}
-                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-black border transition-all ${seller.planName === plan.name ? 'bg-blue-600 text-white border-blue-600' : 'border-border text-gray-500 hover:border-blue-400 hover:text-blue-600'}`}>
-                                                {plan.name} <span className="opacity-60">{plan.maxLocations}loc · {plan.maxCashiers}caj · {plan.maxProducts ? `${plan.maxProducts}prod` : '∞prod'}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Fila 3: Límites ajustables individualmente */}
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                    {[
-                                        { label: 'Locaciones POS', field: 'maxLocations', icon: '📍', val: seller.maxLocations ?? 1, current: seller._count?.ownedLocations ?? 0 },
-                                        { label: 'Cajeros', field: 'maxCashiers', icon: '👤', val: seller.maxCashiers ?? 1, current: seller._count?.cashiers ?? 0 },
-                                        { label: 'Productos', field: 'maxProducts', icon: '📦', val: seller.maxProducts ?? '', current: seller._count?.ownedProducts ?? 0 },
-                                    ].map((item: any) => (
-                                        <div key={item.field} className="flex flex-col gap-1 p-3 rounded-xl border border-border bg-white dark:bg-gray-900">
-                                            <p className="text-[9px] font-black uppercase tracking-wide text-gray-400">{item.icon} {item.label}</p>
-                                            <p className="text-[9px] text-gray-400">Usando: {item.current}</p>
-                                            <input type="number" min="0" value={item.val} placeholder="∞"
-                                                onChange={e => item.field === 'maxProducts' ? handleMaxProducts(seller, e.target.value) : handlePlanChange(seller, item.field, e.target.value)}
-                                                className="w-full px-2 py-1 text-center text-sm font-black bg-gray-50 dark:bg-gray-800 border border-border rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50" />
-                                        </div>
-                                    ))}
-                                    <div className="flex flex-col gap-1 p-3 rounded-xl border border-border bg-white dark:bg-gray-900">
-                                        <p className="text-[9px] font-black uppercase tracking-wide text-gray-400">🏷️ Nombre del plan</p>
-                                        <input type="text" value={seller.planName || 'Básico'}
-                                            onChange={e => handlePlanName(seller, e.target.value)}
-                                            className="w-full px-2 py-1 text-xs font-black bg-gray-50 dark:bg-gray-800 border border-border rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50 mt-auto" />
-                                    </div>
-                                </div>
-                            </div>
+                            ))}
                         </div>
-                    ))}
+                    )}
                 </div>
-            </>
-            )}
             )}
 
             {/* ── TAB: DESTACADOS ── */}
