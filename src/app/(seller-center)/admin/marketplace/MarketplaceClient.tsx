@@ -17,7 +17,8 @@ import {
     savePlans,
     getPlans,
 } from '@/app/actions/marketplace';
-import { getSellerApplications, updateApplicationStatus } from '@/app/(seller-center)/admin/applications/actions';
+import { updateApplicationStatus } from '@/app/(seller-center)/admin/applications/actions';
+import { getSellerApplications } from '@/app/actions/admin';
 import { requestPasswordReset } from '@/app/actions/auth';
 import { validateImageFile } from '@/lib/uploadImage';
 import { processImage } from '@/lib/imageUtils';
