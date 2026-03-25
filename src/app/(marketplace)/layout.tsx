@@ -4,17 +4,14 @@ import Providers from './Providers';
 import Image from 'next/image';
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { getBrandConfig, mergeBrandWithDB } from '@/lib/brand';
-import { getCurrentBrand } from '@/app/actions/brand';
+import { getBrandConfig } from '@/lib/brand';
 import type { Metadata } from 'next';
 import { getSessionUser } from '@/app/actions/auth';
 
 export async function generateMetadata(): Promise<Metadata> {
     const headersList = await headers();
     const host = headersList.get('host');
-    const staticBrand = getBrandConfig(host);
-    const dbBrand = await getCurrentBrand();
-    const brand = mergeBrandWithDB(staticBrand, dbBrand);
+    const brand = getBrandConfig(host);
     
     return {
         title: {
@@ -32,9 +29,7 @@ export default async function MarketplaceLayout({
 }) {
     const headersList = await headers();
     const host = headersList.get('host');
-    const staticBrand = getBrandConfig(host);
-    const dbBrand = await getCurrentBrand();
-    const brand = mergeBrandWithDB(staticBrand, dbBrand);
+    const brand = getBrandConfig(host);
     const user = await getSessionUser();
 
     return (
