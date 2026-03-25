@@ -156,6 +156,7 @@ export default function ProductDetailClient({
                 color: variant.color || selectedColor || 'Único',
                 size,
                 price: product.price,
+                normalPrice: product.price,
                 quantity: qty,
                 image: product.images?.[0] || '',
                 sellByPackage: false,

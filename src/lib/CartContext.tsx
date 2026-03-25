@@ -11,7 +11,7 @@ export interface CartItem {
     color: string;
     size: string;
     price: number;
-    normalPrice: number;   // precio normal sin corrida — para revertir si se rompe
+    normalPrice?: number;  // precio normal sin corrida — para revertir si se rompe
     quantity: number;
     image: string;
     // Wholesale/Package info
@@ -75,7 +75,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const addItem = useCallback((item: CartItem) => {
         setItems(prev => {
             // Asegurar que normalPrice siempre tenga valor
-            const normalizedItem = { ...item, normalPrice: item.normalPrice ?? item.price };
+            const normalizedItem = { ...item, normalPrice: item.normalPrice ?? item.price, wholesaleTotal: (item as any).wholesaleTotal };
             const existing = prev.find(i => i.variantId === item.variantId);
             if (existing) {
                 return prev.map(i =>
