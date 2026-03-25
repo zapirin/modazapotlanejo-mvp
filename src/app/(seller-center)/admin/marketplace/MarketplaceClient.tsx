@@ -125,8 +125,10 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
 
     const loadSellers = async () => {
         setLoadingSellers(true);
-        const data = await getSellersWithPermissions();
-        setSellers(data);
+        try {
+            const data = await getSellersWithPermissions();
+            setSellers(data || []);
+        } catch { setSellers([]); }
         setLoadingSellers(false);
     };
 
@@ -136,27 +138,23 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
         if (activeTab === 'sellers') {
             loadSellers();
             setLoadingApps(true);
-            getSellerApplications().then(apps => { setApplications(apps); setLoadingApps(false); });
+            getSellerApplications().then(apps => { setApplications(apps || []); setLoadingApps(false); }).catch(() => setLoadingApps(false));
             setLoadingInactive(true);
-            getInactiveSellers().then(list => { setInactiveSellers(list); setLoadingInactive(false); });
+            getInactiveSellers().then(list => { setInactiveSellers(list || []); setLoadingInactive(false); }).catch(() => setLoadingInactive(false));
         }
         if (activeTab === 'featured') loadAllSellers();
         if (activeTab === 'photos') loadPhotos();
         if (activeTab === 'brands') {
+            const defaultBrands = [
+                { domain: 'modazapotlanejo.com', name: 'Moda Zapotlanejo', tagline: 'Fashion Marketplace', description: 'El marketplace mayorista líder de Zapotlanejo.', primaryColor: 'blue', logoUrl: '', heroImage: '' },
+                { domain: 'zonadelvestir.com', name: 'Zona del Vestir', tagline: 'Tu Zona Mayorista', description: 'La zona mayorista de moda más grande de México.', primaryColor: 'violet', logoUrl: '', heroImage: '' },
+            ];
             getAllBrands().then(b => {
-                if (b.length === 0) {
-                    // Crear defaults si no existen
-                    setBrands([
-                        { domain: 'modazapotlanejo.com', name: 'Moda Zapotlanejo', tagline: 'Fashion Marketplace', description: 'El marketplace mayorista líder de Zapotlanejo.', primaryColor: 'blue', logoUrl: '', heroImage: '', featuredSellerIds: [], featuredProductIds: [] },
-                        { domain: 'zonadelvestir.com', name: 'Zona del Vestir', tagline: 'Tu Zona Mayorista', description: 'La zona mayorista de moda más grande de México.', primaryColor: 'violet', logoUrl: '', heroImage: '', featuredSellerIds: [], featuredProductIds: [] },
-                    ]);
-                } else {
-                    setBrands(b);
-                }
-            });
+                setBrands(b && b.length > 0 ? b : defaultBrands);
+            }).catch(() => setBrands(defaultBrands));
         }
         if (activeTab === 'plans') {
-            getPlans().then(setPlans);
+            getPlans().then(p => setPlans(p || [])).catch(() => setPlans([]));
         }
     }, [activeTab]);
 
