@@ -41,6 +41,10 @@ export default function SellerRegistrationForm({ plans }: { plans: any[] }) {
             setStatus({ type: 'error', message: 'Debes seleccionar al menos una categoría.' });
             return;
         }
+        if (!formData.storeAddress || !formData.storeAddress.split('|')[0]) {
+            setStatus({ type: 'error', message: 'El domicilio de la tienda o fábrica es obligatorio.' });
+            return;
+        }
 
         setLoading(true);
         setStatus(null);
@@ -168,7 +172,7 @@ export default function SellerRegistrationForm({ plans }: { plans: any[] }) {
                         {/* Domicilio */}
                         <div className="space-y-3">
                             <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 pl-2">
-                                Domicilio de la Tienda o Fábrica
+                                Domicilio de la Tienda o Fábrica <span className="text-red-500">*</span>
                                 <span className="ml-2 text-gray-300 font-medium normal-case tracking-normal">— ¿Dónde están ubicados?</span>
                             </label>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

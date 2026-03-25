@@ -18,12 +18,12 @@ export default function BuyerRegistrationPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [type, setType] = useState<'normal' | 'wholesale'>('normal');
-    const [showAddress, setShowAddress] = useState(false);
+
     const [formData, setFormData] = useState({
         name: '', email: '', password: '', businessName: '', taxId: '',
     });
     const [address, setAddress] = useState({
-        name: '', phone: '', street: '', colonia: '', city: '', state: '', zip: '',
+        name: '', phone: '', street: '', colonia: '', city: '', state: '', zip: '', referencias: '',
     });
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -38,7 +38,7 @@ export default function BuyerRegistrationPage() {
             isWholesale: type === 'wholesale',
             businessName: type === 'wholesale' ? formData.businessName : undefined,
             taxId: type === 'wholesale' ? formData.taxId : undefined,
-            shippingAddress: showAddress && address.street ? address : undefined,
+            shippingAddress: address.street ? address : undefined,
         });
 
         if (result.success) {
@@ -115,19 +115,15 @@ export default function BuyerRegistrationPage() {
                             </div>
                         )}
 
-                        {/* Dirección de envío opcional */}
+                        {/* Dirección de envío obligatoria */}
                         <div className="border border-border rounded-3xl overflow-hidden">
-                            <button type="button" onClick={() => setShowAddress(!showAddress)}
-                                className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-900/50 transition">
+                            <div className="w-full px-6 py-4 flex items-center justify-between bg-blue-50/50 dark:bg-blue-900/10">
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">📦 Dirección de Envío</p>
-                                    <p className="text-xs text-gray-400 mt-0.5">Opcional — agrégala ahora para comprar más rápido</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">📦 Dirección de Envío <span className="text-red-500">*</span></p>
+                                    <p className="text-xs text-gray-400 mt-0.5">Necesaria para recibir tus pedidos</p>
                                 </div>
-                                <span className={`text-lg transition-transform ${showAddress ? 'rotate-180' : ''}`}>⌄</span>
-                            </button>
-
-                            {showAddress && (
-                                <div className="p-6 space-y-4 border-t border-border bg-blue-50/30 dark:bg-blue-900/10 animate-in fade-in slide-in-from-top-2">
+                            </div>
+                            <div className="p-6 space-y-4 border-t border-border">
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <label className="text-[9px] font-black uppercase tracking-widest text-gray-400">Nombre del destinatario</label>
@@ -171,8 +167,13 @@ export default function BuyerRegistrationPage() {
                                                 value={address.zip} onChange={e => setAddress({...address, zip: e.target.value})} />
                                         </div>
                                     </div>
-                                </div>
-                            )}
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-black uppercase tracking-widest text-gray-400">Referencias <span className="text-red-500">*</span></label>
+                                        <input type="text" required className={inputClass}
+                                            placeholder="Ej. Entre Av. López y calle Morelos, casa azul con reja negra"
+                                            value={address.referencias} onChange={e => setAddress({...address, referencias: e.target.value})} />
+                                    </div>
+                            </div>
                         </div>
                     </div>
 

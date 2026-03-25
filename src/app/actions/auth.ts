@@ -237,6 +237,7 @@ export async function registerBuyer(data: {
                     city: data.shippingAddress.city,
                     state: data.shippingAddress.state,
                     zip: data.shippingAddress.zip || '',
+                    referencias: (data.shippingAddress as any).referencias || '',
                     isDefault: true,
                 }
             });

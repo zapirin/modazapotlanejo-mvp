@@ -34,6 +34,7 @@ export async function applyAsSeller(data: {
                 phone: data.phone,
                 category: data.category.join(', '),
                 storeAddress: data.storeAddress || '',
+                planName: data.planName || '',
             }
         });
 

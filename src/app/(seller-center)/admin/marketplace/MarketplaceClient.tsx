@@ -392,7 +392,12 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                         <p className="font-black text-foreground">{app.storeName}</p>
                                         <p className="text-xs text-gray-500">{app.contactName} · {app.email} · {app.phone}</p>
                                         {app.storeAddress && <p className="text-xs text-blue-500">📍 {app.storeAddress.replace('|', ' — ')}</p>}
-                                        <p className="text-[10px] text-gray-400 mt-1">{app.category} {app.planName ? `· Plan: ${app.planName}` : ''}</p>
+                                        <p className="text-[10px] text-gray-400 mt-1">{app.category}</p>
+                                        {app.planName && (
+                                            <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[9px] font-black uppercase rounded-full">
+                                                💼 Plan: {app.planName}
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="flex gap-2 shrink-0">
                                         <button onClick={async () => {

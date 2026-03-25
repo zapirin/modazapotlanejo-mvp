@@ -512,6 +512,7 @@ model SellerApplication {
   phone        String
   category     String
   storeAddress String?  // Domicilio de la tienda o fábrica
+  planName     String?  // Plan seleccionado en el registro
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
@@ -593,6 +594,7 @@ model ShippingAddress {
   state     String
   zip       String  // Código postal (5 dígitos México)
   country   String  @default("MX")
+  referencias String?  // Referencias del domicilio
   isDefault Boolean @default(false)
   createdAt DateTime @default(now())
 
