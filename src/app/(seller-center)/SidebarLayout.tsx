@@ -132,9 +132,12 @@ export default function SidebarLayout({
         {/* Logo block */}
         <div className={`p-6 border-b border-border flex shrink-0 items-center ${isDesktopCollapsed ? 'justify-center' : 'justify-between'}`}>
           <div className={`${isDesktopCollapsed ? 'hidden' : 'block'}`}>
-            <h2 className="text-2xl font-bold tracking-tight">
-              Moda<span className="text-blue-600">Zapotlanejo</span>
-            </h2>
+            <a href="https://tienda-modazapo.vercel.app" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity group flex items-center gap-1.5" title="Ir al Marketplace">
+              <h2 className="text-2xl font-bold tracking-tight">
+                Moda<span className="text-blue-600">Zapotlanejo</span>
+              </h2>
+              <span className="text-[9px] text-gray-400 group-hover:text-blue-500 transition-colors opacity-0 group-hover:opacity-100">↗</span>
+            </a>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-wider font-semibold">
               {user?.role === 'BUYER' ? 'Mi Cuenta' : 'Panel de Fabricante'}
             </p>
