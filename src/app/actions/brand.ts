@@ -32,20 +32,21 @@ export async function getCurrentBrand() {
     try {
         const headersList = await headers();
         const host = headersList.get("host") || "";
-        // Limpiar el host (quitar puerto si existe)
         const domain = host.replace(/:\d+$/, "").replace(/^www\./, "");
 
-        // Buscar en BD
-        const brand = await (prisma as any).brandConfig.findUnique({
-            where: { domain },
-        });
+        try {
+            const brand = await (prisma as any).brandConfig.findUnique({
+                where: { domain },
+            });
+            if (brand) return brand;
+        } catch {
+            // Tabla no existe aún — retornar null para usar fallback estático
+            return null;
+        }
 
-        if (brand) return brand;
-
-        // Fallback a defaults
-        return DEFAULT_BRANDS[domain] || DEFAULT_BRANDS["modazapotlanejo.com"];
+        return null; // El layout usará el fallback estático
     } catch {
-        return DEFAULT_BRANDS["modazapotlanejo.com"];
+        return null;
     }
 }
 
