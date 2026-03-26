@@ -44,10 +44,10 @@ export default async function LandingPage() {
     const month = new Date(nowMs).getMonth(); // usa el mismo nowMs para consistencia
 
     // Temporada — calculada en servidor con nowMs fijo
-    const season = month >= 2 && month <= 4 ? { name: 'Primavera 2026', emoji: '🌸', color: 'from-rose-500 to-pink-500' }
-        : month >= 5 && month <= 7 ? { name: 'Verano 2026', emoji: '☀️', color: 'from-orange-500 to-amber-500' }
-        : month >= 8 && month <= 10 ? { name: 'Otoño 2026', emoji: '🍂', color: 'from-amber-600 to-orange-600' }
-        : { name: 'Invierno 2026', emoji: '❄️', color: 'from-blue-600 to-indigo-600' };
+    const season = month >= 2 && month <= 4 ? { name: 'Primavera 2026', emoji: '🌸' }
+        : month >= 5 && month <= 7 ? { name: 'Verano 2026', emoji: '☀️' }
+        : month >= 8 && month <= 10 ? { name: 'Otoño 2026', emoji: '🍂' }
+        : { name: 'Invierno 2026', emoji: '❄️' };
 
     return (
         <div className="flex flex-col">
@@ -74,7 +74,7 @@ export default async function LandingPage() {
                 <div className="max-w-7xl mx-auto px-6 relative z-10 w-full pb-32 pt-24">
                     <div className="max-w-2xl space-y-8">
                         {/* Banner temporada */}
-                        <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r ${season.color} text-white text-xs font-black uppercase tracking-widest shadow-lg`}>
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-white text-xs font-black uppercase tracking-widest shadow-lg" style={{background:"linear-gradient(to right, var(--brand-600), var(--brand-700))"}}>
                             <span>{season.emoji}</span>
                             <span>Tendencias {season.name}</span>
                             {stats.newThisWeek > 0 && (
@@ -306,7 +306,7 @@ export default async function LandingPage() {
             {/* ── BANNER TEMPORADA ── */}
             <section className="py-16 px-6">
                 <div className="max-w-7xl mx-auto">
-                    <div className={`relative rounded-[40px] overflow-hidden bg-gradient-to-r ${season.color} p-12 md:p-20 text-white`}>
+                    <div className="relative rounded-[40px] overflow-hidden p-12 md:p-20 text-white" style={{background:"linear-gradient(to right, var(--brand-600), var(--brand-700))"}}>
                         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
                             <div className="space-y-4 max-w-lg">
                                 <p className="text-sm font-black uppercase tracking-[0.3em] opacity-80">Temporada Actual</p>
