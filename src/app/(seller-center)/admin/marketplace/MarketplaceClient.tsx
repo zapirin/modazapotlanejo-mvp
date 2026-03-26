@@ -77,6 +77,10 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     const [adminEmail, setAdminEmail] = useState(initialSettings?.adminEmail || '');
     const [privacyUrl, setPrivacyUrl] = useState(initialSettings?.privacyUrl || '');
     const [termsUrl, setTermsUrl] = useState(initialSettings?.termsUrl || '');
+    const [brandColors, setBrandColors] = useState<Record<string,string>>({
+        'modazapotlanejo.com': (initialSettings?.brandColors as any)?.['modazapotlanejo.com'] || 'blue',
+        'zonadelvestir.com': (initialSettings?.brandColors as any)?.['zonadelvestir.com'] || 'violet',
+    });
     const [brands, setBrands] = useState<any[]>([]);
     const [editingBrand, setEditingBrand] = useState<any>(null);
     const [photoPrices, setPhotoPrices] = useState(initialSettings?.photographyPrices || [
@@ -346,39 +350,36 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">🎨 Color de Marca por Dominio</label>
                                 <p className="text-xs text-gray-400 mt-1">Selecciona el color principal para cada dominio. Se aplica en botones, títulos, riel y más.</p>
                             </div>
-                            {[
+                            {([
                                 { domain: 'modazapotlanejo.com', label: 'Moda Zapotlanejo' },
                                 { domain: 'zonadelvestir.com', label: 'Zona del Vestir' },
-                            ].map(site => (
+                            ] as {domain: string, label: string}[]).map(site => (
                                 <div key={site.domain} className="space-y-2">
                                     <p className="text-xs font-black text-foreground">{site.label} <span className="text-gray-400 font-normal">— {site.domain}</span></p>
                                     <div className="flex gap-3 flex-wrap">
-                                        {[
+                                        {([
                                             { color: 'blue',    hex: '#2563eb', label: 'Azul' },
                                             { color: 'violet',  hex: '#7c3aed', label: 'Violeta' },
                                             { color: 'emerald', hex: '#059669', label: 'Esmeralda' },
                                             { color: 'amber',   hex: '#d97706', label: 'Ámbar' },
                                             { color: 'rose',    hex: '#e11d48', label: 'Rosa' },
                                             { color: 'slate',   hex: '#475569', label: 'Gris' },
-                                        ].map(opt => {
-                                            const key = `brandColor_${site.domain}`;
-                                            const current = (settings as any)?.[key] || (site.domain.includes('zonadelvestir') ? 'violet' : 'blue');
-                                            const isSelected = current === opt.color;
+                                        ] as {color: string, hex: string, label: string}[]).map(opt => {
+                                            const isSelected = brandColors[site.domain] === opt.color;
                                             return (
-                                                <button key={opt.color}
+                                                <button key={opt.color} type="button"
                                                     onClick={async () => {
-                                                        const res = await updateMarketplaceSettingsFull({ [key]: opt.color } as any);
-                                                        if (res.success) {
-                                                            setSettings((prev: any) => ({...prev, [key]: opt.color}));
-                                                            toast.success(`Color ${opt.label} aplicado a ${site.label}`);
-                                                        }
+                                                        const newColors = {...brandColors, [site.domain]: opt.color};
+                                                        setBrandColors(newColors);
+                                                        const res = await updateMarketplaceSettingsFull({ brandColors: newColors } as any);
+                                                        if (res.success) toast.success(`Color ${opt.label} aplicado a ${site.label}`);
+                                                        else toast.error('Error al guardar');
                                                     }}
-                                                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 text-xs font-black transition-all ${isSelected ? 'border-gray-800 dark:border-white scale-105 shadow-md' : 'border-transparent hover:scale-105'}`}
-                                                    style={{backgroundColor: opt.hex + '20', borderColor: isSelected ? opt.hex : 'transparent'}}
-                                                    title={opt.label}>
-                                                    <span className="w-4 h-4 rounded-full shrink-0" style={{backgroundColor: opt.hex}} />
+                                                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${isSelected ? 'ring-2 ring-offset-2 scale-110 shadow-lg' : 'opacity-70 hover:opacity-100 hover:scale-105'}`}
+                                                    style={{backgroundColor: opt.hex + (isSelected ? '30' : '15'), ringColor: opt.hex}}>
+                                                    <span className="w-4 h-4 rounded-full shrink-0 shadow" style={{backgroundColor: opt.hex}} />
                                                     {opt.label}
-                                                    {isSelected && <span className="text-[9px]">✓</span>}
+                                                    {isSelected && <span>✓</span>}
                                                 </button>
                                             );
                                         })}

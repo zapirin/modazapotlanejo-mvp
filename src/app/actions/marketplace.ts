@@ -274,6 +274,7 @@ export async function updateMarketplaceSettingsFull(data: {
     privacyUrl?: string;
     termsUrl?: string;
     photographyPrices?: any;
+    brandColors?: Record<string, string>;
 }) {
     try {
         await checkAdmin();

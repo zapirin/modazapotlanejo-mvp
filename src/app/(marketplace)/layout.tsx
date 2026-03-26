@@ -51,8 +51,8 @@ export default async function MarketplaceLayout({
     let brandPrimaryColor = brand.primaryColor;
     try {
         const settings = await getMarketplaceSettings();
-        const colorKey = `brandColor_${brand.domain}`;
-        const savedColor = (settings as any)?.[colorKey];
+        const brandColors = (settings as any)?.brandColors as Record<string,string> | undefined;
+        const savedColor = brandColors?.[brand.domain];
         if (savedColor) brandPrimaryColor = savedColor;
     } catch {}
 
