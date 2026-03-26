@@ -6,7 +6,6 @@ import { getDenominations, seedDefaultDenominations } from '../settings/denomina
 import { savePendingSale, getPendingSales, markSaleSynced, markSaleSyncError, countPendingSales } from '@/lib/posOfflineStore';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { searchProducts, getPriceTiers, getPaymentMethods, getPOSCategories, getProductsByCategory, processSale, getSuspendedSales, suspendSale, deleteSuspendedSale, createLayaway, getSaleById, updateSale } from '../products/new/actions';
 import { getCurrentCashSession, openCashSession, addCashMovement, closeCashSession, createTransfer, getAllowedLocations, checkSellerPOSAccess } from './actions';
 import { getStoreSettings, getLocationsSettings } from '../settings/actions';
