@@ -23,7 +23,6 @@ import {
 import { updateApplicationStatus } from '@/app/(seller-center)/admin/applications/actions';
 import { getSellerApplications } from '@/app/actions/admin';
 import { requestPasswordReset } from '@/app/actions/auth';
-import { getAllBrands, saveBrandConfig } from '@/app/actions/brand';
 import { validateImageFile } from '@/lib/uploadImage';
 import { processImage } from '@/lib/imageUtils';
 import { toast } from 'sonner';
@@ -144,15 +143,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
         }
         if (activeTab === 'featured') loadAllSellers();
         if (activeTab === 'photos') loadPhotos();
-        if (activeTab === 'brands') {
-            const defaultBrands = [
-                { domain: 'modazapotlanejo.com', name: 'Moda Zapotlanejo', tagline: 'Fashion Marketplace', description: 'El marketplace mayorista líder de Zapotlanejo.', primaryColor: 'blue', logoUrl: '', heroImage: '' },
-                { domain: 'zonadelvestir.com', name: 'Zona del Vestir', tagline: 'Tu Zona Mayorista', description: 'La zona mayorista de moda más grande de México.', primaryColor: 'violet', logoUrl: '', heroImage: '' },
-            ];
-            getAllBrands().then(b => {
-                setBrands(b && b.length > 0 ? b : defaultBrands);
-            }).catch(() => setBrands(defaultBrands));
-        }
+
         if (activeTab === 'plans') {
             getPlans().then(p => setPlans(p || [])).catch(() => setPlans([]));
         }
@@ -982,11 +973,11 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                     </div>
                                 </div>
                                 <button onClick={async () => {
-                                    const res = await saveBrandConfig(brand);
-                                    if (res.success) toast.success(`Marca ${brand.name} guardada`);
+                                    const res = await updateMarketplaceSettingsFull({ [`brandColor_${brand.domain}`]: brand.primaryColor } as any);
+                                    if (res.success) toast.success(`Color guardado para ${brand.name}`);
                                     else toast.error(res.error || 'Error al guardar');
                                 }} className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition">
-                                    💾 Guardar {brand.name}
+                                    💾 Guardar color
                                 </button>
                             </div>
                         ))}
