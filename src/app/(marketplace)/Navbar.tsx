@@ -124,7 +124,7 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
                                 key={link.href} 
                                 href={link.href}
                                 className={`text-xs font-black uppercase tracking-widest transition-colors hover:text-blue-600 ${
-                                    pathname === link.href ? 'text-blue-600' : 'text-gray-500 dark:text-gray-400'
+                                    pathname === link.href ? 'text-[color:var(--brand-600)]' : 'text-gray-500 dark:text-gray-400'
                                 }`}
                             >
                                 {link.name}
@@ -168,7 +168,7 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                             </svg>
                             {unreadCount > 0 && (
-                                <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-blue-600 border-2 border-white dark:border-gray-950 rounded-full"></span>
+                                <span className="absolute top-2 right-2 w-2.5 h-2.5 border-2 border-white dark:border-gray-950 rounded-full" style={{backgroundColor:"var(--brand-600)"}}></span>
                             )}
                         </Link>
 
@@ -176,7 +176,7 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
                         <Link href="/cart" className="relative p-2 text-gray-700 dark:text-gray-300 hover:text-blue-600 transition-colors">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
                             {itemCount > 0 && (
-                                <span className={`absolute -top-0.5 -right-0.5 h-5 min-w-5 px-1 bg-blue-600 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-in zoom-in duration-200`}>
+                                <span className="absolute -top-0.5 -right-0.5 h-5 min-w-5 px-1 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-in zoom-in duration-200" style={{backgroundColor:"var(--brand-600)"}}>
                                     {itemCount}
                                 </span>
                             )}
@@ -227,7 +227,7 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
                             />
                             <button 
                                 onClick={handleSearch}
-                                className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition"
+                                className="px-4 py-1.5 text-white rounded-xl text-xs font-black uppercase tracking-widest transition" style={{backgroundColor:"var(--brand-600)"}}
                             >
                                 Buscar
                             </button>
@@ -281,7 +281,7 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
                                 onClick={() => setMobileMenuOpen(false)}
                                 className={`px-4 py-4 rounded-2xl text-lg font-black tracking-tight transition-colors ${
                                     pathname === link.href 
-                                        ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' 
+                                        ? 'text-[color:var(--brand-600)] bg-[color:var(--brand-50)] dark:bg-gray-800' 
                                         : 'text-foreground hover:bg-gray-100 dark:hover:bg-gray-800'
                                 }`}
                             >
@@ -312,7 +312,7 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
                             <Link 
                                 href="/register/buyer" 
                                 onClick={() => setMobileMenuOpen(false)}
-                                className="px-4 py-4 rounded-2xl text-lg font-black text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                                className="px-4 py-4 rounded-2xl text-lg font-black transition-colors text-[color:var(--brand-600)]"
                             >
                                 Registrarse
                             </Link>

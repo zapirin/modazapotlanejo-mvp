@@ -74,17 +74,17 @@ export default async function LandingPage() {
                         </div>
 
                         <div className="space-y-4">
-                            <h2 className="text-blue-400 font-black uppercase tracking-[0.2em] text-xs md:text-sm drop-shadow-sm">{brand.name} Fashion Marketplace</h2>
+                            <h2 className="font-black uppercase tracking-[0.2em] text-xs md:text-sm drop-shadow-sm" style={{color:"var(--brand-500)"}}>{brand.name} Fashion Marketplace</h2>
                             <h1 className="text-5xl md:text-8xl font-black tracking-tighter leading-[0.9] text-foreground drop-shadow-sm">
                                 LA MODA <br />QUE MUEVE A <br />
-                                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">MÉXICO.</span>
+                                <span className="text-transparent bg-clip-text" style={{backgroundImage:"linear-gradient(to right, var(--brand-600), var(--brand-700))"}}>MÉXICO.</span>
                             </h1>
                         </div>
                         <p className="text-lg md:text-xl text-foreground/80 dark:text-white/80 font-medium max-w-lg leading-relaxed drop-shadow-sm">
                             {brand.description} Calidad premium, precios de fábrica y envíos a todo el país.
                         </p>
                         <div className="flex flex-wrap gap-4 pt-4">
-                            <Link href="/catalog" className="px-8 py-4 bg-blue-600 text-white rounded-full text-sm font-black uppercase tracking-widest hover:bg-blue-700 hover:scale-105 transition-all shadow-xl shadow-blue-500/20">
+                            <Link href="/catalog" className="px-8 py-4 text-white rounded-full text-sm font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl" style={{backgroundColor:"var(--brand-600)"}}>
                                 Explorar Catálogo
                             </Link>
 
@@ -120,7 +120,7 @@ export default async function LandingPage() {
 
             {/* ── TICKER NOVEDADES ── */}
             {newArrivals.length > 0 && (
-                <div className="bg-blue-600 text-white py-3 overflow-hidden">
+                <div className="text-white py-3 overflow-hidden" style={{backgroundColor:"var(--brand-600)"}}>
                     <div className="flex gap-12 animate-[marquee_30s_linear_infinite] whitespace-nowrap" suppressHydrationWarning>
                         {[...newArrivals, ...newArrivals].map((p: any, i: number) => (
                             <Link key={i} href={`/catalog/${p.id}`}
@@ -141,10 +141,10 @@ export default async function LandingPage() {
             <section className="py-24 max-w-7xl mx-auto px-6 w-full">
                 <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
                     <div className="space-y-2">
-                        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">Nuestras Secciones</h3>
+                        <h3 className="text-xs font-black uppercase tracking-[0.3em]" style={{color:"var(--brand-600)"}}>Nuestras Secciones</h3>
                         <h2 className="text-4xl font-black tracking-tight uppercase">EXPLORA POR CATEGORÍA</h2>
                     </div>
-                    <Link href="/categories" className="text-sm font-black uppercase tracking-widest border-b-2 border-blue-600 pb-1 hover:text-blue-600 transition-colors">
+                    <Link href="/categories" className="text-sm font-black uppercase tracking-widest border-b-2 pb-1 transition-colors" style={{borderColor:"var(--brand-600)",color:"var(--brand-600)"}}>
                         Ver todas las categorías
                     </Link>
                 </div>
@@ -183,7 +183,7 @@ export default async function LandingPage() {
                 <div className="max-w-7xl mx-auto px-6">
                     <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
                         <div className="space-y-2">
-                            <h3 className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">Lo más reciente</h3>
+                            <h3 className="text-xs font-black uppercase tracking-[0.3em]" style={{color:"var(--brand-600)"}}>Lo más reciente</h3>
                             <h2 className="text-4xl font-black tracking-tight uppercase">NUEVOS MODELOS</h2>
                         </div>
                         <Link href="/catalog" className="px-6 py-3 bg-white dark:bg-gray-800 border border-border rounded-full text-[10px] font-black uppercase tracking-widest hover:shadow-lg transition-all">
@@ -242,7 +242,7 @@ export default async function LandingPage() {
                                     <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-500">⭐ Vendedores Destacados</p>
                                     <h2 className="text-3xl font-black tracking-tight uppercase">Fabricantes Verificados</h2>
                                 </div>
-                                <Link href="/vendors" className="text-xs font-black uppercase tracking-widest text-blue-600 hover:underline">Ver todos →</Link>
+                                <Link href="/vendors" className="text-xs font-black uppercase tracking-widest hover:underline" style={{color:"var(--brand-600)"}}>Ver todos →</Link>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                                 {(featured.sellers as any[]).map((seller: any) => (
@@ -277,10 +277,10 @@ export default async function LandingPage() {
                         <div className="space-y-6">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs font-black uppercase tracking-[0.3em] text-blue-600">⭐ Productos Destacados</p>
+                                    <p className="text-xs font-black uppercase tracking-[0.3em]" style={{color:"var(--brand-600)"}}>⭐ Productos Destacados</p>
                                     <h2 className="text-3xl font-black tracking-tight uppercase">Selección del Editor</h2>
                                 </div>
-                                <Link href="/catalog" className="text-xs font-black uppercase tracking-widest text-blue-600 hover:underline">Ver catálogo →</Link>
+                                <Link href="/catalog" className="text-xs font-black uppercase tracking-widest hover:underline" style={{color:"var(--brand-600)"}}>Ver catálogo →</Link>
                             </div>
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
                                 {(featured.products as any[]).map((product: any) => (
@@ -321,7 +321,7 @@ export default async function LandingPage() {
             <section className="py-32 max-w-7xl mx-auto px-6 w-full text-center space-y-12">
                 <div className="max-w-3xl mx-auto space-y-6">
                     <h2 className="text-5xl font-black tracking-tight italic uppercase">
-                        ¿LISTO PARA ESCALAR TU <span className="text-blue-600">NEGOCIO?</span>
+                        ¿LISTO PARA ESCALAR TU <span style={{color:"var(--brand-600)"}}>NEGOCIO?</span>
                     </h2>
                     <p className="text-lg text-gray-500 font-medium leading-relaxed">
                         Ya seas un comprador buscando las mejores tendencias o un fabricante queriendo digitalizar sus ventas mayoristas, {brand.name} es tu aliado.

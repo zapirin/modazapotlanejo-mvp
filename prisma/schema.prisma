@@ -47,6 +47,25 @@ model MarketplaceSettings {
   privacyUrl         String?  // URL de la página de privacidad
   termsUrl           String?  // URL de la página de términos
   photographyPrices  Json?    // Precios del servicio de fotografía
+  brandColors        Json?    // Colores por dominio {"brandColor_modazapotlanejo.com": "blue"}
+  updatedAt          DateTime @updatedAt
+}
+
+
+model BrandConfig {
+  id                 String   @id @default(cuid())
+  domain             String   @unique // ej: modazapotlanejo.com
+  name               String   // Nombre de la marca
+  tagline            String?  // Slogan
+  description        String?  // Descripción para el hero
+  logoUrl            String?  // Logo
+  heroImage          String?  // Imagen de fondo del hero
+  primaryColor       String   @default("blue") // blue, emerald, violet, amber, rose
+  featuredSellerIds  String[] // Vendedores destacados para este dominio
+  featuredProductIds String[] // Productos destacados para este dominio
+  featuredCategories String[] // Categorías a mostrar primero
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
 
