@@ -74,7 +74,7 @@ export default async function LandingPage() {
                 <div className="max-w-7xl mx-auto px-6 relative z-10 w-full pb-32 pt-24">
                     <div className="max-w-2xl space-y-8">
                         {/* Banner temporada */}
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-white text-xs font-black uppercase tracking-widest shadow-lg" style={{background:"linear-gradient(to right, var(--brand-600), var(--brand-700))"}}>
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-white text-xs font-black uppercase tracking-widest" style={{background:"linear-gradient(to right, var(--brand-600), var(--brand-700))", boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>
                             <span>{season.emoji}</span>
                             <span>Tendencias {season.name}</span>
                             {stats.newThisWeek > 0 && (

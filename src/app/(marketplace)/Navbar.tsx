@@ -100,7 +100,7 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
             >
                 <div className="max-w-7xl mx-auto px-6 flex items-center justify-between gap-4">
                     <Link href="/" className="flex items-center gap-3 group shrink-0">
-                        <div className="relative w-12 h-12 overflow-hidden rounded-xl shadow-lg shadow-blue-500/10 group-hover:scale-105 transition-transform bg-white p-0.5">
+                        <div className="relative w-12 h-12 overflow-hidden rounded-xl group-hover:scale-105 transition-transform">
                             <Image
                                 src={brandConfig.logo.url}
                                 alt={brandConfig.name}
@@ -108,12 +108,25 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
                                 className="object-contain"
                             />
                         </div>
-                        <div className="flex flex-col leading-[0.85] hidden sm:flex">
-                            {brandConfig.logo.text.split(' ').map((word: string, i: number) => (
-                                <span key={i} className={`font-black tracking-tight text-foreground uppercase ${i === 0 ? 'text-xl' : 'text-[11px] opacity-70'}`}>
-                                    {word}
-                                </span>
-                            ))}
+                        <div className="flex flex-col leading-[0.9] hidden sm:flex">
+                            {(() => {
+                                const words = brandConfig.logo.text.split(' ');
+                                if (words.length >= 3) {
+                                    // Ej: "ZONA DEL VESTIR" → "ZONA DEL" arriba, "VESTIR" grande abajo
+                                    const top = words.slice(0, -1).join(' ');
+                                    const bottom = words[words.length - 1];
+                                    return (<>
+                                        <span className="font-black tracking-tight text-foreground uppercase text-[11px] opacity-70">{top}</span>
+                                        <span className="font-black tracking-tight text-foreground uppercase text-xl">{bottom}</span>
+                                    </>);
+                                }
+                                // Ej: "MODA ZAPOTLANEJO" → primera grande, resto pequeño
+                                return words.map((word: string, i: number) => (
+                                    <span key={i} className={`font-black tracking-tight text-foreground uppercase ${i === 0 ? 'text-xl' : 'text-[11px] opacity-70'}`}>
+                                        {word}
+                                    </span>
+                                ));
+                            })()}
                         </div>
                     </Link>
 
