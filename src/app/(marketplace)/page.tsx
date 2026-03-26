@@ -5,12 +5,23 @@ import { getLatestProducts, getFeaturedCategories, getBestSellers, getNewArrival
 import { getMarketplaceSettings, getFeaturedContent } from '@/app/actions/marketplace';
 import { headers } from 'next/headers';
 import { getBrandConfig } from '@/lib/brand';
+import { unstable_noStore as noStore } from 'next/cache';
 import { getSessionUser } from '@/app/actions/auth';
 import RecentlyViewed from '@/components/RecentlyViewed';
 import ProductCard from './ProductCard';
 
 
+const COLOR_MAP: Record<string, Record<string, string>> = {
+    blue:    { c50:'#eff6ff', c500:'#3b82f6', c600:'#2563eb', c700:'#1d4ed8' },
+    violet:  { c50:'#f5f3ff', c500:'#8b5cf6', c600:'#7c3aed', c700:'#6d28d9' },
+    emerald: { c50:'#ecfdf5', c500:'#10b981', c600:'#059669', c700:'#047857' },
+    amber:   { c50:'#fffbeb', c500:'#f59e0b', c600:'#d97706', c700:'#b45309' },
+    rose:    { c50:'#fff1f2', c500:'#f43f5e', c600:'#e11d48', c700:'#be123c' },
+    slate:   { c50:'#f8fafc', c500:'#64748b', c600:'#475569', c700:'#334155' },
+};
+
 export default async function LandingPage() {
+    noStore();
     const headersList = await headers();
     const host = headersList.get('host');
     const brand = getBrandConfig(host);

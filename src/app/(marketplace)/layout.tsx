@@ -10,6 +10,8 @@ import { unstable_noStore as noStore } from 'next/cache';
 import type { Metadata } from 'next';
 import { getSessionUser } from '@/app/actions/auth';
 
+export const dynamic = 'force-dynamic';
+
 // Mapa de colores por nombre de marca
 const COLOR_MAP: Record<string, Record<string, string>> = {
     blue:    { c50:'#eff6ff', c100:'#dbeafe', c200:'#bfdbfe', c500:'#3b82f6', c600:'#2563eb', c700:'#1d4ed8', rgb:'37,99,235' },

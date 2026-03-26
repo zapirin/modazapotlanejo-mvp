@@ -375,8 +375,8 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                                         if (res.success) toast.success(`Color ${opt.label} aplicado a ${site.label}`);
                                                         else toast.error('Error al guardar');
                                                     }}
-                                                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${isSelected ? 'ring-2 ring-offset-2 scale-110 shadow-lg' : 'opacity-70 hover:opacity-100 hover:scale-105'}`}
-                                                    style={{backgroundColor: opt.hex + (isSelected ? '30' : '15'), ringColor: opt.hex}}>
+                                                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-black transition-all cursor-pointer border-2 ${isSelected ? 'scale-110 shadow-lg' : 'border-transparent opacity-70 hover:opacity-100 hover:scale-105'}`}
+                                                    style={{backgroundColor: opt.hex + (isSelected ? '30' : '15'), borderColor: isSelected ? opt.hex : 'transparent'}}>
                                                     <span className="w-4 h-4 rounded-full shrink-0 shadow" style={{backgroundColor: opt.hex}} />
                                                     {opt.label}
                                                     {isSelected && <span>✓</span>}
