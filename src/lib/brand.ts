@@ -42,7 +42,7 @@ export const BRANDS: Record<string, BrandConfig> = {
         logo: {
             text: 'ZONA DEL VESTIR',
             initial: 'Z',
-            url: '/logo_zonadelvestir.png'
+            url: 'https://ynbcslgimrrccqohirzl.supabase.co/storage/v1/object/public/product-images/logo_zonadelvestir.jpg'
         },
         domain: 'zonadelvestir.com',
         featuredSellerIds: [],
