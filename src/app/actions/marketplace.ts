@@ -288,7 +288,8 @@ export async function updateMarketplaceSettingsFull(data: {
         } else {
             result = await (prisma.marketplaceSettings as any).create({ data });
         }
-        revalidatePath('/');
+        revalidatePath('/', 'layout');
+        revalidatePath('/catalog');
         revalidatePath('/admin/marketplace');
         return { success: true, data: result };
     } catch (error: any) {

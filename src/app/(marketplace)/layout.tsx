@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { getBrandConfig } from '@/lib/brand';
 import { getMarketplaceSettings } from '@/app/actions/marketplace';
+import { unstable_noStore as noStore } from 'next/cache';
 import type { Metadata } from 'next';
 import { getSessionUser } from '@/app/actions/auth';
 
@@ -43,6 +44,7 @@ export default async function MarketplaceLayout({
 }: {
     children: React.ReactNode;
 }) {
+    noStore(); // Forzar lectura fresca de BD en cada request
     const headersList = await headers();
     const host = headersList.get('host');
     const brand = getBrandConfig(host);
