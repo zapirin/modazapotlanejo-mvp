@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getMyReceivedReviews, replyToReview } from '@/app/actions/reviews';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 
 function StarDisplay({ value }: { value: number }) {
     return (
