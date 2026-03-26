@@ -69,6 +69,25 @@ model BrandConfig {
   updatedAt          DateTime @updatedAt
 }
 
+
+model SellerReview {
+  id           String   @id @default(cuid())
+  seller       User     @relation("SellerReviews", fields: [sellerId], references: [id])
+  sellerId     String
+  buyer        User     @relation("BuyerReviews", fields: [buyerId], references: [id])
+  buyerId      String
+  order        Order    @relation(fields: [orderId], references: [id])
+  orderId      String   @unique // Una reseña por orden
+  rating       Int      // 1-5 estrellas
+  title        String?  // Título opcional
+  body         String   // Reseña escrita
+  sellerReply  String?  // Respuesta del vendedor
+  repliedAt    DateTime?
+  isVisible    Boolean  @default(true) // Admin puede ocultar
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 enum Role {
   ADMIN
   MANAGER
@@ -165,6 +184,8 @@ model User {
   receivedMessages  Message[]         @relation("ReceivedMessages")
   wishlistItems     Wishlist[]
   shippingAddresses ShippingAddress[]
+  sellerReviews     SellerReview[]  @relation("SellerReviews")
+  buyerReviews      SellerReview[]  @relation("BuyerReviews")
   storeSettings     StoreSettings?    @relation("UserStoreSettings")
 
   resetToken       String?   @unique
@@ -565,6 +586,7 @@ model Order {
 
   // Shipping
   shippingAddress     ShippingAddress? @relation(fields: [shippingAddressId], references: [id])
+  review              SellerReview?
   shippingAddressId   String?
   shippingCost        Float            @default(0)
   skydropxRateId      String? // ID del rate seleccionado por el comprador

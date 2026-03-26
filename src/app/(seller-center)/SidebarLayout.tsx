@@ -189,6 +189,13 @@ export default function SidebarLayout({
                     </span>
                 )}
             </Link>
+            <Link
+                href="/reviews"
+                className={`flex items-center gap-3 px-4 py-3 rounded-2xl font-bold text-sm transition-all ${pathname === '/reviews' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+            >
+                <span>⭐</span>
+                <span className={isDesktopCollapsed ? 'hidden' : 'block'}>Calificaciones</span>
+            </Link>
 
             {/* SELLER Only: Clients, POS, Reports */}
             {user?.role === 'SELLER' && (
