@@ -100,7 +100,7 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
             >
                 <div className="max-w-7xl mx-auto px-6 flex items-center justify-between gap-4">
                     <Link href="/" className="flex items-center gap-3 group shrink-0">
-                        <div className="relative w-12 h-12 overflow-hidden rounded-xl group-hover:scale-105 transition-transform">
+                        <div className="relative w-12 h-12 rounded-xl group-hover:scale-105 transition-transform overflow-hidden">
                             <Image
                                 src={brandConfig.logo.url}
                                 alt={brandConfig.name}

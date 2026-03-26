@@ -53,7 +53,7 @@ export default async function LandingPage() {
         <div className="flex flex-col">
 
             {/* ── HERO ── */}
-            <section className="relative h-[90vh] flex items-end overflow-hidden" suppressHydrationWarning>
+            <section className="relative h-[90vh] flex items-center overflow-hidden" suppressHydrationWarning>
                 <div className="absolute inset-0 z-0">
                     {heroImageUrl ? (
                         heroImageUrl.startsWith('data:') || heroImageUrl.startsWith('http') || heroImageUrl.startsWith('/') ? (
@@ -71,7 +71,7 @@ export default async function LandingPage() {
                     <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/40 to-transparent" />
                 </div>
 
-                <div className="max-w-7xl mx-auto px-6 relative z-10 w-full pb-32 pt-24">
+                <div className="max-w-7xl mx-auto px-6 relative z-10 w-full py-20">
                     <div className="max-w-2xl space-y-8">
                         {/* Banner temporada */}
                         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-white text-xs font-black uppercase tracking-widest" style={{background:"linear-gradient(to right, var(--brand-600), var(--brand-700))", boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>

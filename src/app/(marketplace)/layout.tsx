@@ -71,7 +71,7 @@ export default async function MarketplaceLayout({
                 <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-10">
                     <div className="space-y-4">
                         <div className="flex items-center gap-2">
-                            <div className="relative w-8 h-8 overflow-hidden rounded-lg bg-white p-0.5">
+                            <div className="relative w-8 h-8 overflow-hidden rounded-lg">
                                 <Image 
                                     src={brand.logo.url} 
                                     alt={brand.name} 
