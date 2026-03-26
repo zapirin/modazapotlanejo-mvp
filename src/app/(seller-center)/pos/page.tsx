@@ -6,6 +6,7 @@ import { getDenominations, seedDefaultDenominations } from '../settings/denomina
 import { savePendingSale, getPendingSales, markSaleSynced, markSaleSyncError, countPendingSales } from '@/lib/posOfflineStore';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { searchProducts, getPriceTiers, getPaymentMethods, getPOSCategories, getProductsByCategory, processSale, getSuspendedSales, suspendSale, deleteSuspendedSale, createLayaway, getSaleById, updateSale } from '../products/new/actions';
 import { getCurrentCashSession, openCashSession, addCashMovement, closeCashSession, createTransfer, getAllowedLocations, checkSellerPOSAccess } from './actions';
 import { getStoreSettings, getLocationsSettings } from '../settings/actions';
@@ -1210,6 +1211,11 @@ function POSContent() {
                         </div>
                         
                         <div className="flex items-center gap-2">
+                            <Link href="/pos/peripherals"
+                                className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-border rounded-xl text-xs font-black hover:bg-gray-200 transition flex items-center gap-1.5"
+                                title="Configurar periféricos">
+                                🔌 Periféricos
+                            </Link>
                             {suspendedSales.length > 0 && (
                                 <button
                                     onClick={loadSuspendedSales}

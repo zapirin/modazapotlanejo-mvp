@@ -88,6 +88,19 @@ model SellerReview {
   updatedAt    DateTime @updatedAt
 }
 
+
+model PosPeripheral {
+  id         String   @id @default(cuid())
+  seller     User     @relation(fields: [sellerId], references: [id])
+  sellerId   String
+  type       String   // PRINTER_NETWORK | PRINTER_BLUETOOTH | BARCODE | CASH_DRAWER | CUSTOMER_DISPLAY
+  name       String   // Nombre descriptivo ej: "Impresora Caja 1"
+  config     Json     // { ip, port, baudRate, deviceId, etc }
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 enum Role {
   ADMIN
   MANAGER
@@ -186,6 +199,7 @@ model User {
   shippingAddresses ShippingAddress[]
   sellerReviews     SellerReview[]  @relation("SellerReviews")
   buyerReviews      SellerReview[]  @relation("BuyerReviews")
+  posPeripherals    PosPeripheral[]
   storeSettings     StoreSettings?    @relation("UserStoreSettings")
 
   resetToken       String?   @unique
