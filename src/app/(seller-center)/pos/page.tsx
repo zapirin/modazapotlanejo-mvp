@@ -93,6 +93,32 @@ function POSContent() {
 
     // Receipt State
     const [showReceiptModal, setShowReceiptModal] = useState(false);
+
+    // Cajón de dinero
+    const openCashDrawer = (reason?: string) => {
+        const drawerHtml = `
+            <html>
+            <head>
+                <style>
+                    body { margin: 0; }
+                    @page { margin: 0; size: 1mm 1mm; }
+                </style>
+            </head>
+            <body>
+                <!-- ESC/POS: ESC p 0 50 255 — comando de apertura de cajón -->
+                <div style="font-family:monospace;font-size:1px;color:white;">
+                    \x1B\x70\x00\x32\xFF
+                    ${reason ? `Apertura manual: ${reason}` : 'Apertura de cajón'}
+                </div>
+            </body>
+            </html>`;
+        const win = window.open('', '', 'width=1,height=1');
+        if (win) {
+            win.document.write(drawerHtml);
+            win.document.close();
+            setTimeout(() => { win.print(); win.close(); }, 200);
+        }
+    };
     const [lastSaleData, setLastSaleData] = useState<any>(null);
 
     // Suspended Sales State
@@ -459,10 +485,11 @@ function POSContent() {
             }
         }
 
-        return Math.max(0, subtotal); // Prevent negative totals
+        return isReturnMode ? Math.abs(subtotal) : Math.max(0, subtotal);
     };
 
     const calculateBalance = () => {
+        if (isReturnMode) return 0; // En devolución no hay saldo pendiente del cliente
         const paid = partialPayments.reduce((acc, p) => acc + p.amount, 0);
         return Math.max(0, calculateTotal() - paid);
     };
@@ -1215,6 +1242,18 @@ function POSContent() {
                                 title="Configurar periféricos">
                                 🔌 Periféricos
                             </Link>
+                            {/* Botón cajón de dinero — solo si tiene permiso */}
+                            {(currentUser?.role === 'SELLER' || (currentUser as any)?.canOpenDrawer) && (
+                                <button
+                                    onClick={() => {
+                                        openCashDrawer('Manual');
+                                        toast.success('💰 Comando enviado a cajón');
+                                    }}
+                                    className="px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 rounded-xl text-xs font-black hover:bg-amber-100 transition flex items-center gap-1.5"
+                                    title="Abrir cajón de dinero">
+                                    💰 Abrir cajón
+                                </button>
+                            )}
                             {suspendedSales.length > 0 && (
                                 <button
                                     onClick={loadSuspendedSales}
@@ -1763,8 +1802,28 @@ function POSContent() {
                             })}
                         </div>
 
+                        {/* Modo devolución: mostrar monto a devolver */}
+                        {isReturnMode && calculateTotal() > 0 && (
+                            <div className="mt-3 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-2xl space-y-3 animate-in slide-in-from-top-2">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-xs font-black uppercase tracking-widest text-orange-700 dark:text-orange-400">💰 Monto a devolver al cliente</span>
+                                    <span className="text-2xl font-black text-orange-600">{formatCurrency(calculateTotal())}</span>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-gray-400">Monto entregado al cliente (opcional)</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-2.5 text-gray-400 font-bold">$</span>
+                                        <input type="number" placeholder={calculateTotal().toFixed(2)}
+                                            className="w-full pl-7 pr-3 py-2.5 bg-white dark:bg-card border border-orange-200 dark:border-orange-800 rounded-xl text-sm font-bold focus:ring-2 focus:ring-orange-400 outline-none"
+                                            value={receivedAmount}
+                                            onChange={e => setReceivedAmount(e.target.value)} />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Input de Efectivo / Abono */}
-                        {calculateBalance() > 0 && (
+                        {!isReturnMode && calculateBalance() > 0 && (
                             <div className="mt-3 space-y-2 animate-in slide-in-from-top-2 duration-200">
                                 <div className="relative">
                                     <span className="absolute left-3 top-2 text-gray-400 font-bold">$</span>
@@ -1856,7 +1915,7 @@ function POSContent() {
                             isProcessing || 
                             (!isTransferMode && !currentSession) ||
                             (isTransferMode && (!transferSourceId || !transferDestId)) || 
-                            (!isTransferMode && calculateBalance() > 0 && (parseFloat(receivedAmount) || 0) < calculateBalance())
+                            (!isReturnMode && !isTransferMode && calculateBalance() > 0 && (parseFloat(receivedAmount) || 0) < calculateBalance())
                         }
                         className={`w-full py-5 font-black rounded-2xl shadow-xl hover:-translate-y-1 transition-all disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none uppercase tracking-widest relative overflow-hidden ${isTransferMode ? 'bg-purple-600 text-white' : 'bg-foreground text-background dark:bg-white dark:text-black'}`}
                     >

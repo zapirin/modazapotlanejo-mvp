@@ -155,6 +155,7 @@ model User {
   logoUrl        String? // Logo del vendedor
   // Permisos del vendedor (configurados por el admin)
   posEnabled     Boolean @default(true)  // Puede usar el POS
+  canOpenDrawer   Boolean @default(false) // Puede abrir cajón de dinero manualmente
   maxProducts    Int?                    // Límite de productos (null = sin límite)
   posRequested   Boolean @default(false) // El vendedor ha solicitado acceso al POS
   // Plan del vendedor

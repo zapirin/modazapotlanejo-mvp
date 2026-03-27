@@ -92,6 +92,7 @@ export async function updateCashier(cashierId: string, data: {
     canDiscount?: boolean;
     canViewReports?: boolean;
     canCreateProducts?: boolean;
+    canOpenDrawer?: boolean;
     isActive?: boolean;
     password?: string;
 }) {

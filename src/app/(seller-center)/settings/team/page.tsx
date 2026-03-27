@@ -153,10 +153,25 @@ export default function TeamPage() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         {cashier.isActive && (
+                                            <>
+                                            <button
+                                                onClick={async () => {
+                                                    const newVal = !(cashier as any).canOpenDrawer;
+                                                    const res = await updateCashier(cashier.id, { canOpenDrawer: newVal });
+                                                    if (res.success) {
+                                                        toast.success(newVal ? '💰 Cajón habilitado' : 'Cajón deshabilitado');
+                                                        loadData();
+                                                    }
+                                                }}
+                                                className={`px-3 py-1.5 text-xs font-black rounded-xl border transition ${(cashier as any).canOpenDrawer ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 text-amber-700' : 'bg-gray-50 dark:bg-gray-800 border-border text-gray-400'}`}
+                                                title={(cashier as any).canOpenDrawer ? 'Quitar permiso de cajón' : 'Dar permiso de cajón'}>
+                                                💰 {(cashier as any).canOpenDrawer ? 'Cajón ✓' : 'Cajón'}
+                                            </button>
                                             <button onClick={() => openEdit(cashier)}
                                                 className="px-3 py-1.5 text-xs font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-100 transition">
                                                 Editar
                                             </button>
+                                            </>
                                         )}
                                         {cashier.isActive ? (
                                             <button onClick={() => handleDelete(cashier)}
