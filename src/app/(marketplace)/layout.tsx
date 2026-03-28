@@ -54,10 +54,12 @@ export default async function MarketplaceLayout({
     // Leer color de marca guardado por el admin (si existe)
     let brandPrimaryColor = brand.primaryColor;
     try {
-        const settings = await getMarketplaceSettings();
-        const brandColors = (settings as any)?.brandColors as Record<string,string> | undefined;
-        const savedColor = brandColors?.[brand.domain];
-        if (savedColor) brandPrimaryColor = savedColor;
+        const settingsRes = await getMarketplaceSettings();
+        if (settingsRes.success && settingsRes.data) {
+            const brandColors = (settingsRes.data as any)?.brandColors as Record<string,string> | undefined;
+            const savedColor = brandColors?.[brand.domain];
+            if (savedColor) brandPrimaryColor = savedColor;
+        }
     } catch {}
 
     return (

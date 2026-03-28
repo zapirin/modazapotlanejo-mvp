@@ -71,7 +71,7 @@ export default async function LandingPage() {
                     <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/40 to-transparent" />
                 </div>
 
-                <div className="max-w-7xl mx-auto px-6 relative z-10 w-full py-20">
+                <div className="max-w-7xl mx-auto px-6 relative z-10 w-full pt-20 pb-40">
                     <div className="max-w-2xl space-y-8">
                         {/* Banner temporada */}
                         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-white text-xs font-black uppercase tracking-widest" style={{background:"linear-gradient(to right, var(--brand-600), var(--brand-700))", boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>
@@ -161,9 +161,9 @@ export default async function LandingPage() {
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                     {[...categories].sort((a: any, b: any) => {
-                            const ORDER = ['Damas', 'Caballeros', 'Niños', 'Accesorios', 'Calzado'];
-                            const ai = ORDER.indexOf(a.name);
-                            const bi = ORDER.indexOf(b.name);
+                            const ORDER = ['DAMAS', 'CABALLEROS', 'NIÑOS', 'ACCESORIOS', 'CALZADO'];
+                            const ai = ORDER.indexOf(a.name?.toUpperCase());
+                            const bi = ORDER.indexOf(b.name?.toUpperCase());
                             if (ai === -1 && bi === -1) return a.name.localeCompare(b.name);
                             if (ai === -1) return 1;
                             if (bi === -1) return -1;
