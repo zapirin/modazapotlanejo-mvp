@@ -53,7 +53,7 @@ export default async function LandingPage() {
         <div className="flex flex-col">
 
             {/* ── HERO ── */}
-            <section className="relative h-[90vh] flex items-center overflow-hidden" suppressHydrationWarning>
+            <section className="relative min-h-[95vh] flex items-center overflow-hidden" suppressHydrationWarning>
                 <div className="absolute inset-0 z-0">
                     {heroImageUrl ? (
                         heroImageUrl.startsWith('data:') || heroImageUrl.startsWith('http') || heroImageUrl.startsWith('/') ? (
