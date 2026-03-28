@@ -29,7 +29,7 @@ function getBrandCssVars(color: string): string {
 
 export async function generateMetadata(): Promise<Metadata> {
     const headersList = await headers();
-    const host = headersList.get('host');
+    const host = headersList.get('x-forwarded-host') || headersList.get('host');
     const brand = getBrandConfig(host);
     
     return {
@@ -48,7 +48,7 @@ export default async function MarketplaceLayout({
 }) {
     noStore(); // Forzar lectura fresca de BD en cada request
     const headersList = await headers();
-    const host = headersList.get('host');
+    const host = headersList.get('x-forwarded-host') || headersList.get('host');
     const brand = getBrandConfig(host);
     const user = await getSessionUser();
     // Leer color de marca guardado por el admin (si existe)

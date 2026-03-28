@@ -3,6 +3,8 @@ import MarketplaceClient from "./MarketplaceClient";
 import { getSessionUser } from "@/app/actions/auth";
 import { redirect } from "next/navigation";
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminMarketplacePage() {
     const user = await getSessionUser();
     if (!user || user.role !== 'ADMIN') {
