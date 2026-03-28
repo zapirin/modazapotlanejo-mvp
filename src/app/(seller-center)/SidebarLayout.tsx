@@ -388,10 +388,10 @@ export default function SidebarLayout({
         <div className="p-4 border-t border-border mt-auto space-y-3">
           <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
             <div className="w-10 h-10 shrink-0 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
-              {user?.name?.substring(0, 2).toUpperCase() || 'US'}
+              {((user?.role === 'SELLER' || user?.role === 'ADMIN') && (user as any)?.businessName ? (user as any).businessName : user?.name)?.substring(0, 2).toUpperCase() || 'US'}
             </div>
             <div className={`overflow-hidden ${isDesktopCollapsed ? 'hidden' : 'block'}`}>
-              <p className="text-sm font-bold truncate">{user?.name}</p>
+              <p className="text-sm font-bold truncate">{(user?.role === 'SELLER' || user?.role === 'ADMIN') && (user as any)?.businessName ? (user as any).businessName : user?.name}</p>
               <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase truncate">
                 {user?.role === 'BUYER' ? (user.isWholesale ? 'Mayorista' : 'COMPRADOR') : user.role}
               </p>
