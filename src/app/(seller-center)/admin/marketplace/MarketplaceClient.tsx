@@ -702,6 +702,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                             ))}
                         </div>
                     )}
+                </div>
             )}
 
             {/* ── TAB: DESTACADOS ── */}
