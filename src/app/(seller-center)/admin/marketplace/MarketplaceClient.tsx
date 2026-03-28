@@ -389,10 +389,9 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                                 </button>
                                             );
                                         })}
-                                    </div>
-                                </div>}
-                        ))}
-                    </div>
+                                    </div>}
+                                </div>
+                            ))}
                         </div>
 
                         {/* URLs legales */}
