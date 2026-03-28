@@ -172,7 +172,7 @@ export async function getFeaturedCategories() {
 
 export async function getCategories() {
     try {
-        const CATEGORY_ORDER = ['Damas', 'Caballeros', 'Niños', 'Accesorios', 'Calzado'];
+        const CATEGORY_ORDER = ['DAMAS', 'CABALLEROS', 'NIÑOS', 'ACCESORIOS', 'CALZADO'];
         const cats = await prisma.category.findMany({
             include: {
                 subcategories: { orderBy: { name: 'asc' } },
