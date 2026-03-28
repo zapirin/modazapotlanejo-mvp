@@ -35,9 +35,7 @@ export default async function VendorsPage() {
                                     <h3 className="text-lg font-black text-foreground uppercase tracking-tight group-hover:text-blue-600 transition-colors">
                                         {vendor.businessName || vendor.name}
                                     </h3>
-                                    {vendor.businessName && vendor.businessName !== vendor.name && (
-                                        <p className="text-xs font-bold text-gray-400">{vendor.name}</p>
-                                    )}
+
                                     <div className="flex flex-wrap gap-2 pt-1">
                                         <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-full text-[10px] font-black uppercase tracking-widest text-gray-500">
                                             📦 {vendor._count.ownedProducts} Productos
