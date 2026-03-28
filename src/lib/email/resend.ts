@@ -28,7 +28,7 @@ export async function sendEmail({
     }
 
     const { data, error } = await resend.emails.send({
-      from: 'Moda Zapotlanejo <onboarding@resend.dev>',
+      from: 'Moda Zapotlanejo <noreply@modazapotlanejo.com>',
       to,
       subject,
       html,
