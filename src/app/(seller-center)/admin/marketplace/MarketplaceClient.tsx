@@ -389,7 +389,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                                 </button>
                                             );
                                         })}
-                                    </div>}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -584,18 +584,17 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             <div>
                                                 <p className="font-black text-foreground">{seller.businessName || seller.name}</p>
                                                 <p className="text-xs text-gray-400 font-medium">{seller.email} · {seller._count?.ownedProducts || 0} productos</p>
-                                        <p className="text-[10px] text-gray-400">
-                                            Miembro desde {new Date((seller as any).createdAt).toLocaleDateString('es-MX', {month:'short', year:'numeric'})}
-                                            {' · '}Renovación: {new Date(new Date((seller as any).createdAt).setMonth(new Date((seller as any).createdAt).getMonth() + Math.ceil((Date.now() - new Date((seller as any).createdAt).getTime()) / (30*24*60*60*1000)))).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'})}
-                                        </p>
+                                                <p className="text-[10px] text-gray-400">
+                                                    Miembro desde {new Date((seller as any).createdAt).toLocaleDateString('es-MX', {month:'short', year:'numeric'})}
+                                                </p>
                                                 {seller.sellerSlug ? (
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <p className="text-[10px] font-mono text-blue-500">/acceso/{seller.sellerSlug}</p>
-                                                        <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/acceso/${seller.sellerSlug}`); toast.success('URL copiada'); }}
+                                                        <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(`${window.location.origin}/acceso/${seller.sellerSlug}`); toast.success('URL copiada'); }}
                                                             className="text-[9px] font-black text-gray-400 hover:text-blue-600 transition uppercase">Copiar</button>
                                                     </div>
                                                 ) : (
-                                                    <button onClick={async () => {
+                                                    <button onClick={async e => { e.stopPropagation();
                                                         const res = await assignSellerSlug(seller.id);
                                                         if (res.success) { setSellers(prev => prev.map((s: any) => s.id === seller.id ? { ...s, sellerSlug: res.slug } : s)); toast.success('URL generada'); }
                                                         else toast.error(res.error || 'Error');
@@ -606,8 +605,8 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <span className={`text-gray-400 transition-transform ${expandedSellers.has(seller.id) ? 'rotate-180' : ''}`}>⌄</span>
-                                            <button onClick={async () => {
+                                            <span className={`text-gray-400 transition-transform duration-200 ${expandedSellers.has(seller.id) ? 'rotate-180' : ''}`}>⌄</span>
+                                            <button onClick={async e => { e.stopPropagation();
                                                 if (!confirm(`¿Enviar email de reseteo a ${seller.email}?`)) return;
                                                 const res = await requestPasswordReset(seller.email);
                                                 if (res.success) toast.success('Email de reseteo enviado');
@@ -615,92 +614,94 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             }} className="px-3 py-1.5 text-xs font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-100 transition">
                                                 🔑 Resetear acceso
                                             </button>
-                                            <button onClick={() => handleDeleteSeller(seller)}
+                                            <button onClick={e => { e.stopPropagation(); handleDeleteSeller(seller); }}
                                                 className="px-3 py-1.5 text-xs font-black text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl hover:bg-red-100 transition">
                                                 Desactivar
                                             </button>
                                         </div>
                                     </div>
-                                    {expandedSellers.has(seller.id) && <div className="space-y-3 pt-3 border-t border-border px-5 pb-5">
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                            <div className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${seller.posEnabled ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gray-50 dark:bg-gray-800/30 border-border'}`}>
-                                                <span className="text-base">🖥️</span>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Acceso POS</p>
-                                                    {seller.posRequested && !seller.posEnabled && (
-                                                        <p className="text-[9px] text-orange-500 font-black">⚠️ Solicitud pendiente</p>
-                                                    )}
+
+                                    {expandedSellers.has(seller.id) && (
+                                        <div className="space-y-3 px-5 pb-5 border-t border-border pt-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                <div className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${seller.posEnabled ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gray-50 dark:bg-gray-800/30 border-border'}`}>
+                                                    <span className="text-base">🖥️</span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Acceso POS</p>
+                                                        {seller.posRequested && !seller.posEnabled && (
+                                                            <p className="text-[9px] text-orange-500 font-black">⚠️ Solicitud pendiente</p>
+                                                        )}
+                                                    </div>
+                                                    <button onClick={() => handleTogglePOS(seller)}
+                                                        className={`relative w-9 h-5 rounded-full transition-all shrink-0 ${seller.posEnabled ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                                                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${seller.posEnabled ? 'left-4' : 'left-0.5'}`} />
+                                                    </button>
                                                 </div>
-                                                <button onClick={() => handleTogglePOS(seller)}
-                                                    className={`relative w-9 h-5 rounded-full transition-all shrink-0 ${seller.posEnabled ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                                                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${seller.posEnabled ? 'left-4' : 'left-0.5'}`} />
-                                                </button>
-                                            </div>
-                                            <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-gray-50 dark:bg-gray-800/30">
-                                                <span className="text-base">💰</span>
-                                                <div className="flex-1">
-                                                    <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Comisión %</p>
-                                                    <div className="flex items-center gap-1 mt-0.5">
-                                                        <input type="number" min={0} max={100} step={0.5}
-                                                            defaultValue={seller.commission || 0}
-                                                            onBlur={async (e) => {
-                                                                const val = parseFloat(e.target.value);
-                                                                if (isNaN(val) || val < 0 || val > 100) return;
-                                                                const res = await updateSellerPermissions(seller.id, { commission: val });
-                                                                if (res.success) toast.success(`Comisión actualizada a ${val}%`);
-                                                                else toast.error(res.error || 'Error');
-                                                            }}
-                                                            className="w-16 px-2 py-1 text-sm font-black text-blue-600 bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded-lg text-center focus:ring-2 focus:ring-blue-500 outline-none" />
-                                                        <span className="text-sm font-black text-blue-600">%</span>
+                                                <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-gray-50 dark:bg-gray-800/30">
+                                                    <span className="text-base">💰</span>
+                                                    <div className="flex-1">
+                                                        <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Comisión %</p>
+                                                        <div className="flex items-center gap-1 mt-0.5">
+                                                            <input type="number" min={0} max={100} step={0.5}
+                                                                defaultValue={seller.commission || 0}
+                                                                onBlur={async (e) => {
+                                                                    const val = parseFloat(e.target.value);
+                                                                    if (isNaN(val) || val < 0 || val > 100) return;
+                                                                    const res = await updateSellerPermissions(seller.id, { commission: val });
+                                                                    if (res.success) toast.success(`Comisión actualizada a ${val}%`);
+                                                                    else toast.error(res.error || 'Error');
+                                                                }}
+                                                                className="w-16 px-2 py-1 text-sm font-black text-blue-600 bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded-lg text-center focus:ring-2 focus:ring-blue-500 outline-none" />
+                                                            <span className="text-sm font-black text-blue-600">%</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3 p-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+                                                    <span className="text-base">🏷️</span>
+                                                    <div className="flex-1">
+                                                        <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Plan actual</p>
+                                                        <p className="text-sm font-black text-blue-600">{seller.planName || 'Básico'}</p>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-3 p-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
-                                                <span className="text-base">🏷️</span>
-                                                <div className="flex-1">
-                                                    <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Plan actual</p>
-                                                    <p className="text-sm font-black text-blue-600">{seller.planName || 'Básico'}</p>
+                                            <div className="p-3 rounded-xl border border-border bg-gray-50 dark:bg-gray-800/30 space-y-2">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Asignar Plan Rápido</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {PLANS.map((plan: any) => (
+                                                        <button key={plan.name} onClick={() => applyPlan(seller, plan)}
+                                                            className={`px-3 py-1.5 rounded-xl text-[10px] font-black border transition-all ${seller.planName === plan.name ? 'bg-blue-600 text-white border-blue-600' : 'border-border text-gray-500 hover:border-blue-400 hover:text-blue-600'}`}>
+                                                            {plan.name} <span className="opacity-60">{plan.maxLocations}loc · {plan.maxCashiers}caj · {plan.maxProducts ? `${plan.maxProducts}prod` : '∞prod'}</span>
+                                                        </button>
+                                                    ))}
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div className="p-3 rounded-xl border border-border bg-gray-50 dark:bg-gray-800/30 space-y-2">
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Asignar Plan Rápido</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {PLANS.map((plan: any) => (
-                                                    <button key={plan.name} onClick={() => applyPlan(seller, plan)}
-                                                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black border transition-all ${seller.planName === plan.name ? 'bg-blue-600 text-white border-blue-600' : 'border-border text-gray-500 hover:border-blue-400 hover:text-blue-600'}`}>
-                                                        {plan.name} <span className="opacity-60">{plan.maxLocations}loc · {plan.maxCashiers}caj · {plan.maxProducts ? `${plan.maxProducts}prod` : '∞prod'}</span>
-                                                    </button>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                {[
+                                                    { label: 'Locaciones POS', field: 'maxLocations', icon: '📍', val: seller.maxLocations ?? 1, current: seller._count?.ownedLocations ?? 0 },
+                                                    { label: 'Cajeros', field: 'maxCashiers', icon: '👤', val: seller.maxCashiers ?? 1, current: seller._count?.cashiers ?? 0 },
+                                                    { label: 'Productos', field: 'maxProducts', icon: '📦', val: seller.maxProducts ?? '', current: seller._count?.ownedProducts ?? 0 },
+                                                ].map((item: any) => (
+                                                    <div key={item.field} className="flex flex-col gap-1 p-3 rounded-xl border border-border bg-white dark:bg-gray-900">
+                                                        <p className="text-[9px] font-black uppercase tracking-wide text-gray-400">{item.icon} {item.label}</p>
+                                                        <p className="text-[9px] text-gray-400">Usando: {item.current}</p>
+                                                        <input type="number" min="0" value={item.val} placeholder="∞"
+                                                            onChange={e => item.field === 'maxProducts' ? handleMaxProducts(seller, e.target.value) : handlePlanChange(seller, item.field, e.target.value)}
+                                                            className="w-full px-2 py-1 text-center text-sm font-black bg-gray-50 dark:bg-gray-800 border border-border rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50" />
+                                                    </div>
                                                 ))}
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                            {[
-                                                { label: 'Locaciones POS', field: 'maxLocations', icon: '📍', val: seller.maxLocations ?? 1, current: seller._count?.ownedLocations ?? 0 },
-                                                { label: 'Cajeros', field: 'maxCashiers', icon: '👤', val: seller.maxCashiers ?? 1, current: seller._count?.cashiers ?? 0 },
-                                                { label: 'Productos', field: 'maxProducts', icon: '📦', val: seller.maxProducts ?? '', current: seller._count?.ownedProducts ?? 0 },
-                                            ].map((item: any) => (
-                                                <div key={item.field} className="flex flex-col gap-1 p-3 rounded-xl border border-border bg-white dark:bg-gray-900">
-                                                    <p className="text-[9px] font-black uppercase tracking-wide text-gray-400">{item.icon} {item.label}</p>
-                                                    <p className="text-[9px] text-gray-400">Usando: {item.current}</p>
-                                                    <input type="number" min="0" value={item.val} placeholder="∞"
-                                                        onChange={e => item.field === 'maxProducts' ? handleMaxProducts(seller, e.target.value) : handlePlanChange(seller, item.field, e.target.value)}
-                                                        className="w-full px-2 py-1 text-center text-sm font-black bg-gray-50 dark:bg-gray-800 border border-border rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50" />
+                                                <div className="flex flex-col gap-1 p-3 rounded-xl border border-border bg-white dark:bg-gray-900">
+                                                    <p className="text-[9px] font-black uppercase tracking-wide text-gray-400">🏷️ Nombre del plan</p>
+                                                    <input type="text" value={seller.planName || 'Básico'}
+                                                        onChange={e => handlePlanName(seller, e.target.value)}
+                                                        className="w-full px-2 py-1 text-xs font-black bg-gray-50 dark:bg-gray-800 border border-border rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50 mt-auto" />
                                                 </div>
-                                            ))}
-                                            <div className="flex flex-col gap-1 p-3 rounded-xl border border-border bg-white dark:bg-gray-900">
-                                                <p className="text-[9px] font-black uppercase tracking-wide text-gray-400">🏷️ Nombre del plan</p>
-                                                <input type="text" value={seller.planName || 'Básico'}
-                                                    onChange={e => handlePlanName(seller, e.target.value)}
-                                                    className="w-full px-2 py-1 text-xs font-black bg-gray-50 dark:bg-gray-800 border border-border rounded-lg outline-none focus:ring-2 focus:ring-blue-500/50 mt-auto" />
                                             </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
                     )}
-                </div>
             )}
 
             {/* ── TAB: DESTACADOS ── */}
