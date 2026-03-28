@@ -214,6 +214,7 @@ export async function getSellersWithPermissions() {
                 isActive: true, adminNotes: true, commission: true, fixedFee: true,
                 posEnabled: true, maxProducts: true, posRequested: true, logoUrl: true,
                 planName: true, maxLocations: true, maxCashiers: true,
+                sellerSlug: true, createdAt: true,
                 _count: { select: { ownedProducts: true, cashiers: true, ownedLocations: true } }
             },
             orderBy: { createdAt: 'desc' }

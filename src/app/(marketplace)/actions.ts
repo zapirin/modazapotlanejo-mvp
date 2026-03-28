@@ -172,14 +172,21 @@ export async function getFeaturedCategories() {
 
 export async function getCategories() {
     try {
-        return await prisma.category.findMany({
+        const CATEGORY_ORDER = ['Damas', 'Caballeros', 'Niños', 'Accesorios', 'Calzado'];
+        const cats = await prisma.category.findMany({
             include: {
                 subcategories: { orderBy: { name: 'asc' } },
-                _count: {
-                    select: { products: true }
-                }
+                _count: { select: { products: true } }
             },
-            orderBy: { name: 'asc' }
+        });
+        // Ordenar según el orden definido
+        return cats.sort((a: any, b: any) => {
+            const ia = CATEGORY_ORDER.indexOf(a.name);
+            const ib = CATEGORY_ORDER.indexOf(b.name);
+            if (ia === -1 && ib === -1) return a.name.localeCompare(b.name);
+            if (ia === -1) return 1;
+            if (ib === -1) return -1;
+            return ia - ib;
         });
     } catch (error) {
         return [];

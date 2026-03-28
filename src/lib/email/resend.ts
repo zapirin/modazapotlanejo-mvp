@@ -15,10 +15,12 @@ export async function sendEmail({
   to,
   subject,
   html,
+  domain,
 }: {
   to: string | string[];
   subject: string;
   html: string;
+  domain?: string;
 }) {
   try {
     const resend = getResend();
@@ -28,7 +30,9 @@ export async function sendEmail({
     }
 
     const { data, error } = await resend.emails.send({
-      from: 'Moda Zapotlanejo <noreply@modazapotlanejo.com>',
+      from: domain?.includes('zonadelvestir') 
+        ? 'Zona del Vestir <noreply@modazapotlanejo.com>'
+        : 'Moda Zapotlanejo <noreply@modazapotlanejo.com>',
       to,
       subject,
       html,

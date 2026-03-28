@@ -57,6 +57,12 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     const [applications, setApplications] = useState<any[]>([]);
     const [loadingApps, setLoadingApps] = useState(false);
     const [sellerSubTab, setSellerSubTab] = useState<'active' | 'inactive'>('active');
+    const [expandedSellers, setExpandedSellers] = useState<Set<string>>(new Set());
+    const toggleSeller = (id: string) => setExpandedSellers(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
     const [inactiveSellers, setInactiveSellers] = useState<any[]>([]);
     const [loadingInactive, setLoadingInactive] = useState(false);
     const [plans, setPlans] = useState<any[]>([]);
@@ -384,7 +390,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             );
                                         })}
                                     </div>
-                                </div>
+                                </div>}
                             ))}
                         </div>
 
@@ -567,8 +573,9 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                             {loadingSellers ? (
                                 <div className="flex justify-center p-10"><div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" /></div>
                             ) : sellers.map((seller: any) => (
-                                <div key={seller.id} className="bg-card border border-border rounded-2xl p-5 space-y-4">
-                                    <div className="flex items-start justify-between gap-4">
+                                <div key={seller.id} className="bg-card border border-border rounded-2xl overflow-hidden">
+                                    <div className="flex items-start justify-between gap-4 p-5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                                         onClick={() => toggleSeller(seller.id)}>
                                         <div className="flex items-center gap-3">
                                             {seller.logoUrl
                                                 ? <Image src={seller.logoUrl} alt={seller.name} width={40} height={40} className="w-10 h-10 rounded-xl object-contain border border-border" />
@@ -577,6 +584,10 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             <div>
                                                 <p className="font-black text-foreground">{seller.businessName || seller.name}</p>
                                                 <p className="text-xs text-gray-400 font-medium">{seller.email} · {seller._count?.ownedProducts || 0} productos</p>
+                                        <p className="text-[10px] text-gray-400">
+                                            Miembro desde {new Date((seller as any).createdAt).toLocaleDateString('es-MX', {month:'short', year:'numeric'})}
+                                            {' · '}Renovación: {new Date(new Date((seller as any).createdAt).setMonth(new Date((seller as any).createdAt).getMonth() + Math.ceil((Date.now() - new Date((seller as any).createdAt).getTime()) / (30*24*60*60*1000)))).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'})}
+                                        </p>
                                                 {seller.sellerSlug ? (
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <p className="text-[10px] font-mono text-blue-500">/acceso/{seller.sellerSlug}</p>
@@ -594,7 +605,8 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                                 )}
                                             </div>
                                         </div>
-                                        <div className="flex gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-gray-400 transition-transform ${expandedSellers.has(seller.id) ? 'rotate-180' : ''}`}>⌄</span>
                                             <button onClick={async () => {
                                                 if (!confirm(`¿Enviar email de reseteo a ${seller.email}?`)) return;
                                                 const res = await requestPasswordReset(seller.email);
@@ -609,7 +621,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="space-y-3 pt-3 border-t border-border">
+                                    {expandedSellers.has(seller.id) && <div className="space-y-3 pt-3 border-t border-border px-5 pb-5">
                                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                             <div className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${seller.posEnabled ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gray-50 dark:bg-gray-800/30 border-border'}`}>
                                                 <span className="text-base">🖥️</span>
