@@ -391,7 +391,8 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                         })}
                                     </div>
                                 </div>}
-                            ))}
+                        ))}
+                    </div>
                         </div>
 
                         {/* URLs legales */}
