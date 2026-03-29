@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { getInventory, bulkCreateProducts, deleteProduct, getCategories, duplicateProduct } from '../products/new/actions';
 import { adjustProductStock } from './actions';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
+import BulkActionsModal from '../products/BulkActionsModal';
 import { useCallback } from 'react';
 
 const formatVariantName = (variant: any) => {
@@ -37,6 +38,35 @@ export default function InventoryPage() {
     const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
     const [stockAdjustments, setStockAdjustments] = useState<Record<string, number>>({});
     const [isAdjusting, setIsAdjusting] = useState(false);
+
+    // Bulk Edit State
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+
+    // Computed filtered products for list and "select all"
+    const filteredProducts = products.filter((p: any) => {
+        const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
+        let matchCategory = true;
+        if (selectedCategory) {
+            if (selectedCategory.includes('|')) {
+                const [catId, subcatId] = selectedCategory.split('|');
+                matchCategory = p.categoryId === catId && p.subcategoryId === subcatId;
+            } else {
+                matchCategory = p.categoryId === selectedCategory;
+            }
+        }
+        return matchSearch && matchCategory;
+    });
+
+    const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.checked) setSelectedIds(filteredProducts.map((p: any) => p.id));
+        else setSelectedIds([]);
+    };
+
+    const handleSelectOne = (id: string, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    };
 
     useEffect(() => {
         loadInventory();
@@ -272,6 +302,20 @@ export default function InventoryPage() {
                 </div>
             </div>
 
+            {selectedIds.length > 0 && (
+                <div className="mb-4 flex flex-col md:flex-row items-center justify-between bg-blue-50/80 backdrop-blur py-3 px-6 rounded-3xl border border-blue-200 shadow-sm animate-fade-in gap-4">
+                    <span className="text-blue-800 font-bold text-lg">💡 {selectedIds.length} artículos seleccionados</span>
+                    <div className="flex gap-3 w-full md:w-auto">
+                        <button onClick={() => setSelectedIds([])} className="flex-1 md:flex-none text-sm font-bold text-gray-500 hover:text-red-600 px-4 py-2.5 rounded-xl bg-white shadow-sm transition">
+                            ✖ Cancelar
+                        </button>
+                        <button onClick={() => setIsBulkModalOpen(true)} className="flex-1 md:flex-none bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg hover:bg-blue-700 hover:scale-105 active:scale-95 transition flex items-center justify-center gap-2">
+                            ⚡ Edición Masiva 
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Panel de Búsqueda y Filtros */}
             <div className="bg-card p-5 rounded-t-3xl border border-border flex flex-col md:flex-row gap-4 shadow-sm">
                 <div className="flex-1 relative">
@@ -322,6 +366,12 @@ export default function InventoryPage() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-gray-50/50 dark:bg-card/80 border-b border-border text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-[0.2em]">
+                                    <th className="p-5 text-center w-12">
+                                        <input type="checkbox" className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                            checked={selectedIds.length === filteredProducts.length && filteredProducts.length > 0}
+                                            onChange={handleSelectAll}
+                                        />
+                                    </th>
                                     <th className="p-5">Modelo / Prenda</th>
                                     <th className="p-5">Categoría</th>
                                     <th className="p-5 text-emerald-600 dark:text-emerald-400">Costo</th>
@@ -331,25 +381,20 @@ export default function InventoryPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/50">
-                                {products.filter((p: any) => {
-                                    const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
-                                    
-                                    let matchCategory = true;
-                                    if (selectedCategory) {
-                                        if (selectedCategory.includes('|')) {
-                                            const [catId, subcatId] = selectedCategory.split('|');
-                                            matchCategory = p.categoryId === catId && p.subcategoryId === subcatId;
-                                        } else {
-                                            matchCategory = p.categoryId === selectedCategory;
-                                        }
-                                    }
-                                    return matchSearch && matchCategory;
-                                }).map((product) => {
+                                {filteredProducts.map((product: any) => {
                                     const totalStock = product.variants.reduce((acc: number, v: any) => acc + v.stock, 0);
                                     const options = product.variantOptions as any[] || [];
+                                    const isSelected = selectedIds.includes(product.id);
 
                                     return (
-                                        <tr key={product.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors group">
+                                        <tr key={product.id} onClick={() => handleSelectOne(product.id)} className={`hover:bg-black/5 dark:hover:bg-white/5 transition-colors group cursor-pointer ${isSelected ? 'bg-blue-50/60 dark:bg-blue-900/20' : ''}`}>
+                                            <td className="p-5 text-center" onClick={(e) => e.stopPropagation()}>
+                                                <input type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={() => handleSelectOne(product.id)}
+                                                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                />
+                                            </td>
                                             <td className="p-5">
                                                 <div className="flex items-center gap-4">
                                                     <div className="w-14 h-14 bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center text-2xl overflow-hidden shadow-inner flex-shrink-0 group-hover:scale-110 transition-transform">
@@ -521,6 +566,18 @@ export default function InventoryPage() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {isBulkModalOpen && (
+                <BulkActionsModal 
+                    selectedIds={selectedIds} 
+                    onClose={() => setIsBulkModalOpen(false)}
+                    onSuccess={() => {
+                        setIsBulkModalOpen(false);
+                        setSelectedIds([]);
+                        loadInventory();
+                    }}
+                />
             )}
         </div>
     );
