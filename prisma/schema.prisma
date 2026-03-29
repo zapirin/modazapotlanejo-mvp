@@ -254,6 +254,10 @@ model Product {
   packageSize          Int? // e.g., 6, 12 pieces
   wholesaleComposition Json? // User defined variant breakdown for combos
 
+  promotionalPrice     Float? // Discounted price for campaigns
+  promoStartDate       DateTime? // When promo starts
+  promoEndDate         DateTime? // When promo ends
+
   // New Fields based on requirements
   brand   Brand?  @relation(fields: [brandId], references: [id])
   brandId String?

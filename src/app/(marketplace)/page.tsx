@@ -12,12 +12,12 @@ import ProductCard from './ProductCard';
 
 
 const COLOR_MAP: Record<string, Record<string, string>> = {
-    blue:    { c50:'#eff6ff', c500:'#3b82f6', c600:'#2563eb', c700:'#1d4ed8' },
-    violet:  { c50:'#f5f3ff', c500:'#8b5cf6', c600:'#7c3aed', c700:'#6d28d9' },
-    emerald: { c50:'#ecfdf5', c500:'#10b981', c600:'#059669', c700:'#047857' },
-    amber:   { c50:'#fffbeb', c500:'#f59e0b', c600:'#d97706', c700:'#b45309' },
-    rose:    { c50:'#fff1f2', c500:'#f43f5e', c600:'#e11d48', c700:'#be123c' },
-    slate:   { c50:'#f8fafc', c500:'#64748b', c600:'#475569', c700:'#334155' },
+    blue: { c50: '#eff6ff', c500: '#3b82f6', c600: '#2563eb', c700: '#1d4ed8' },
+    violet: { c50: '#f5f3ff', c500: '#8b5cf6', c600: '#7c3aed', c700: '#6d28d9' },
+    emerald: { c50: '#ecfdf5', c500: '#10b981', c600: '#059669', c700: '#047857' },
+    amber: { c50: '#fffbeb', c500: '#f59e0b', c600: '#d97706', c700: '#b45309' },
+    rose: { c50: '#fff1f2', c500: '#eb3ff4ff', c600: '#eb3ff4ff', c700: '#eb3ff4ff' },
+    slate: { c50: '#f8fafc', c500: '#64748b', c600: '#475569', c700: '#334155' },
 };
 
 export default async function LandingPage() {
@@ -25,7 +25,7 @@ export default async function LandingPage() {
     const headersList = await headers();
     const host = headersList.get('host');
     const brand = getBrandConfig(host);
-    
+
     const [products, categories, user, bestSellers, newArrivals, stats, siteSettings, featured] = await Promise.all([
         getLatestProducts(),
         getFeaturedCategories(),
@@ -46,8 +46,8 @@ export default async function LandingPage() {
     // Temporada — calculada en servidor con nowMs fijo
     const season = month >= 2 && month <= 4 ? { name: 'Primavera 2026', emoji: '🌸' }
         : month >= 5 && month <= 7 ? { name: 'Verano 2026', emoji: '☀️' }
-        : month >= 8 && month <= 10 ? { name: 'Otoño 2026', emoji: '🍂' }
-        : { name: 'Invierno 2026', emoji: '❄️' };
+            : month >= 8 && month <= 10 ? { name: 'Otoño 2026', emoji: '🍂' }
+                : { name: 'Invierno 2026', emoji: '❄️' };
 
     return (
         <div className="flex flex-col">
@@ -74,7 +74,7 @@ export default async function LandingPage() {
                 <div className="max-w-7xl mx-auto px-6 relative z-10 w-full pt-20 pb-40">
                     <div className="max-w-2xl space-y-8">
                         {/* Banner temporada */}
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-white text-xs font-black uppercase tracking-widest" style={{background:"linear-gradient(to right, var(--brand-600), var(--brand-700))", boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-white text-xs font-black uppercase tracking-widest" style={{ background: "linear-gradient(to right, var(--brand-600), var(--brand-700))", boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>
                             <span>{season.emoji}</span>
                             <span>Tendencias {season.name}</span>
                             {stats.newThisWeek > 0 && (
@@ -85,17 +85,17 @@ export default async function LandingPage() {
                         </div>
 
                         <div className="space-y-4">
-                            <h2 className="font-black uppercase tracking-[0.2em] text-xs md:text-sm drop-shadow-sm" style={{color:"var(--brand-500)"}}>{brand.name} Fashion Marketplace</h2>
+                            <h2 className="font-black uppercase tracking-[0.2em] text-xs md:text-sm drop-shadow-sm" style={{ color: "var(--brand-500)" }}>{brand.name} Fashion Marketplace</h2>
                             <h1 className="text-5xl md:text-8xl font-black tracking-tighter leading-[0.9] text-foreground drop-shadow-sm">
                                 LA MODA <br />QUE MUEVE A <br />
-                                <span className="text-transparent bg-clip-text" style={{backgroundImage:"linear-gradient(to right, var(--brand-600), var(--brand-700))"}}>MÉXICO.</span>
+                                <span className="text-transparent bg-clip-text" style={{ backgroundImage: "linear-gradient(to right, var(--brand-600), var(--brand-700))" }}>MÉXICO.</span>
                             </h1>
                         </div>
                         <p className="text-lg md:text-xl text-foreground/80 dark:text-white/80 font-medium max-w-lg leading-relaxed drop-shadow-sm">
                             {brand.description} Calidad premium, precios de fábrica y envíos a todo el país.
                         </p>
                         <div className="flex flex-wrap gap-4 pt-4">
-                            <Link href="/catalog" className="px-8 py-4 text-white rounded-full text-sm font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl" style={{backgroundColor:"var(--brand-600)"}}>
+                            <Link href="/catalog" className="px-8 py-4 text-white rounded-full text-sm font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl" style={{ backgroundColor: "var(--brand-600)" }}>
                                 Explorar Catálogo
                             </Link>
 
@@ -109,20 +109,20 @@ export default async function LandingPage() {
                         <div className="flex flex-wrap gap-8 md:gap-16 items-center text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
                             <div className="flex items-center gap-3">
                                 <span className="text-2xl font-black text-foreground">{stats.totalSellers}</span>
-                                <span>Vendedores<br/>verificados</span>
+                                <span>Vendedores<br />verificados</span>
                             </div>
                             <div className="flex items-center gap-3 md:border-l md:border-border md:pl-16">
                                 <span className="text-2xl font-black text-foreground">{stats.totalProducts.toLocaleString()}</span>
-                                <span>Productos<br/>en catálogo</span>
+                                <span>Productos<br />en catálogo</span>
                             </div>
                             <div className="flex items-center gap-3 md:border-l md:border-border md:pl-16">
                                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
                                 <span className="text-2xl font-black text-emerald-500">{stats.newThisWeek}</span>
-                                <span>Nuevos<br/>esta semana</span>
+                                <span>Nuevos<br />esta semana</span>
                             </div>
                             <div className="flex items-center gap-3 md:border-l md:border-border md:pl-16">
                                 <span className="text-2xl font-black text-foreground">{stats.totalOrders.toLocaleString()}</span>
-                                <span>Pedidos<br/>completados</span>
+                                <span>Pedidos<br />completados</span>
                             </div>
                         </div>
                     </div>
@@ -131,7 +131,7 @@ export default async function LandingPage() {
 
             {/* ── TICKER NOVEDADES ── */}
             {newArrivals.length > 0 && (
-                <div className="text-white py-3 overflow-hidden" style={{backgroundColor:"var(--brand-600)"}}>
+                <div className="text-white py-3 overflow-hidden" style={{ backgroundColor: "var(--brand-600)" }}>
                     <div className="flex gap-12 animate-[marquee_30s_linear_infinite] whitespace-nowrap" suppressHydrationWarning>
                         {[...newArrivals, ...newArrivals].map((p: any, i: number) => (
                             <Link key={i} href={`/catalog/${p.id}`}
@@ -152,24 +152,24 @@ export default async function LandingPage() {
             <section className="py-24 max-w-7xl mx-auto px-6 w-full">
                 <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
                     <div className="space-y-2">
-                        <h3 className="text-xs font-black uppercase tracking-[0.3em]" style={{color:"var(--brand-600)"}}>Nuestras Secciones</h3>
+                        <h3 className="text-xs font-black uppercase tracking-[0.3em]" style={{ color: "var(--brand-600)" }}>Nuestras Secciones</h3>
                         <h2 className="text-4xl font-black tracking-tight uppercase">EXPLORA POR CATEGORÍA</h2>
                     </div>
-                    <Link href="/categories" className="text-sm font-black uppercase tracking-widest border-b-2 pb-1 transition-colors" style={{borderColor:"var(--brand-600)",color:"var(--brand-600)"}}>
+                    <Link href="/categories" className="text-sm font-black uppercase tracking-widest border-b-2 pb-1 transition-colors" style={{ borderColor: "var(--brand-600)", color: "var(--brand-600)" }}>
                         Ver todas las categorías
                     </Link>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                     {[...categories].sort((a: any, b: any) => {
-                            const ORDER = ['DAMAS', 'CABALLEROS', 'NIÑOS', 'ACCESORIOS', 'CALZADO'];
-                            const ai = ORDER.indexOf(a.name?.toUpperCase());
-                            const bi = ORDER.indexOf(b.name?.toUpperCase());
-                            if (ai === -1 && bi === -1) return a.name.localeCompare(b.name);
-                            if (ai === -1) return 1;
-                            if (bi === -1) return -1;
-                            return ai - bi;
-                        }).map((category: any, idx: number) => {
-                        const gradients = ['from-rose-500 to-orange-500','from-blue-500 to-indigo-500','from-emerald-500 to-teal-500','from-violet-500 to-purple-500'];
+                        const ORDER = ['DAMAS', 'CABALLEROS', 'NIÑOS', 'ACCESORIOS', 'CALZADO'];
+                        const ai = ORDER.indexOf(a.name?.toUpperCase());
+                        const bi = ORDER.indexOf(b.name?.toUpperCase());
+                        if (ai === -1 && bi === -1) return a.name.localeCompare(b.name);
+                        if (ai === -1) return 1;
+                        if (bi === -1) return -1;
+                        return ai - bi;
+                    }).map((category: any, idx: number) => {
+                        const gradients = ['from-rose-500 to-orange-500', 'from-blue-500 to-indigo-500', 'from-emerald-500 to-teal-500', 'from-violet-500 to-purple-500'];
                         return (
                             <Link key={category.id} href={`/catalog?category=${category.slug}`}
                                 className="group relative h-56 rounded-3xl overflow-hidden bg-gray-100 dark:bg-gray-900 border border-border transition-all hover:scale-[1.02] hover:shadow-2xl">
@@ -194,7 +194,7 @@ export default async function LandingPage() {
                 <div className="max-w-7xl mx-auto px-6">
                     <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
                         <div className="space-y-2">
-                            <h3 className="text-xs font-black uppercase tracking-[0.3em]" style={{color:"var(--brand-600)"}}>Lo más reciente</h3>
+                            <h3 className="text-xs font-black uppercase tracking-[0.3em]" style={{ color: "var(--brand-600)" }}>Lo más reciente</h3>
                             <h2 className="text-4xl font-black tracking-tight uppercase">NUEVOS MODELOS</h2>
                         </div>
                         <Link href="/catalog" className="px-6 py-3 bg-white dark:bg-gray-800 border border-border rounded-full text-[10px] font-black uppercase tracking-widest hover:shadow-lg transition-all">
@@ -253,7 +253,7 @@ export default async function LandingPage() {
                                     <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-500">⭐ Vendedores Destacados</p>
                                     <h2 className="text-3xl font-black tracking-tight uppercase">Fabricantes Verificados</h2>
                                 </div>
-                                <Link href="/vendors" className="text-xs font-black uppercase tracking-widest hover:underline" style={{color:"var(--brand-600)"}}>Ver todos →</Link>
+                                <Link href="/vendors" className="text-xs font-black uppercase tracking-widest hover:underline" style={{ color: "var(--brand-600)" }}>Ver todos →</Link>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                                 {(featured.sellers as any[]).map((seller: any) => (
@@ -288,10 +288,10 @@ export default async function LandingPage() {
                         <div className="space-y-6">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs font-black uppercase tracking-[0.3em]" style={{color:"var(--brand-600)"}}>⭐ Productos Destacados</p>
+                                    <p className="text-xs font-black uppercase tracking-[0.3em]" style={{ color: "var(--brand-600)" }}>⭐ Productos Destacados</p>
                                     <h2 className="text-3xl font-black tracking-tight uppercase">Selección del Editor</h2>
                                 </div>
-                                <Link href="/catalog" className="text-xs font-black uppercase tracking-widest hover:underline" style={{color:"var(--brand-600)"}}>Ver catálogo →</Link>
+                                <Link href="/catalog" className="text-xs font-black uppercase tracking-widest hover:underline" style={{ color: "var(--brand-600)" }}>Ver catálogo →</Link>
                             </div>
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
                                 {(featured.products as any[]).map((product: any) => (
@@ -306,7 +306,7 @@ export default async function LandingPage() {
             {/* ── BANNER TEMPORADA ── */}
             <section className="py-16 px-6">
                 <div className="max-w-7xl mx-auto">
-                    <div className="relative rounded-[40px] overflow-hidden p-12 md:p-20 text-white" style={{background:"linear-gradient(to right, var(--brand-600), var(--brand-700))"}}>
+                    <div className="relative rounded-[40px] overflow-hidden p-12 md:p-20 text-white" style={{ background: "linear-gradient(to right, var(--brand-600), var(--brand-700))" }}>
                         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
                             <div className="space-y-4 max-w-lg">
                                 <p className="text-sm font-black uppercase tracking-[0.3em] opacity-80">Temporada Actual</p>
@@ -332,7 +332,7 @@ export default async function LandingPage() {
             <section className="py-32 max-w-7xl mx-auto px-6 w-full text-center space-y-12">
                 <div className="max-w-3xl mx-auto space-y-6">
                     <h2 className="text-5xl font-black tracking-tight italic uppercase">
-                        ¿LISTO PARA ESCALAR TU <span style={{color:"var(--brand-600)"}}>NEGOCIO?</span>
+                        ¿LISTO PARA ESCALAR TU <span style={{ color: "var(--brand-600)" }}>NEGOCIO?</span>
                     </h2>
                     <p className="text-lg text-gray-500 font-medium leading-relaxed">
                         Ya seas un comprador buscando las mejores tendencias o un fabricante queriendo digitalizar sus ventas mayoristas, {brand.name} es tu aliado.
