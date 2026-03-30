@@ -43,7 +43,8 @@ export async function createProduct(data: {
     tagIds?: string[];
     // New Dynamic Variants
     variantOptions?: any;
-    variantsData?: { attributes: any; stock: number; color?: string; size?: string }[];
+    variantsData?: { attributes: any; stock: number; color?: string; size?: string; inventoryLevels?: { locationId: string; quantity: number }[] }[];
+    sku?: string | null;
     // Legacy
     colors?: string[];
     sizes?: string[];
@@ -99,6 +100,12 @@ export async function createProduct(data: {
                 stock: v.stock || 0,
                 color: v.color || (v.attributes?.Color || v.attributes?.color || null),
                 size: v.size || (v.attributes?.Talla || v.attributes?.talla || v.attributes?.Size || v.attributes?.size || null),
+                inventoryLevels: v.inventoryLevels && v.inventoryLevels.length > 0 ? {
+                    create: v.inventoryLevels.map(lvl => ({
+                        locationId: lvl.locationId,
+                        stock: lvl.quantity
+                    }))
+                } : undefined,
             }));
         } else if (data.colors && data.sizes && data.inventory) {
             // Legacy fallback

@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getInventory, bulkCreateProducts, deleteProduct, getCategories, duplicateProduct, getStoreLocations } from '../products/new/actions';
+import { getInventory, bulkCreateProducts, deleteProduct, getCategories, duplicateProduct, getStoreLocations, createStoreLocation } from '../products/new/actions';
 import { adjustProductStock, adjustProductStockGrid } from './actions';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
 import BulkActionsModal from '../products/BulkActionsModal';
@@ -230,6 +230,21 @@ export default function InventoryPage() {
         }
     };
 
+    const handleCreateLocation = async () => {
+        const name = window.prompt("Ingresa el nombre de la nueva tienda o bodega (Ej. Centro, Almacén 2):");
+        if (!name?.trim()) return;
+
+        setLoading(true);
+        const res = await createStoreLocation(name.trim());
+        if (res.success) {
+            alert(`✅ Sucursal "${name}" agregada exitosamente.`);
+            loadInventory();
+        } else {
+            alert(res.error || "No se pudo crear la sucursal.");
+            setLoading(false);
+        }
+    };
+
     const handleOpenAdjustModal = (product: any) => {
         setAdjustingProduct(product);
         setIsAdjusting(false);
@@ -297,6 +312,12 @@ export default function InventoryPage() {
                         accept=".csv"
                         onChange={handleFileImport}
                     />
+                    <button
+                        onClick={handleCreateLocation}
+                        className="flex-1 md:flex-none px-6 py-3 bg-indigo-50 text-indigo-600 dark:bg-indigo-900/10 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition shadow-sm"
+                    >
+                        + SUCURSAL
+                    </button>
                     <button
                         onClick={handleImportClick}
                         disabled={isImporting}

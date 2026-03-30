@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { createProduct, getCategories, getBrands, createBrand, createSubcategory, getSuppliers, createSupplier } from './actions';
+import { createProduct, getCategories, getBrands, createBrand, createSubcategory, getSuppliers, createSupplier, getStoreLocations } from './actions';
 import { processImage } from '@/lib/imageUtils';
 import { getTags, createTag } from '../../inventory/tags/actions';
 import { getSessionUser } from '@/app/actions/auth';
@@ -15,6 +15,7 @@ export default function NewProductPage() {
     const [brands, setBrands] = useState<any[]>([]);
     const [suppliers, setSuppliers] = useState<any[]>([]);
     const [tags, setTags] = useState<any[]>([]);
+    const [locations, setLocations] = useState<any[]>([]);
     const [user, setUser] = useState<any>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -80,19 +81,20 @@ export default function NewProductPage() {
 
     useEffect(() => {
         async function load() {
-            const [cats, brs, sups, tgs, userData] = await Promise.all([
+            const [cats, brs, sups, tgs, userData, locs] = await Promise.all([
                 getCategories(),
                 getBrands(),
                 getSuppliers(),
                 getTags(),
-                getSessionUser()
+                getSessionUser(),
+                getStoreLocations()
             ]);
             setCategories(cats);
             setBrands(brs);
             setSuppliers(sups);
             setTags(tgs);
             setUser(userData);
-
+            setLocations(locs);
         }
         load();
     }, []);
@@ -163,12 +165,12 @@ export default function NewProductPage() {
         });
     };
 
-    const handleInventoryChange = (attrKey: string, value: string) => {
+    const handleInventoryChange = (attrKey: string, locationId: string, value: string) => {
         setFormData(prev => ({
             ...prev,
             inventory: {
                 ...prev.inventory,
-                [attrKey]: value
+                [`${attrKey}_${locationId}`]: value
             }
         }));
     };
@@ -256,9 +258,21 @@ export default function NewProductPage() {
             const combinations = generateCombinations(formData.variantOptions);
             const variantsData = combinations.map(combo => {
                 const attrKey = JSON.stringify(combo);
+                let totalStock = 0;
+                const inventoryLevels: { locationId: string, quantity: number }[] = [];
+                
+                locations.forEach(loc => {
+                    const quantity = parseInt((formData.inventory[`${attrKey}_${loc.id}`] || "0").toString()) || 0;
+                    totalStock += quantity;
+                    if (quantity >= 0) { // we send it even if 0 to initialize it
+                        inventoryLevels.push({ locationId: loc.id, quantity });
+                    }
+                });
+
                 return {
                     attributes: combo,
-                    stock: parseInt((formData.inventory[attrKey] || "0").toString()) || 0
+                    stock: totalStock,
+                    inventoryLevels
                 };
             });
 
@@ -788,41 +802,49 @@ export default function NewProductPage() {
                                     <div className="overflow-x-auto rounded-3xl border border-border shadow-inner bg-gray-50/50 dark:bg-gray-900/20">
                                         <table className="w-full text-left border-collapse">
                                             <thead>
-                                                <tr className="border-b border-border">
+                                                <tr className="border-b border-border bg-gray-50/50 dark:bg-gray-800/50">
                                                     <th className="p-4 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Combinación</th>
-                                                    <th className="p-4 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 text-center w-40">Stock Inicial</th>
+                                                    {locations.map(loc => (
+                                                        <th key={loc.id} className="p-4 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-32 bg-blue-50/30 dark:bg-blue-900/10 border-l border-border">
+                                                            Stock {loc.name} {loc.isWebStore ? '🌐' : '🏪'}
+                                                        </th>
+                                                    ))}
                                                     {formData.sellByPackage && (
-                                                        <th className="p-4 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 text-center w-48">
+                                                        <th className="p-4 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 text-center w-48 border-l border-border">
                                                             Pz x {formData.wholesaleMethods.find(m => m.id === formData.activeMethodId)?.name || 'Corrida'}
                                                         </th>
                                                     )}
                                                 </tr>
                                             </thead>
-                                            <tbody>
+                                            <tbody className="divide-y divide-border">
                                                 {generateCombinations(formData.variantOptions).map((combo, idx) => {
                                                     const attrKey = JSON.stringify(combo);
                                                     const activeMethod = formData.wholesaleMethods.find(m => m.id === formData.activeMethodId);
                                                     return (
                                                         <tr key={idx} className="border-b border-border/50 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-                                                            <td className="p-4">
+                                                            <td className="p-4 min-w-[200px]">
                                                                 <div className="flex flex-wrap gap-2">
                                                                     {Object.entries(combo).map(([k, v], i) => (
-                                                                        <span key={i} className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded-lg text-[10px] font-bold text-gray-600 dark:text-gray-400">
-                                                                            <span className="opacity-60">{k}:</span> {v}
+                                                                        <span key={i} className="px-3 py-1 bg-white dark:bg-gray-800 shadow-sm border border-border/50 rounded-lg text-xs font-black text-foreground">
+                                                                            <span className="opacity-50 font-medium mr-1">{k}:</span> {v}
                                                                         </span>
                                                                     ))}
                                                                 </div>
                                                             </td>
-                                                            <td className="p-3">
-                                                                <input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    placeholder="0"
-                                                                    className="w-full bg-input border border-border rounded-xl p-3 focus:ring-2 focus:ring-blue-500/50 outline-none text-center font-bold"
-                                                                    value={formData.inventory[attrKey] || ''}
-                                                                    onChange={(e) => handleInventoryChange(attrKey, e.target.value)}
-                                                                />
-                                                            </td>
+                                                            {locations.map(loc => (
+                                                                <td key={loc.id} className="p-2 border-l border-border bg-blue-50/10 dark:bg-blue-900/5">
+                                                                    <div className="bg-input border border-border/50 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all shadow-inner">
+                                                                        <input
+                                                                            type="number"
+                                                                            min="0"
+                                                                            placeholder="0"
+                                                                            className="w-full bg-transparent p-3 outline-none text-center font-black text-blue-600 dark:text-blue-400 text-lg"
+                                                                            value={formData.inventory[`${attrKey}_${loc.id}`] || ''}
+                                                                            onChange={(e) => handleInventoryChange(attrKey, loc.id, e.target.value)}
+                                                                        />
+                                                                    </div>
+                                                                </td>
+                                                            ))}
                                                             {formData.sellByPackage && (
                                                                 <td className="p-3">
                                                                     <input
