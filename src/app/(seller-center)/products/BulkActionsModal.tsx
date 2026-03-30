@@ -193,6 +193,7 @@ export default function BulkActionsModal({ selectedIds, onClose, onSuccess }: Bu
                                     <option value="increase_percent">Aumentar por Porcentaje (%)</option>
                                     <option value="decrease_percent">Disminuir por Porcentaje (%)</option>
                                     <option value="fixed_price">Sobrescribir con Precio Fijo ($)</option>
+                                    <option value="fixed_cost">Sobrescribir con Costo Fijo ($)</option>
                                     <option value="clear_promo">Limpiar cualquier Oferta Activa</option>
                                 </select>
                             </div>

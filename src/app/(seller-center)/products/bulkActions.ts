@@ -4,14 +4,15 @@ import { PrismaClient } from '../../../generated/client';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 
+import { getSessionUser } from '@/app/actions/auth';
+
 const prisma = new PrismaClient();
 
 // Helper para validar vendedor
 async function getSellerId() {
-    const cookieStore = await cookies();
-    const sellerId = cookieStore.get('sellerId')?.value;
-    if (!sellerId) throw new Error('No estás autenticado como vendedor.');
-    return sellerId;
+    const user = await getSessionUser();
+    if (!user || user.role !== 'SELLER') throw new Error('No estás autenticado como vendedor.');
+    return user.id;
 }
 
 export async function bulkUpdateVisibility(productIds: string[], isOnline: boolean) {
@@ -35,7 +36,7 @@ export async function bulkUpdateVisibility(productIds: string[], isOnline: boole
 
 export async function bulkUpdatePrices(
     productIds: string[],
-    actionType: 'increase_percent' | 'decrease_percent' | 'fixed_price' | 'clear_promo',
+    actionType: 'increase_percent' | 'decrease_percent' | 'fixed_price' | 'fixed_cost' | 'clear_promo',
     value?: number,
     promoStartDate?: Date,
     promoEndDate?: Date
@@ -58,11 +59,16 @@ export async function bulkUpdatePrices(
             });
         }
         else if (actionType === 'fixed_price' && value !== undefined) {
-            // Fijo base
-            await prisma.product.updateMany({
-                where: { id: { in: productIds }, sellerId },
-                data: { price: value }
-            });
+             await prisma.product.updateMany({
+                 where: { id: { in: productIds }, sellerId },
+                 data: { price: value }
+             });
+        }
+        else if (actionType === 'fixed_cost' && value !== undefined) {
+             await prisma.product.updateMany({
+                 where: { id: { in: productIds }, sellerId },
+                 data: { cost: value }
+             });
         }
         else if (actionType === 'increase_percent' && value !== undefined) {
              // Incrementar porcentaje

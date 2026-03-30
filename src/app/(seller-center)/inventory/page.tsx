@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getInventory, bulkCreateProducts, deleteProduct, getCategories, duplicateProduct, getStoreLocations, createStoreLocation } from '../products/new/actions';
+import { getInventory, bulkCreateProducts, deleteProduct, getCategories, duplicateProduct, getStoreLocations, createStoreLocation, getBrands, getSuppliers } from '../products/new/actions';
 import { adjustProductStock, adjustProductStockGrid } from './actions';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
 import BulkActionsModal from '../products/BulkActionsModal';
@@ -25,9 +25,16 @@ export default function InventoryPage() {
     const router = useRouter();
     const [products, setProducts] = useState<any[]>([]);
     const [categories, setCategories] = useState<any[]>([]);
+    const [brands, setBrands] = useState<any[]>([]);
+    const [suppliers, setSuppliers] = useState<any[]>([]);
     const [locations, setLocations] = useState<any[]>([]);
-    const [selectedCategory, setSelectedCategory] = useState<string>("");
+    
+    // Filters state
     const [searchQuery, setSearchQuery] = useState<string>("");
+    const [selectedCategory, setSelectedCategory] = useState<string>("");
+    const [selectedBrand, setSelectedBrand] = useState<string>("");
+    const [selectedSupplier, setSelectedSupplier] = useState<string>("");
+    const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     
     const [loading, setLoading] = useState(true);
     const [isImporting, setIsImporting] = useState(false);
@@ -56,7 +63,11 @@ export default function InventoryPage() {
                 matchCategory = p.categoryId === selectedCategory;
             }
         }
-        return matchSearch && matchCategory;
+        
+        const matchBrand = selectedBrand ? p.brandId === selectedBrand : true;
+        const matchSupplier = selectedSupplier ? p.supplierId === selectedSupplier : true;
+
+        return matchSearch && matchCategory && matchBrand && matchSupplier;
     });
 
     const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -89,14 +100,18 @@ export default function InventoryPage() {
     const loadInventory = async () => {
         setLoading(true);
         try {
-            const [data, cats, locs] = await Promise.all([
+            const [data, cats, locs, brs, sups] = await Promise.all([
                 getInventory(),
                 getCategories(),
-                getStoreLocations()
+                getStoreLocations(),
+                getBrands(),
+                getSuppliers()
             ]);
             setProducts(data);
             setCategories(cats);
             setLocations(locs);
+            setBrands(brs);
+            setSuppliers(sups);
         } catch (error) {
             console.error("Error loading inventory:", error);
         } finally {
@@ -355,34 +370,81 @@ export default function InventoryPage() {
             )}
 
             {/* Panel de Búsqueda y Filtros */}
-            <div className="bg-card p-5 rounded-t-3xl border border-border flex flex-col md:flex-row gap-4 shadow-sm">
-                <div className="flex-1 relative">
-                    <span className="absolute left-4 top-3.5 text-gray-400">🔍</span>
-                    <input
-                        type="text"
-                        placeholder="Buscar por nombre o modelo..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-12 pr-4 py-3 bg-input border border-border rounded-2xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground font-medium"
-                    />
+            <div className="bg-card p-5 rounded-t-3xl border border-border gap-4 shadow-sm flex flex-col">
+                <div className="flex flex-col md:flex-row gap-4 w-full">
+                    <div className="flex-1 relative">
+                        <span className="absolute left-4 top-3.5 text-gray-400">🔍</span>
+                        <input
+                            type="text"
+                            placeholder="Buscar por nombre o modelo..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-12 pr-4 py-3 bg-input border border-border rounded-2xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground font-medium"
+                        />
+                    </div>
+                    <button
+                        onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                        className={`px-5 py-3 rounded-2xl border font-bold text-sm transition-all focus:ring-2 outline-none flex items-center justify-center gap-2 ${isFiltersOpen ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800' : 'bg-input border-border text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800/80'}`}
+                    >
+                        <span>{isFiltersOpen ? '▲' : '🔬'}</span> Filtros Adicionales
+                    </button>
+                    {(!isFiltersOpen && (selectedCategory || selectedBrand || selectedSupplier)) && (
+                        <button onClick={() => { setSelectedCategory(''); setSelectedBrand(''); setSelectedSupplier(''); }} className="px-4 py-3 text-red-500 font-bold hover:bg-red-50 dark:hover:bg-red-900/20 rounded-2xl transition">
+                            Limpiar
+                        </button>
+                    )}
                 </div>
-                <select 
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="px-5 py-3 rounded-2xl border border-border bg-input outline-none focus:ring-2 focus:ring-blue-500/50 transition font-bold text-sm text-foreground"
-                >
-                    <option value="">Todas las categorías</option>
-                    {categories.map((c) => (
-                        <React.Fragment key={c.id}>
-                            <option value={c.id}>{c.name}</option>
-                            {c.subcategories?.map((sc: any) => (
-                                <option key={sc.id} value={`${c.id}|${sc.id}`}>
-                                    &nbsp;&nbsp;↳ {sc.name}
-                                </option>
-                            ))}
-                        </React.Fragment>
-                    ))}
-                </select>
+
+                {isFiltersOpen && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-border/50 animate-in slide-in-from-top-2">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest pl-2">Categoría</label>
+                            <select 
+                                value={selectedCategory}
+                                onChange={(e) => setSelectedCategory(e.target.value)}
+                                className="w-full px-5 py-3 rounded-2xl border border-border bg-input outline-none focus:ring-2 focus:ring-blue-500/50 transition font-bold text-sm text-foreground"
+                            >
+                                <option value="">Todas las categorías</option>
+                                {categories.map((c) => (
+                                    <React.Fragment key={c.id}>
+                                        <option value={c.id}>{c.name}</option>
+                                        {c.subcategories?.map((sc: any) => (
+                                            <option key={sc.id} value={`${c.id}|${sc.id}`}>
+                                                &nbsp;&nbsp;↳ {sc.name}
+                                            </option>
+                                        ))}
+                                    </React.Fragment>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest pl-2">Marca</label>
+                            <select 
+                                value={selectedBrand}
+                                onChange={(e) => setSelectedBrand(e.target.value)}
+                                className="w-full px-5 py-3 rounded-2xl border border-border bg-input outline-none focus:ring-2 focus:ring-blue-500/50 transition font-bold text-sm text-foreground"
+                            >
+                                <option value="">Todas las Marcas</option>
+                                {brands.map((b) => (
+                                    <option key={b.id} value={b.id}>{b.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest pl-2">Proveedor</label>
+                            <select 
+                                value={selectedSupplier}
+                                onChange={(e) => setSelectedSupplier(e.target.value)}
+                                className="w-full px-5 py-3 rounded-2xl border border-border bg-input outline-none focus:ring-2 focus:ring-blue-500/50 transition font-bold text-sm text-foreground"
+                            >
+                                <option value="">Todos los Proveedores</option>
+                                {suppliers.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Tabla de Inventario */}
