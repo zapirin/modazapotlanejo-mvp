@@ -458,10 +458,21 @@ export default function InventoryPage() {
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="p-5 text-center">
-                                                <span className={`inline-flex items-center justify-center min-w-[3.5rem] px-3 py-1.5 ${totalStock > 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'} text-xs font-black rounded-xl shadow-sm`}>
-                                                    {totalStock} <span className="ml-1 opacity-50 font-medium">pz</span>
-                                                </span>
+                                            <td 
+                                                className="p-5 text-center cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-900/20 group/stock border-l border-r border-transparent hover:border-blue-100 dark:hover:border-blue-800 transition-colors"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleOpenAdjustModal(product);
+                                                }}
+                                            >
+                                                <div className="flex flex-col items-center gap-1 group-hover/stock:scale-105 transition-transform relative">
+                                                    <span className={`inline-flex items-center justify-center min-w-[3.5rem] px-3 py-1.5 ${totalStock > 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'} text-xs font-black rounded-xl shadow-sm`}>
+                                                        {totalStock} <span className="ml-1 opacity-50 font-medium">pz</span>
+                                                    </span>
+                                                    <span className="text-[10px] text-blue-500 font-bold opacity-0 group-hover/stock:opacity-100 transition-opacity absolute top-full mt-1 uppercase tracking-widest whitespace-nowrap">
+                                                        Editar Stock
+                                                    </span>
+                                                </div>
                                             </td>
                                             <td className="p-5 text-right relative">
                                                 <button 
