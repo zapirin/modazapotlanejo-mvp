@@ -107,3 +107,39 @@ export async function bulkUpdatePromotionalPrice(
         return { success: false, error: e.message };
     }
 }
+
+export async function bulkUpdateClassification(
+    productIds: string[],
+    updates: {
+        categoryId?: string | null;
+        subcategoryId?: string | null;
+        brandId?: string | null;
+        supplierId?: string | null;
+    }
+) {
+    try {
+        const sellerId = await getSellerId();
+        
+        // Formamos la data a actualizar (undefined se ignora, null limpia la relación)
+        const dataToUpdate: any = {};
+        if (updates.categoryId !== undefined) dataToUpdate.categoryId = updates.categoryId;
+        if (updates.subcategoryId !== undefined) dataToUpdate.subcategoryId = updates.subcategoryId;
+        if (updates.brandId !== undefined) dataToUpdate.brandId = updates.brandId;
+        if (updates.supplierId !== undefined) dataToUpdate.supplierId = updates.supplierId;
+
+        if (Object.keys(dataToUpdate).length === 0) {
+            return { success: true };
+        }
+
+        await prisma.product.updateMany({
+            where: { id: { in: productIds }, sellerId },
+            data: dataToUpdate
+        });
+        
+        revalidatePath('/products');
+        revalidatePath('/inventory');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
-import { bulkUpdateVisibility, bulkUpdatePrices, bulkUpdatePromotionalPrice } from './bulkActions';
+import React, { useState, useEffect } from 'react';
+import { bulkUpdateVisibility, bulkUpdatePrices, bulkUpdatePromotionalPrice, bulkUpdateClassification } from './bulkActions';
+import { getCategories, getBrands, getSuppliers, createBrand, createSupplier } from './new/actions';
 
 interface BulkActionsModalProps {
     selectedIds: string[];
@@ -17,6 +18,62 @@ export default function BulkActionsModal({ selectedIds, onClose, onSuccess }: Bu
     const [endDate, setEndDate] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+
+    // --- Classification State ---
+    const [categories, setCategories] = useState<any[]>([]);
+    const [brands, setBrands] = useState<any[]>([]);
+    const [suppliers, setSuppliers] = useState<any[]>([]);
+    const [isLoadingData, setIsLoadingData] = useState(false);
+    
+    // undefined = do not update, null = detach/clear
+    const [selectedCategory, setSelectedCategory] = useState<string | null | undefined>(undefined);
+    const [selectedSubcategory, setSelectedSubcategory] = useState<string | null | undefined>(undefined);
+    const [selectedBrand, setSelectedBrand] = useState<string | null | undefined>(undefined);
+    const [selectedSupplier, setSelectedSupplier] = useState<string | null | undefined>(undefined);
+
+    const [newBrandName, setNewBrandName] = useState('');
+    const [newSupplierName, setNewSupplierName] = useState('');
+
+    useEffect(() => {
+        if (actionType === 'classification' && categories.length === 0) {
+            setIsLoadingData(true);
+            Promise.all([getCategories(), getBrands(), getSuppliers()]).then(([cats, brs, sups]) => {
+                setCategories(cats);
+                setBrands(brs);
+                setSuppliers(sups);
+                setIsLoadingData(false);
+            }).catch(e => {
+                console.error(e);
+                setIsLoadingData(false);
+            });
+        }
+    }, [actionType]);
+
+    const handleCreateBrand = async () => {
+        if (!newBrandName.trim()) return;
+        setIsSubmitting(true);
+        try {
+            const res = await createBrand(newBrandName.trim());
+            if (res.success && res.brand) {
+                setBrands([...brands, res.brand]);
+                setSelectedBrand(res.brand.id);
+                setNewBrandName('');
+            }
+        } finally { setIsSubmitting(false); }
+    };
+
+    const handleCreateSupplier = async () => {
+        if (!newSupplierName.trim()) return;
+        setIsSubmitting(true);
+        try {
+            const res = await createSupplier(newSupplierName.trim());
+            if (res.success && res.supplier) {
+                setSuppliers([...suppliers, res.supplier]);
+                setSelectedSupplier(res.supplier.id);
+                setNewSupplierName('');
+            }
+        } finally { setIsSubmitting(false); }
+    };
 
     const handleSubmit = async () => {
         setIsSubmitting(true);
@@ -54,6 +111,18 @@ export default function BulkActionsModal({ selectedIds, onClose, onSuccess }: Bu
                 const res = await bulkUpdatePromotionalPrice(selectedIds, price, start, end);
                 if (!res.success) throw new Error(res.error);
             }
+            else if (actionType === 'classification') {
+                const updates: any = {};
+                if (selectedCategory !== undefined) updates.categoryId = selectedCategory;
+                if (selectedSubcategory !== undefined) updates.subcategoryId = selectedSubcategory;
+                if (selectedBrand !== undefined) updates.brandId = selectedBrand;
+                if (selectedSupplier !== undefined) updates.supplierId = selectedSupplier;
+
+                if (Object.keys(updates).length > 0) {
+                    const res = await bulkUpdateClassification(selectedIds, updates);
+                    if (!res.success) throw new Error(res.error);
+                }
+            }
             onSuccess();
         } catch (e: any) {
             setError(e.message || "Ocurrió un error inesperado.");
@@ -88,6 +157,7 @@ export default function BulkActionsModal({ selectedIds, onClose, onSuccess }: Bu
                             <option value="visibility">🌐 Publicar / Ocultar de Tienda (Web)</option>
                             <option value="price">💰 Modificar Precio Base Automáticamente</option>
                             <option value="promo">🎉 Configurar Promoción / Oferta Temporal</option>
+                            <option value="classification">🏷️ Clasificar (Categoría, Marca, Proveedor)</option>
                         </select>
                     </div>
 
@@ -197,6 +267,103 @@ export default function BulkActionsModal({ selectedIds, onClose, onSuccess }: Bu
                         </div>
                     )}
 
+                    {actionType === 'classification' && (
+                        <div className="space-y-4 p-4 bg-orange-50/50 rounded-xl border border-orange-100">
+                            {isLoadingData ? (
+                                <p className="text-sm text-gray-500 font-bold text-center py-4">Cargando catálogos...</p>
+                            ) : (
+                                <>
+                                    {/* Categoría */}
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Categoría</label>
+                                        <select 
+                                            className="w-full border-gray-200 rounded-lg text-sm bg-white"
+                                            value={selectedCategory === undefined ? 'keep' : (selectedCategory === null ? 'null' : selectedCategory)}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setSelectedCategory(val === 'keep' ? undefined : (val === 'null' ? null : val));
+                                                setSelectedSubcategory(undefined); // Resetear subcat si cambia categoría
+                                            }}
+                                        >
+                                            <option value="keep">-- Mantener Actual --</option>
+                                            <option value="null">-- Desvincular (Remover Categoría) --</option>
+                                            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </select>
+                                    </div>
+
+                                    {/* Subcategoría */}
+                                    {selectedCategory && selectedCategory !== 'null' && selectedCategory !== 'keep' && (
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-700 mb-1">Subcategoría (Opcional)</label>
+                                            <select 
+                                                className="w-full border-gray-200 rounded-lg text-sm bg-white"
+                                                value={selectedSubcategory === undefined ? 'keep' : (selectedSubcategory === null ? 'null' : selectedSubcategory)}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setSelectedSubcategory(val === 'keep' ? undefined : (val === 'null' ? null : val));
+                                                }}
+                                            >
+                                                <option value="keep">-- Mantener Actual --</option>
+                                                <option value="null">-- Ninguna --</option>
+                                                {categories.find(c => c.id === selectedCategory)?.subcategories?.map((sc: any) => (
+                                                    <option key={sc.id} value={sc.id}>{sc.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {/* Marca */}
+                                    <div className="border-t border-orange-200/50 pt-3">
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Marca / Colección</label>
+                                        <select 
+                                            className="w-full border-gray-200 rounded-lg text-sm bg-white"
+                                            value={selectedBrand === undefined ? 'keep' : (selectedBrand === null ? 'null' : selectedBrand)}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setSelectedBrand(val === 'keep' ? undefined : (val === 'null' ? null : val));
+                                            }}
+                                        >
+                                            <option value="keep">-- Mantener Actual --</option>
+                                            <option value="null">-- Sin Marca --</option>
+                                            {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                        </select>
+                                        
+                                        {(selectedBrand === undefined || selectedBrand === 'keep') && (
+                                            <div className="flex gap-2 mt-2">
+                                                <input type="text" placeholder="📝 Crear Nueva Marca..." value={newBrandName} onChange={e => setNewBrandName(e.target.value)} className="flex-1 border-gray-200 rounded-lg text-sm bg-white focus:ring-orange-500" />
+                                                <button onClick={handleCreateBrand} disabled={!newBrandName || isSubmitting} className="bg-orange-600 text-white font-bold text-xs px-3 py-1.5 rounded-lg hover:bg-orange-700 disabled:opacity-50">Crear y Seleccionar</button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Proveedor */}
+                                    <div className="border-t border-orange-200/50 pt-3">
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Proveedor / Fabricante</label>
+                                        <select 
+                                            className="w-full border-gray-200 rounded-lg text-sm bg-white"
+                                            value={selectedSupplier === undefined ? 'keep' : (selectedSupplier === null ? 'null' : selectedSupplier)}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setSelectedSupplier(val === 'keep' ? undefined : (val === 'null' ? null : val));
+                                            }}
+                                        >
+                                            <option value="keep">-- Mantener Actual --</option>
+                                            <option value="null">-- Sin Proveedor --</option>
+                                            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                        </select>
+                                        
+                                        {(selectedSupplier === undefined || selectedSupplier === 'keep') && (
+                                            <div className="flex gap-2 mt-2">
+                                                <input type="text" placeholder="📝 Crear Nuevo Proveedor..." value={newSupplierName} onChange={e => setNewSupplierName(e.target.value)} className="flex-1 border-gray-200 rounded-lg text-sm bg-white focus:ring-orange-500" />
+                                                <button onClick={handleCreateSupplier} disabled={!newSupplierName || isSubmitting} className="bg-orange-600 text-white font-bold text-xs px-3 py-1.5 rounded-lg hover:bg-orange-700 disabled:opacity-50">Crear y Seleccionar</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
                     {error && (
                         <div className="mt-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm font-medium border border-red-100">
                             {error}
@@ -214,11 +381,12 @@ export default function BulkActionsModal({ selectedIds, onClose, onSuccess }: Bu
                     </button>
                     <button 
                         onClick={handleSubmit}
-                        disabled={isSubmitting || !actionType || (actionType === 'visibility' && !subAction) || (actionType === 'price' && subAction !== 'clear_promo' && !numValue) || (actionType === 'promo' && !numValue)}
+                        disabled={isSubmitting || !actionType || (actionType === 'visibility' && !subAction) || (actionType === 'price' && subAction !== 'clear_promo' && !numValue) || (actionType === 'promo' && !numValue) || (actionType === 'classification' && selectedCategory === undefined && selectedSubcategory === undefined && selectedBrand === undefined && selectedSupplier === undefined)}
                         className={`px-6 py-2.5 font-bold text-white rounded-xl shadow-md flex items-center transition
                             ${actionType === 'visibility' ? 'bg-blue-600 hover:bg-blue-700' : ''}
                             ${actionType === 'price' ? 'bg-green-600 hover:bg-green-700' : ''}
                             ${actionType === 'promo' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                            ${actionType === 'classification' ? 'bg-orange-600 hover:bg-orange-700' : ''}
                             ${!actionType ? 'bg-gray-800' : ''}
                             disabled:opacity-50 disabled:cursor-not-allowed
                         `}

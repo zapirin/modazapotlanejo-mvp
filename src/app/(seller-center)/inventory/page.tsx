@@ -3,8 +3,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getInventory, bulkCreateProducts, deleteProduct, getCategories, duplicateProduct } from '../products/new/actions';
-import { adjustProductStock } from './actions';
+import { getInventory, bulkCreateProducts, deleteProduct, getCategories, duplicateProduct, getStoreLocations } from '../products/new/actions';
+import { adjustProductStock, adjustProductStockGrid } from './actions';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
 import BulkActionsModal from '../products/BulkActionsModal';
 import { useCallback } from 'react';
@@ -25,6 +25,7 @@ export default function InventoryPage() {
     const router = useRouter();
     const [products, setProducts] = useState<any[]>([]);
     const [categories, setCategories] = useState<any[]>([]);
+    const [locations, setLocations] = useState<any[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string>("");
     const [searchQuery, setSearchQuery] = useState<string>("");
     
@@ -88,12 +89,14 @@ export default function InventoryPage() {
     const loadInventory = async () => {
         setLoading(true);
         try {
-            const [data, cats] = await Promise.all([
+            const [data, cats, locs] = await Promise.all([
                 getInventory(),
-                getCategories()
+                getCategories(),
+                getStoreLocations()
             ]);
             setProducts(data);
             setCategories(cats);
+            setLocations(locs);
         } catch (error) {
             console.error("Error loading inventory:", error);
         } finally {
@@ -229,40 +232,54 @@ export default function InventoryPage() {
 
     const handleOpenAdjustModal = (product: any) => {
         setAdjustingProduct(product);
-        setStockAdjustments({});
+        setIsAdjusting(false);
+
+        const initAdj: Record<string, number> = {};
+        product.variants.forEach((v: any) => {
+            const dbTotal = v.stock || 0;
+            const levelSum = (v.inventoryLevels || []).reduce((acc: number, l: any) => acc + l.stock, 0);
+            const hasLegacyGap = dbTotal > 0 && levelSum === 0;
+
+            locations.forEach((loc: any) => {
+                const level = (v.inventoryLevels || []).find((l: any) => l.locationId === loc.id);
+                let val = level ? level.stock : 0;
+                
+                // Fallback for migration: dump stock in Main/WebStore if no explicit levels exist
+                if (!level && hasLegacyGap && loc.isWebStore === true) {
+                    val = dbTotal;
+                }
+                
+                initAdj[`${v.id}_${loc.id}`] = val;
+            });
+        });
+        setStockAdjustments(initAdj);
+        setOpenMenuId(null);
     };
 
-    const handleAdjustmentChange = (variantId: string, quantity: number) => {
-        setStockAdjustments(prev => ({
-            ...prev,
-            [variantId]: quantity
-        }));
+    const handleAdjustmentChange = (key: string, quantity: number) => {
+        setStockAdjustments(prev => ({ ...prev, [key]: quantity }));
     };
 
     const submitStockAdjustment = async () => {
         if (!adjustingProduct) return;
-        
         setIsAdjusting(true);
-        // Convert map to array { variantId, quantity }
-        const adjustmentsArray = Object.entries(stockAdjustments)
-            .map(([variantId, quantity]) => ({ variantId, quantity }))
-            .filter(adj => adj.quantity !== 0);
 
-        if (adjustmentsArray.length === 0) {
-            setIsAdjusting(false);
-            setAdjustingProduct(null);
-            return;
-        }
+        const payload: { variantId: string, locationId: string, quantity: number }[] = [];
+        Object.entries(stockAdjustments).forEach(([key, quantity]) => {
+            const [variantId, locationId] = key.split('_');
+            if (variantId && locationId) {
+                payload.push({ variantId, locationId, quantity });
+            }
+        });
 
-        const res = await adjustProductStock(adjustingProduct.id, adjustmentsArray);
-        setIsAdjusting(false);
-
+        const res = await adjustProductStockGrid(adjustingProduct.id, payload);
         if (res.success) {
-            setAdjustingProduct(null);
             loadInventory();
+            setAdjustingProduct(null);
         } else {
-            alert(res.error || "No se pudo ajustar el inventario.");
+            alert(res.error || "No se pudo actualizar el inventario.");
         }
+        setIsAdjusting(false);
     };
 
     return (
@@ -375,6 +392,7 @@ export default function InventoryPage() {
                                     <th className="p-5">Modelo / Prenda</th>
                                     <th className="p-5">Categoría</th>
                                     <th className="p-5 text-emerald-600 dark:text-emerald-400">Costo</th>
+                                    <th className="p-5 text-blue-600">Precio Venta</th>
                                     <th className="p-5">Matriz</th>
                                     <th className="p-5 text-center">Stock Físico</th>
                                     <th className="p-5 text-right"></th>
@@ -402,10 +420,7 @@ export default function InventoryPage() {
                                                     </div>
                                                     <div>
                                                         <p className="font-black text-foreground text-lg tracking-tight leading-tight">{product.name}</p>
-                                                        <div className="flex gap-3 mt-1">
-                                                            <p className="text-xs text-blue-500 font-bold">${product.price}</p>
-                                                            {product.cost && <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold opacity-70">C: ${product.cost}</p>}
-                                                        </div>
+                                                        {product.sku && <p className="text-xs text-gray-400 font-mono mt-1 font-bold">{product.sku}</p>}
                                                     </div>
                                                 </div>
                                             </td>
@@ -413,10 +428,21 @@ export default function InventoryPage() {
                                                 <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-foreground text-xs font-bold rounded-lg uppercase tracking-wider">
                                                     {product.category?.name || 'Varios'} {product.subcategory ? `- ${product.subcategory.name}` : ''}
                                                 </span>
+                                                {product.brand && (
+                                                    <span className="block mt-2 text-[10px] text-gray-500 font-bold uppercase tracking-widest">{product.brand.name}</span>
+                                                )}
                                             </td>
                                             <td className="p-5">
                                                 <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">
                                                     ${product.cost?.toFixed(2) || '0.00'}
+                                                </span>
+                                            </td>
+                                            <td className="p-5">
+                                                {product.promotionalPrice && (
+                                                    <span className="text-[10px] text-gray-400 line-through block leading-none">${product.price.toFixed(2)}</span>
+                                                )}
+                                                <span className={`font-black text-sm ${product.promotionalPrice ? 'text-purple-600' : 'text-blue-600'}`}>
+                                                    ${(product.promotionalPrice || product.price).toFixed(2)}
                                                 </span>
                                             </td>
                                             <td className="p-5">
@@ -498,55 +524,70 @@ export default function InventoryPage() {
                     <div className="bg-card w-full max-w-md rounded-3xl shadow-2xl border border-border overflow-hidden animate-in zoom-in-95 duration-200">
                         <div className="p-6 border-b border-border bg-gray-50/50 dark:bg-gray-800/50">
                             <h3 className="text-xl font-black text-foreground flex items-center gap-2">
-                                ⚖️ Ajustar Stock
+                                ⚖️ Reemplazar Stock en Sucursales
                             </h3>
                             <p className="text-sm text-gray-500 mt-1 font-medium">{adjustingProduct.name}</p>
                         </div>
                         
-                        <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
-                            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-4">Ingresa la cantidad a Sumar (+) o Restar (-) al stock actual.</p>
+                        <div className="p-6 max-h-[60vh] overflow-y-auto">
+                            <p className="text-xs text-blue-600 font-bold uppercase tracking-widest mb-4">Ingresa la cantidad final exacta (Caja Registradora) para cada bodega</p>
                             
-                            {adjustingProduct.variants.map((v: any) => {
-                                const adjValue = stockAdjustments[v.id] || 0;
-                                const newTotal = v.stock + adjValue;
-                                
-                                return (
-                                    <div key={v.id} className="flex items-center justify-between p-4 rounded-2xl border border-border bg-input/50 hover:bg-input transition-colors">
-                                        <div>
-                                            <p className="font-bold text-sm text-foreground">{formatVariantName(v)}</p>
-                                            <p className="text-xs text-gray-500 mt-0.5">Stock actual: <span className="font-black text-foreground">{v.stock}</span></p>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex items-center bg-card border border-border rounded-xl p-1 shadow-sm">
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => handleAdjustmentChange(v.id, adjValue - 1)}
-                                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 hover:text-red-500 font-black text-gray-500 transition-colors"
-                                                >
-                                                    -
-                                                </button>
-                                                <input 
-                                                    type="number"
-                                                    value={adjValue}
-                                                    onChange={(e) => handleAdjustmentChange(v.id, parseInt(e.target.value) || 0)}
-                                                    className="w-12 text-center font-bold text-sm bg-transparent outline-none"
-                                                />
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => handleAdjustmentChange(v.id, adjValue + 1)}
-                                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-green-50 hover:text-green-600 font-black text-gray-500 transition-colors"
-                                                >
-                                                    +
-                                                </button>
-                                            </div>
-                                            <div className="w-12 text-right">
-                                                <span className={`text-xs font-black ${newTotal < 0 ? 'text-red-500' : 'text-blue-500'}`}>{newTotal}</span>
-                                                <span className="text-[10px] text-gray-400 block -mt-1">Final</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                            <div className="overflow-x-auto rounded-2xl border border-border shadow-sm">
+                                <table className="w-full text-left text-sm bg-card">
+                                    <thead className="bg-gray-50/50 dark:bg-gray-800/80 uppercase text-[10px] font-black tracking-widest text-gray-400">
+                                        <tr>
+                                            <th className="p-3 border-b border-border">Variante</th>
+                                            {locations.map(loc => (
+                                                <th key={loc.id} className="p-3 text-center min-w-[120px] border-b border-l border-border bg-blue-50/30">
+                                                    {loc.name} {loc.isWebStore ? '🌐' : '🏪'}
+                                                </th>
+                                            ))}
+                                            <th className="p-3 border-b border-l border-border text-center bg-gray-100/50">TOTAL</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-border">
+                                        {adjustingProduct.variants.map((v: any) => {
+                                            const totalRow = locations.reduce((acc, loc) => acc + (stockAdjustments[`${v.id}_${loc.id}`] || 0), 0);
+                                            return (
+                                                <tr key={v.id} className="hover:bg-input/50 transition-colors">
+                                                    <td className="p-3 font-bold text-foreground max-w-[150px] truncate">
+                                                        {formatVariantName(v)}
+                                                    </td>
+                                                    {locations.map(loc => {
+                                                        const key = `${v.id}_${loc.id}`;
+                                                        const val = stockAdjustments[key] || 0;
+                                                        return (
+                                                            <td key={loc.id} className="p-2 border-l border-border">
+                                                                <div className="flex items-center justify-center gap-1 bg-input rounded-xl border border-border/50 p-1">
+                                                                    <button 
+                                                                        type="button" 
+                                                                        onClick={() => setStockAdjustments(p => ({...p, [key]: Math.max(0, val - 1)}))}
+                                                                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 font-black text-gray-500 transition-colors"
+                                                                    >-</button>
+                                                                    <input 
+                                                                        type="number" 
+                                                                        value={val}
+                                                                        onChange={(e) => setStockAdjustments(p => ({...p, [key]: Math.max(0, parseInt(e.target.value) || 0)}))}
+                                                                        className="w-10 text-center font-bold bg-transparent outline-none focus:ring-1 focus:ring-blue-500 rounded text-base"
+                                                                    />
+                                                                    <button 
+                                                                        type="button" 
+                                                                        onClick={() => setStockAdjustments(p => ({...p, [key]: val + 1}))}
+                                                                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 font-black text-gray-500 transition-colors"
+                                                                    >+</button>
+                                                                </div>
+                                                            </td>
+                                                        )
+                                                    })}
+                                                    <td className="p-3 border-l border-border text-center font-black text-blue-600 bg-gray-50/30">
+                                                        {totalRow}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                         
                         <div className="p-6 border-t border-border flex gap-3 bg-gray-50/50 dark:bg-gray-800/50">

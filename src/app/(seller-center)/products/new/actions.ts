@@ -229,8 +229,14 @@ export async function getInventory() {
                 ...sellerFilter
             },
             include: {
-                variants: true,
+                variants: {
+                    include: {
+                        inventoryLevels: true
+                    }
+                },
                 category: true,
+                subcategory: true,
+                brand: true,
             },
             orderBy: {
                 createdAt: 'desc'
@@ -240,6 +246,55 @@ export async function getInventory() {
     } catch (error) {
         console.error("Error fetching inventory:", error);
         return [];
+    }
+}
+
+export async function getStoreLocations() {
+    try {
+        const user = await getSessionUser();
+        const effectiveSellerId = await getEffectiveSellerId(user);
+        
+        const locations = await prisma.storeLocation.findMany({
+            where: { sellerId: effectiveSellerId },
+            orderBy: [{ createdAt: 'asc' }, { name: 'asc' }]
+        });
+        
+        // Auto-crear "Matriz" si el vendedor no tiene sucursales para no romper inventario
+        if (locations.length === 0 && effectiveSellerId) {
+            const matriz = await prisma.storeLocation.create({
+                data: {
+                    name: 'Matriz',
+                    sellerId: effectiveSellerId,
+                    isWebStore: true
+                }
+            });
+            return [matriz];
+        }
+
+        return locations;
+    } catch (e) {
+        console.error("Error getStoreLocations:", e);
+        return [];
+    }
+}
+
+export async function createStoreLocation(name: string) {
+    try {
+        const user = await getSessionUser();
+        const effectiveSellerId = await getEffectiveSellerId(user);
+        if (!effectiveSellerId) throw new Error("Accediendo como visitante sin permisos.");
+
+        const location = await prisma.storeLocation.create({
+            data: {
+                name,
+                sellerId: effectiveSellerId,
+                isWebStore: false
+            }
+        });
+        
+        return { success: true, location };
+    } catch (e: any) {
+        return { success: false, error: e.message };
     }
 }
 
