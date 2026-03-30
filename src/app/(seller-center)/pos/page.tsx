@@ -2049,11 +2049,10 @@ function POSContent() {
                                         <button
                                             key={v.id}
                                             onClick={() => handleSingleVariantSelect(v)}
-                                            disabled={v.stock <= 0}
-                                            className={`p-4 rounded-2xl border flex flex-col items-center justify-center text-center transition-all ${v.stock > 0 ? 'bg-white dark:bg-gray-800 border-border hover:border-blue-500 hover:shadow-md cursor-pointer' : 'bg-gray-50 dark:bg-gray-900 border-transparent opacity-50 cursor-not-allowed'}`}
+                                            className={`p-4 rounded-2xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer ${v.stock > 0 ? 'bg-white dark:bg-gray-800 border-border hover:border-blue-500 hover:shadow-md' : 'bg-orange-50 dark:bg-orange-900/10 border-orange-300 dark:border-orange-700 hover:border-orange-500 hover:shadow-md'}`}
                                         >
                                             <span className="bg-gray-100 dark:bg-gray-700 rounded-xl px-4 py-2 font-black text-xs mb-2">{formatVariantName(v)}</span>
-                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">{v.stock} pz</span>
+                                            <span className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${v.stock > 0 ? 'text-gray-400' : 'text-orange-500'}`}>{v.stock} pz</span>
                                         </button>
                                     ))}
                                 </div>
