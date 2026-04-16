@@ -213,6 +213,7 @@ export async function getSalesBySession(sessionId: string) {
                 paymentMethod: { select: { id: true, name: true } },
                 client: { select: { id: true, name: true } },
                 location: { select: { id: true, name: true, address: true, ticketHeader: true, ticketFooter: true } },
+                // paymentSplit included as scalar field automatically
             }
         });
         return sales;

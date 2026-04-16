@@ -33,7 +33,7 @@ export default function NewProductPage() {
         packageSize: '6',
         isOnline: true,
         isPOS: true,
-        variantOptions: [],
+        variantOptions: [] as { name: string; values: string[] }[],
         inventory: {} as Record<string, string | number>, // Key will be JSON.stringify(attributes)
         wholesaleMethods: [] as any[],
         activeMethodId: '',

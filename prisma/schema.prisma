@@ -430,6 +430,7 @@ model Sale {
   balance               Float                @default(0)
   dueDate               DateTime?
   notes                 String?
+  paymentSplit          String?
   createdAt             DateTime             @default(now())
   layawayPayments       LayawayPayment[]
   buyer                 User?                @relation("BuyerSales", fields: [buyerId], references: [id])
@@ -540,6 +541,8 @@ model Order {
   shippingCost        Float            @default(0)
   skydropxRateId      String?
   skydropxQuotationId String?
+  shippingCarrier     String?
+  shippingServiceName String?
   commissionRate          Float            @default(0)
   commissionAmount        Float            @default(0)
   sellerEarnings          Float            @default(0)

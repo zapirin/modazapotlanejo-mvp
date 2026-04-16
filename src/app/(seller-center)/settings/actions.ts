@@ -404,7 +404,7 @@ export async function updateRequireCashSession(value: boolean) {
         if (!user) return { success: false, error: 'No autorizado' };
         await prisma.user.update({
             where: { id: user.id },
-            data: { requireCashSession: value }
+            data: { requireCashSession: value } as any
         });
         revalidatePath('/settings/general');
         revalidatePath('/pos');

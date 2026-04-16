@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { addLayawayPayment, deleteSale, updateSaleNotes } from '../products/new/actions';
+import { addLayawayPayment, deleteSale, updateSaleNotes, updateSaleDashboard } from '../products/new/actions';
 import { 
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, Legend, BarChart, Bar
@@ -28,6 +28,7 @@ interface DashboardClientProps {
     marketplaceCommission: number;
     marketplaceNet: number;
     recentOrders: any[];
+    paymentMethods: { id: string; name: string }[];
 }
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#ec4899'];
@@ -50,12 +51,16 @@ export default function DashboardClient({
     marketplaceRevenue,
     marketplaceCommission,
     marketplaceNet,
-    recentOrders
+    recentOrders,
+    paymentMethods
 }: DashboardClientProps) {
     const [selectedSale, setSelectedSale] = useState<any>(null);
     const [selectedLayaway, setSelectedLayaway] = useState<any>(null);
     const [editingSale, setEditingSale] = useState<any>(null);
     const [editNotes, setEditNotes] = useState('');
+    const [editPaymentMethod, setEditPaymentMethod] = useState('');
+    const [editItems, setEditItems] = useState<{ variantId: string; name: string; quantity: number; price: number }[]>([]);
+    const [editSaving, setEditSaving] = useState(false);
     const [layawayAbono, setLayawayAbono] = useState<string>('');
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -178,14 +183,32 @@ export default function DashboardClient({
 
     const handleEditSale = async () => {
         if (!editingSale) return;
-        const res = await updateSaleNotes(editingSale.id, editNotes);
-        if (res.success) {
-            toast.success('Venta actualizada');
-            setEditingSale(null);
-            window.location.reload();
-        } else {
-            toast.error(res.error || 'Error al actualizar');
+        setEditSaving(true);
+        // Persist notes update
+        if (editNotes !== (editingSale.notes || '')) {
+            await updateSaleNotes(editingSale.id, editNotes);
         }
+        // Persist payment method + items update
+        const pmChanged = editPaymentMethod && editPaymentMethod !== editingSale.paymentMethodName;
+        const itemsChanged = JSON.stringify(editItems) !== JSON.stringify(
+            editingSale.cart.map((i: any) => ({ variantId: i.variantId, name: i.name, quantity: i.quantity, price: i.price }))
+        );
+        if (pmChanged || itemsChanged) {
+            const res = await updateSaleDashboard(editingSale.id, {
+                ...(pmChanged ? { paymentMethodName: editPaymentMethod } : {}),
+                ...(itemsChanged ? { items: editItems.filter(i => i.quantity > 0).map(i => ({ variantId: i.variantId, quantity: i.quantity, price: i.price })) } : {})
+            });
+            setEditSaving(false);
+            if (!res.success) {
+                toast.error(res.error || 'Error al actualizar');
+                return;
+            }
+        } else {
+            setEditSaving(false);
+        }
+        toast.success('Venta actualizada');
+        setEditingSale(null);
+        window.location.reload();
     };
 
     const handleCancelSale = async (sale: any) => {
@@ -650,9 +673,14 @@ export default function DashboardClient({
                                                 </button>
                                             )}
                                             <button
-                                                onClick={() => { setEditingSale(sale); setEditNotes(sale.notes || ''); }}
+                                                onClick={() => {
+                                                    setEditingSale(sale);
+                                                    setEditNotes(sale.notes || '');
+                                                    setEditPaymentMethod(sale.paymentMethodName || '');
+                                                    setEditItems(sale.cart.map((i: any) => ({ variantId: i.variantId, name: i.name, quantity: i.quantity, price: i.price })));
+                                                }}
                                                 className="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                                                title="Editar notas"
+                                                title="Editar venta"
                                             >
                                                 ✏️
                                             </button>
@@ -886,31 +914,97 @@ export default function DashboardClient({
             {/* Modal editar venta */}
             {editingSale && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-card rounded-3xl border border-border shadow-2xl p-8 w-full max-w-md space-y-5">
-                        <h3 className="text-lg font-black text-foreground">✏️ Editar Venta #{editingSale.receiptNumber}</h3>
-                        <div className="text-xs text-gray-500 space-y-1">
-                            <p>📅 {new Date(editingSale.date).toLocaleDateString('es-MX', { dateStyle: 'full' })}</p>
-                            <p>🏬 {editingSale.locationName} {editingSale.cashierName ? `· 👤 ${editingSale.cashierName}` : ''}</p>
-                            <p className="font-black text-foreground">${editingSale.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                    <div className="bg-card rounded-3xl border border-border shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+                        {/* Header */}
+                        <div className="px-6 pt-6 pb-4 border-b border-border flex justify-between items-start">
+                            <div>
+                                <h3 className="text-lg font-black text-foreground">✏️ Editar Venta #PDV{editingSale.receiptNumber}</h3>
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                    {new Date(editingSale.date).toLocaleDateString('es-MX', { dateStyle: 'full' })} · {editingSale.locationName}
+                                </p>
+                            </div>
+                            <button onClick={() => setEditingSale(null)} className="text-gray-400 hover:text-red-500 w-8 h-8 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center transition-colors">✕</button>
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-xs font-black uppercase tracking-widest text-gray-400">Notas internas</label>
-                            <textarea
-                                value={editNotes}
-                                onChange={e => setEditNotes(e.target.value)}
-                                placeholder="Agregar nota a esta venta..."
-                                rows={3}
-                                className="w-full px-4 py-3 bg-input border border-border rounded-xl text-sm font-medium resize-none focus:ring-2 focus:ring-blue-500 outline-none"
-                            />
+
+                        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                            {/* Método de pago */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-black uppercase tracking-widest text-gray-400">Método de pago</label>
+                                <select
+                                    value={editPaymentMethod}
+                                    onChange={e => setEditPaymentMethod(e.target.value)}
+                                    className="w-full px-4 py-3 bg-input border border-border rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+                                >
+                                    {paymentMethods.map(pm => (
+                                        <option key={pm.id} value={pm.name}>{pm.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Artículos */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-black uppercase tracking-widest text-gray-400">Artículos</label>
+                                <div className="space-y-2">
+                                    {editItems.map((item, idx) => (
+                                        <div key={item.variantId + idx} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/50 border border-border rounded-xl px-3 py-2">
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-bold text-foreground truncate">{item.name}</p>
+                                                <p className="text-[10px] text-gray-400">${item.price.toFixed(2)} c/u</p>
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <button
+                                                    onClick={() => setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: Math.max(1, it.quantity - 1) } : it))}
+                                                    className="w-7 h-7 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-sm font-black hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+                                                >−</button>
+                                                <span className="w-6 text-center text-sm font-black">{item.quantity}</span>
+                                                <button
+                                                    onClick={() => setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: it.quantity + 1 } : it))}
+                                                    className="w-7 h-7 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-sm font-black hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+                                                >+</button>
+                                                <span className="w-16 text-right text-xs font-black text-foreground">${(item.price * item.quantity).toFixed(2)}</span>
+                                                <button
+                                                    onClick={() => setEditItems(prev => prev.filter((_, i) => i !== idx))}
+                                                    className="w-7 h-7 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition text-xs"
+                                                    title="Quitar artículo"
+                                                >✕</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {editItems.length === 0 && (
+                                        <p className="text-xs text-red-500 italic">Sin artículos. Agrega al menos uno antes de guardar.</p>
+                                    )}
+                                </div>
+                                <div className="flex justify-end pt-1">
+                                    <p className="text-xs font-black text-foreground">
+                                        Nuevo total: ${editItems.reduce((s, i) => s + i.price * i.quantity, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Notas */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-black uppercase tracking-widest text-gray-400">Notas internas</label>
+                                <textarea
+                                    value={editNotes}
+                                    onChange={e => setEditNotes(e.target.value)}
+                                    placeholder="Agregar nota a esta venta..."
+                                    rows={2}
+                                    className="w-full px-4 py-3 bg-input border border-border rounded-xl text-sm font-medium resize-none focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                            </div>
                         </div>
-                        <div className="flex gap-3">
+
+                        {/* Footer */}
+                        <div className="px-6 pb-6 pt-4 border-t border-border flex gap-3">
                             <button onClick={() => setEditingSale(null)}
                                 className="flex-1 py-3 border border-border rounded-xl text-sm font-black text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
                                 Cancelar
                             </button>
-                            <button onClick={handleEditSale}
-                                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-black transition">
-                                Guardar
+                            <button
+                                onClick={handleEditSale}
+                                disabled={editSaving || editItems.length === 0}
+                                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-black transition">
+                                {editSaving ? 'Guardando...' : 'Guardar cambios'}
                             </button>
                         </div>
                     </div>

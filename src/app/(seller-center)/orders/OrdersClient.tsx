@@ -458,8 +458,34 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller, isAdm
                                                         {[item.color !== "Único" ? item.color : null, item.size !== "Único" ? `Talla ${item.size}` : null].filter(Boolean).join(" · ")} · {item.quantity} pz · ${item.price.toLocaleString("es-MX", { minimumFractionDigits: 2 })}/pz
                                                     </p>
                                                 </div>
+                                                <p className="text-sm font-bold text-foreground shrink-0">${(item.price * item.quantity).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                                             </div>
                                         ))}
+
+                                        {/* ── Resumen de totales ── */}
+                                        {(() => {
+                                            const subtotal = order.items.reduce((s: number, i: any) => s + i.price * i.quantity, 0);
+                                            const shipping = order.shippingCost || 0;
+                                            const totalPiezas = order.items.reduce((s: number, i: any) => s + i.quantity, 0);
+                                            return (
+                                                <div className="border-t border-border pt-3 mt-1 space-y-1.5">
+                                                    <div className="flex justify-between text-xs text-gray-500">
+                                                        <span>Subtotal ({totalPiezas} pz)</span>
+                                                        <span className="font-bold">${subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                                                    </div>
+                                                    {shipping > 0 && (
+                                                        <div className="flex justify-between text-xs text-gray-500">
+                                                            <span>Envío {order.shippingCarrier ? `· ${order.shippingCarrier}` : ''}</span>
+                                                            <span className="font-bold">${shipping.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex justify-between items-center pt-1 border-t border-border">
+                                                        <span className="text-xs font-black uppercase tracking-widest text-foreground">Total</span>
+                                                        <span className="text-lg font-black text-foreground">${(subtotal + shipping).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
 
                                     {/* Detalles + Acciones */}
@@ -489,6 +515,12 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller, isAdm
                                                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">📦 Envío</p>
                                                 <p className="text-xs font-bold text-foreground">{order.shippingAddress.name} · {order.shippingAddress.phone}</p>
                                                 <p className="text-[11px] text-gray-500">{order.shippingAddress.street}, {order.shippingAddress.colonia}, {order.shippingAddress.city}, {order.shippingAddress.state}</p>
+                                                {(order.shippingCarrier || order.shippingServiceName) && (
+                                                    <p className="text-[11px] font-black text-blue-600 pt-0.5">
+                                                        🚚 {[order.shippingCarrier, order.shippingServiceName].filter(Boolean).join(' · ')}
+                                                        {order.shippingCost > 0 && <span className="text-gray-400 font-medium ml-1">(${order.shippingCost.toLocaleString('es-MX', { minimumFractionDigits: 2 })})</span>}
+                                                    </p>
+                                                )}
                                             </div>
                                         )}
                                         {order.shipment?.trackingNumber && (
@@ -568,6 +600,13 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller, isAdm
                                                             {showNotes === order.id ? "Ocultar nota" : "✏️ Agregar nota"}
                                                         </button>
                                                     </>
+                                                )}
+                                                {order.status === "PENDING_PAYMENT" && (
+                                                    <button onClick={() => handleStatus(order.id, "PAID")}
+                                                        disabled={processing === order.id + "PAID"}
+                                                        className="w-full py-3 bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition disabled:opacity-50">
+                                                        {processing === order.id + "PAID" ? "..." : "✅ Confirmar pago recibido"}
+                                                    </button>
                                                 )}
                                                 {(order.status === "ACCEPTED" || order.status === "PAID") && (
                                                     <button onClick={() => handleStatus(order.id, "SHIPPED")}

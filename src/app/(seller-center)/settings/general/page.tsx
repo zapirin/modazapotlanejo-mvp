@@ -5,8 +5,6 @@ import { getStoreSettings, updateStoreSettings, updateSellerLogo, getRequireCash
 import { useSearchParams } from 'next/navigation';
 import { validateImageFile } from '@/lib/uploadImage';
 import { processImage } from '@/lib/imageUtils';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import _unused from '@/lib/uploadImage';
 import { toast } from 'sonner';
 
 export default function GeneralSettingsPage() {

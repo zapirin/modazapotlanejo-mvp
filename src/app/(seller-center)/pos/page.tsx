@@ -629,15 +629,16 @@ function POSContent() {
         const totalPaidSoFar = paymentsToUse.reduce((acc, p) => acc + p.amount, 0);
 
         // Si no hay pagos registrados, intentamos validar el monto directo en el input
-        if (paymentsToUse.length === 0 && !isTransferMode) {
+        // Excepción: si el total es $0 (ej. cambio de producto mismo precio) no se requiere pago
+        if (paymentsToUse.length === 0 && !isTransferMode && calculateTotal() > 0) {
             const directReceived = explicitReceivedAmount !== undefined ? explicitReceivedAmount : parseFloat(receivedAmount);
             if (isNaN(directReceived) || directReceived < calculateTotal()) {
                 toast.error("Debe ingresar un monto válido que cubra el total de la venta.");
                 return;
             }
-            // Para consistencia con el backend, si no hay pagos parciales, 
+            // Para consistencia con el backend, si no hay pagos parciales,
             // el sistema asume un pago único por el total con el método seleccionado.
-        } else if (totalPaidSoFar < calculateTotal() && !isTransferMode) {
+        } else if (totalPaidSoFar < calculateTotal() && !isTransferMode && calculateTotal() > 0) {
             toast.warning("Aún queda un saldo pendiente por pagar.");
             return;
         }
@@ -726,6 +727,9 @@ function POSContent() {
                 setReceivedAmount('');
                 setPartialPayments([]);
                 setIsReturnMode(false);
+                // Resetear método de pago a Efectivo
+                const efectivoAfterSale = paymentMethods.find((m: any) => m.name.toLowerCase().includes('efectivo'));
+                setSelectedPaymentMethod(efectivoAfterSale ? efectivoAfterSale.name : (paymentMethods[0]?.name || 'Efectivo'));
                 setShowReceiptModal(true);
             } else {
                 toast.error(res.error || "Ocurrió un error al procesar la venta.");
@@ -853,6 +857,8 @@ function POSContent() {
                 setShowLayawayModal(false);
                 setLayawayPayment('');
                 setLayawayDueDate('');
+                const efectivoAfterLayaway = paymentMethods.find((m: any) => m.name.toLowerCase().includes('efectivo'));
+                setSelectedPaymentMethod(efectivoAfterLayaway ? efectivoAfterLayaway.name : (paymentMethods[0]?.name || 'Efectivo'));
                 setShowReceiptModal(true); // Imprimir ticket normal pero como apartado
             } else {
                 toast.error(res.error || "Ocurrió un error al crear el apartado.");
@@ -2706,11 +2712,18 @@ function POSContent() {
                                 const totalReturns = returns.reduce((a: number, s: any) => a + s.total, 0);
                                 const totalDiscount = completed.reduce((a: number, s: any) => a + (s.discount || 0), 0);
 
-                                // Agrupar por método de pago
+                                // Agrupar por método de pago (respetando pagos divididos)
                                 const byMethod: Record<string, number> = {};
                                 completed.forEach((s: any) => {
-                                    const name = s.paymentMethod?.name || 'Efectivo';
-                                    byMethod[name] = (byMethod[name] || 0) + s.total;
+                                    const split = s.paymentSplit ? (() => { try { return JSON.parse(s.paymentSplit); } catch { return null; } })() : null;
+                                    if (split?.length > 0) {
+                                        split.forEach((p: any) => {
+                                            byMethod[p.method] = (byMethod[p.method] || 0) + p.amount;
+                                        });
+                                    } else {
+                                        const name = s.paymentMethod?.name || 'Efectivo';
+                                        byMethod[name] = (byMethod[name] || 0) + s.total;
+                                    }
                                 });
                                 const cashSales = byMethod['Efectivo'] || 0;
 
@@ -3134,7 +3147,15 @@ function POSContent() {
                                 )}
 
                                 <div className="text-xs mb-1 mt-0.5">
-                                    <span>Pago: {lastSaleData.paymentMethodName}</span>
+                                    {lastSaleData.partialPayments?.length > 0 ? (
+                                        <div>
+                                            {lastSaleData.partialPayments.map((p: any, i: number) => (
+                                                <div key={i}>Pago {i + 1}: {p.method} — ${p.amount.toFixed(2)}</div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <span>Pago: {lastSaleData.paymentMethodName}</span>
+                                    )}
                                     {' · '}
                                     <span>{lastSaleData.cart.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0)} artículo(s)</span>
                                 </div>
@@ -3257,9 +3278,17 @@ function POSContent() {
                                             <div className="flex justify-between text-xs"><span>Descuento</span><span>-${reprintSale.discount.toFixed(2)}</span></div>
                                         )}
                                         <div className="flex justify-between font-black text-base mt-1"><span>TOTAL</span><span>${reprintSale.total.toFixed(2)}</span></div>
-                                        {reprintSale.paymentMethod?.name && (
-                                            <div className="text-xs mt-1">Pago: {reprintSale.paymentMethod.name} — ${reprintSale.amountPaid?.toFixed(2)}</div>
-                                        )}
+                                        {(() => {
+                                            const split = reprintSale.paymentSplit ? (() => { try { return JSON.parse(reprintSale.paymentSplit); } catch { return null; } })() : null;
+                                            if (split?.length > 0) {
+                                                return split.map((p: any, i: number) => (
+                                                    <div key={i} className="text-xs mt-0.5">Pago {i + 1}: {p.method} — ${p.amount.toFixed(2)}</div>
+                                                ));
+                                            }
+                                            return reprintSale.paymentMethod?.name
+                                                ? <div className="text-xs mt-1">Pago: {reprintSale.paymentMethod.name}{reprintSale.amountPaid ? ` — $${reprintSale.amountPaid.toFixed(2)}` : ''}</div>
+                                                : null;
+                                        })()}
                                         {(reprintSale.amountPaid || 0) > reprintSale.total && (
                                             <div className="text-xs">Cambio: ${((reprintSale.amountPaid || 0) - reprintSale.total).toFixed(2)}</div>
                                         )}

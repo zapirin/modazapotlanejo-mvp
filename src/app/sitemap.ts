@@ -49,12 +49,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             where: brand.isSingleVendor && brand.sellerId
                 ? { products: { some: { sellerId: brand.sellerId, isOnline: true, isActive: true } } }
                 : {},
-            select: { slug: true, updatedAt: true },
+            select: { slug: true },
         });
 
         const categoryPages: MetadataRoute.Sitemap = categories.map(c => ({
             url: `${baseUrl}/catalog?category=${c.slug}`,
-            lastModified: c.updatedAt,
             changeFrequency: 'weekly' as const,
             priority: 0.7,
         }));

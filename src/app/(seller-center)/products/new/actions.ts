@@ -650,6 +650,7 @@ export async function processSale(data: {
     amountPaid?: number;
     soldByUserId?: string | null;
     soldBySalespersonId?: string | null;
+    partialPayments?: { method: string; amount: number }[] | null;
 }) {
     try {
         const user = await getSessionUser();
@@ -682,13 +683,23 @@ export async function processSale(data: {
         }
 
         // Find payment method ID from name
+        // For split payments, use the method with the largest amount as the primary
+        const effectiveMethodName = data.partialPayments?.length
+            ? data.partialPayments.reduce((a, b) => a.amount >= b.amount ? a : b).method
+            : data.paymentMethodName;
+
         let paymentMethodId = null;
-        if (data.paymentMethodName) {
+        if (effectiveMethodName) {
             const pm = await prisma.paymentMethod.findFirst({
-                where: { name: data.paymentMethodName, isActive: true }
+                where: { name: effectiveMethodName, isActive: true }
             });
             if (pm) paymentMethodId = pm.id;
         }
+
+        // Serialize partial payments for storage
+        const paymentSplit = data.partialPayments?.length
+            ? JSON.stringify(data.partialPayments)
+            : null;
 
         // Inside a transaction
         const sale = await prisma.$transaction(async (tx) => {
@@ -716,6 +727,7 @@ export async function processSale(data: {
                     soldByUserId: data.soldByUserId || null,
                     soldBySalespersonId: (data as any).soldBySalespersonId || null,
                     status: finalStatus,
+                    paymentSplit,
                     items: {
                         create: data.cart.map(item => ({
                             variantId: item.variantId,
@@ -1561,7 +1573,6 @@ export async function updateSaleNotes(saleId: string, notes: string) {
         const user = await getSessionUser();
         if (!user) return { success: false, error: 'No autorizado' };
         const effectiveSellerId = await getEffectiveSellerId(user);
-        // Verificar que la venta pertenece al vendedor
         const sale = await prisma.sale.findFirst({
             where: { id: saleId, sellerId: effectiveSellerId }
         });
@@ -1572,6 +1583,95 @@ export async function updateSaleNotes(saleId: string, notes: string) {
         });
         return { success: true };
     } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function updateSaleDashboard(saleId: string, data: {
+    paymentMethodName?: string;
+    items?: { variantId: string; quantity: number; price: number }[];
+}) {
+    try {
+        const user = await getSessionUser();
+        if (!user) return { success: false, error: 'No autorizado' };
+        const effectiveSellerId = await getEffectiveSellerId(user);
+
+        const sale = await prisma.sale.findFirst({
+            where: { id: saleId, sellerId: effectiveSellerId },
+            include: { items: true }
+        });
+        if (!sale) return { success: false, error: 'Venta no encontrada' };
+
+        await prisma.$transaction(async (tx) => {
+            const updateData: any = {};
+
+            // Actualizar método de pago
+            if (data.paymentMethodName) {
+                const pm = await tx.paymentMethod.findFirst({
+                    where: { name: data.paymentMethodName, isActive: true }
+                });
+                if (pm) updateData.paymentMethodId = pm.id;
+            }
+
+            // Actualizar artículos e inventario
+            if (data.items) {
+                const locationId = sale.locationId;
+
+                // Revertir inventario de artículos anteriores
+                for (const oldItem of sale.items) {
+                    await tx.variant.update({
+                        where: { id: oldItem.variantId },
+                        data: { stock: { increment: oldItem.quantity } }
+                    });
+                    await tx.inventoryMovement.create({
+                        data: {
+                            variantId: oldItem.variantId,
+                            type: 'ADJUSTMENT',
+                            quantity: oldItem.quantity,
+                            reason: `Corrección venta #PDV${sale.receiptNumber}`,
+                            locationId
+                        }
+                    });
+                }
+
+                // Eliminar artículos anteriores
+                await tx.saleItem.deleteMany({ where: { saleId } });
+
+                // Crear nuevos artículos y descontar inventario
+                let newTotal = 0;
+                for (const item of data.items) {
+                    await tx.saleItem.create({
+                        data: { saleId, variantId: item.variantId, quantity: item.quantity, price: item.price }
+                    });
+                    await tx.variant.update({
+                        where: { id: item.variantId },
+                        data: { stock: { decrement: item.quantity } }
+                    });
+                    await tx.inventoryMovement.create({
+                        data: {
+                            variantId: item.variantId,
+                            type: 'SALE',
+                            quantity: -item.quantity,
+                            reason: `Corrección venta #PDV${sale.receiptNumber}`,
+                            locationId
+                        }
+                    });
+                    newTotal += item.price * item.quantity;
+                }
+                updateData.total = newTotal;
+                updateData.subtotal = newTotal;
+                updateData.discount = 0;
+            }
+
+            if (Object.keys(updateData).length > 0) {
+                await tx.sale.update({ where: { id: saleId }, data: updateData });
+            }
+        });
+
+        revalidatePath('/dashboard');
+        return { success: true };
+    } catch (e: any) {
+        console.error('updateSale error:', e);
         return { success: false, error: e.message };
     }
 }

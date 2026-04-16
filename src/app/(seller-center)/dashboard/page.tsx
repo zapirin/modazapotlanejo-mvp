@@ -306,15 +306,22 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
         cashierName: (sale as any).cashSession?.openedBy?.name || null,
         salespersonName: (sale as any).salesperson?.name || null,
         cart: sale.items.map((i: any) => ({
+            variantId: i.variantId,
             name: `${i.variant.product.name} (${i.variant.color ?? ''} ${i.variant.size ?? ''})`.replace('()', '').trim(),
             quantity: i.quantity,
             price: i.price
         }))
     }));
 
+    const paymentMethods = await prisma.paymentMethod.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' }
+    });
+
     return (
-        <DashboardClient 
-            userName={user?.name || "Usuario"} 
+        <DashboardClient
+            userName={user?.name || "Usuario"}
             salesTotal={todaysSales._sum.total || 0}
             inventoryTotal={inventoryCount._sum.stock || 0}
             clientsTotal={clientsCount}
@@ -337,6 +344,7 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
             marketplaceCommission={marketplaceMetrics?._sum?.commissionAmount || 0}
             marketplaceNet={marketplaceMetrics?._sum?.sellerEarnings || 0}
             recentOrders={recentOrders}
+            paymentMethods={paymentMethods}
         />
     );
 }

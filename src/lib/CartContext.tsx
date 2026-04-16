@@ -98,7 +98,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                 const groupId = removing.wholesaleGroupId;
                 next = next.map(i =>
                     i.wholesaleGroupId === groupId
-                        ? { ...i, sellByPackage: false, wholesaleGroupId: undefined, price: i.normalPrice }
+                        ? { ...i, sellByPackage: false, wholesaleGroupId: undefined, price: i.normalPrice ?? i.price }
                         : i
                 );
             }
@@ -116,7 +116,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                     const groupId = target.wholesaleGroupId;
                     next = next.map(i =>
                         i.wholesaleGroupId === groupId
-                            ? { ...i, sellByPackage: false, wholesaleGroupId: undefined, price: i.normalPrice }
+                            ? { ...i, sellByPackage: false, wholesaleGroupId: undefined, price: i.normalPrice ?? i.price } as CartItem
                             : i
                     );
                 }
@@ -127,10 +127,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                 const groupId = target.wholesaleGroupId;
                 return prev.map(i => {
                     if (i.variantId === variantId) {
-                        return { ...i, quantity, sellByPackage: false, wholesaleGroupId: undefined, price: i.normalPrice };
+                        return { ...i, quantity, sellByPackage: false, wholesaleGroupId: undefined, price: i.normalPrice ?? i.price } as CartItem;
                     }
                     if (i.wholesaleGroupId === groupId) {
-                        return { ...i, sellByPackage: false, wholesaleGroupId: undefined, price: i.normalPrice };
+                        return { ...i, sellByPackage: false, wholesaleGroupId: undefined, price: i.normalPrice ?? i.price } as CartItem;
                     }
                     return i;
                 });

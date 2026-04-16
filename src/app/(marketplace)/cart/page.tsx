@@ -36,6 +36,7 @@ export default function CartPage() {
     const [freshImages, setFreshImages] = useState<Record<string, string>>({});
     const [paymentMethod, setPaymentMethod] = useState<'stripe' | 'paypal' | 'transfer'>('stripe');
     const [isKalexa, setIsKalexa] = useState(false);
+    const [confirmClear, setConfirmClear] = useState(false);
     // Cupones: { [sellerId]: { code, couponId, discountType, discountValue, discountAmount } }
     const [appliedCoupons, setAppliedCoupons] = useState<Map<string, any>>(new Map());
     const [couponInputs, setCouponInputs] = useState<Record<string, string>>({});
@@ -119,8 +120,6 @@ export default function CartPage() {
 
     // Cotizar envío cuando cambie la dirección seleccionada
     useEffect(() => {
-        // No cotizar envío para Kalexa — se coordina por WhatsApp
-        if (isKalexa) return;
         if (!selectedAddressId || items.length === 0) {
             setShippingRates([]);
             setSelectedRate(null);
@@ -322,6 +321,8 @@ export default function CartPage() {
                     shippingCost: pickupMode ? 0 : (selectedRate?.totalPrice || 0),
                     skydropxRateId: pickupMode ? undefined : (selectedRate?.rateId || undefined),
                     skydropxQuotationId: pickupMode ? undefined : (selectedRate?.quotationId || undefined),
+                    shippingCarrier: pickupMode ? undefined : (selectedRate?.carrier || undefined),
+                    shippingServiceName: pickupMode ? undefined : (selectedRate?.serviceName || undefined),
                     paymentMethod: isKalexa
                         ? (paymentMethod === 'paypal' ? 'Tarjeta de Débito/Crédito' : 'Depósito/Transferencia')
                         : (paymentMethod === 'transfer' ? 'Depósito/Transferencia' : undefined),
@@ -506,13 +507,31 @@ export default function CartPage() {
                             <h1 className="text-4xl font-black text-foreground tracking-tight">Mi Carrito</h1>
                             <p className="text-gray-500 font-medium mt-2">{getItemCount()} pieza{getItemCount() !== 1 ? 's' : ''} en tu carrito ({items.length} variante{items.length !== 1 ? 's' : ''})</p>
                         </div>
+                        {confirmClear ? (
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-black text-red-600 uppercase tracking-widest">¿Vaciar carrito?</span>
+                                <button
+                                    onClick={() => { clearCart(); setConfirmClear(false); }}
+                                    className="px-3 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-all"
+                                >
+                                    Sí, vaciar
+                                </button>
+                                <button
+                                    onClick={() => setConfirmClear(false)}
+                                    className="px-3 py-2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
+                        ) : (
                         <button
-                            onClick={() => { if (confirm('¿Vaciar todo el carrito?')) clearCart(); }}
+                            onClick={() => setConfirmClear(true)}
                             className="flex items-center gap-2 px-4 py-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-100 dark:hover:bg-red-900/40 transition-all"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                             Vaciar carrito
                         </button>
+                        )}
                     </div>
                 </div>
 
@@ -885,8 +904,8 @@ export default function CartPage() {
                                 }
                             </div>
 
-                            {/* ── OPCIONES DE ENVÍO — ocultar si va a recoger o es Kalexa ── */}
-                            {!pickupMode && !isKalexa && <>
+                            {/* ── OPCIONES DE ENVÍO — ocultar si va a recoger ── */}
+                            {!pickupMode && <>
                             {selectedAddressId && (
                                 <div className="border-t border-border pt-4 space-y-3">
                                     <h4 className="text-xs font-black uppercase tracking-widest text-gray-400">🚚 Paquetería</h4>
@@ -933,16 +952,6 @@ export default function CartPage() {
 
                             </>
                             }
-
-                            {/* ── MENSAJE DE COORDINACIÓN PARA KALEXA ── */}
-                            {isKalexa && !pickupMode && (
-                                <div className="border-t border-border pt-4">
-                                    <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-200 dark:border-emerald-800">
-                                        <p className="text-xs font-black text-emerald-700 dark:text-emerald-300">🚚 Envío coordinado</p>
-                                        <p className="text-[11px] text-emerald-600 mt-0.5">Coordinaremos el pago y envío contigo por WhatsApp después de confirmar tu pedido.</p>
-                                    </div>
-                                </div>
-                            )}
 
                             {/* ── TOTALES ── */}
                             <div className="border-t border-border pt-4 space-y-2">
@@ -1020,9 +1029,9 @@ export default function CartPage() {
 
                             <button
                                 onClick={handleCheckout}
-                                disabled={isSubmitting || (!pickupMode && (!selectedAddressId || (!isKalexa && !selectedRate)))}
+                                disabled={isSubmitting || (!pickupMode && (!selectedAddressId || !selectedRate))}
                                 className={`w-full py-4 rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-xl ${
-                                    isSubmitting || (!pickupMode && (!selectedAddressId || (!isKalexa && !selectedRate)))
+                                    isSubmitting || (!pickupMode && (!selectedAddressId || !selectedRate))
                                         ? 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed text-gray-500'
                                         : isKalexa
                                             ? 'text-white hover:scale-[1.02]'
@@ -1030,12 +1039,12 @@ export default function CartPage() {
                                                 ? 'bg-emerald-600 text-white hover:bg-emerald-700 hover:scale-[1.02] shadow-emerald-500/20'
                                                 : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-[1.02] shadow-blue-500/20'
                                 }`}
-                                style={isKalexa && !(isSubmitting || (!pickupMode && !selectedAddressId)) ? {backgroundColor: '#8124E3'} : undefined}
+                                style={isKalexa && !(isSubmitting || (!pickupMode && (!selectedAddressId || !selectedRate))) ? {backgroundColor: '#8124E3'} : undefined}
                             >
                                 {isSubmitting ? 'Procesando...' : pickupMode
                                     ? `Confirmar Pedido — Recoger en Tienda`
                                     : !selectedAddressId ? 'Agrega una dirección o selecciona Recoger en Tienda'
-                                    : (!isKalexa && !selectedRate) ? 'Selecciona paquetería'
+                                    : !selectedRate ? 'Selecciona paquetería'
                                     : isKalexa
                                         ? `Confirmar Pedido — ${paymentMethod === 'paypal' ? 'Tarjeta Déb/Créd' : 'Transferencia'}`
                                         : paymentMethod === 'transfer'

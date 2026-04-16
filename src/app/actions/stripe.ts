@@ -19,7 +19,7 @@ interface StripeLineItem {
 
 export async function createCheckoutSession(data: {
   orderIds: string[];
-  items: { productName: string; quantity: number; price: number; image?: string }[];
+  items: { productName: string; quantity: number; price: number; image?: string; size?: string; color?: string }[];
   total: number;
 }) {
   try {

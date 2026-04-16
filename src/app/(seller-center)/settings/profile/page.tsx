@@ -6,8 +6,6 @@ import { getSessionUser, updateProfile } from '@/app/actions/auth';
 import { updateSellerLogo, ensureSellerSlug } from '../actions';
 import { validateImageFile } from '@/lib/uploadImage';
 import { processImage } from '@/lib/imageUtils';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import _unused from '@/lib/uploadImage';
 
 export default function ProfilePage() {
     const [user, setUser] = useState<any>(null);

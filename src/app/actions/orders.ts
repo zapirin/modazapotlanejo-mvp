@@ -33,6 +33,8 @@ export async function createOrder(data: {
     shippingCost?: number;
     skydropxRateId?: string;
     skydropxQuotationId?: string;
+    shippingCarrier?: string;
+    shippingServiceName?: string;
     paymentMethod?: string;
     domain?: string;
 }) {
@@ -70,6 +72,8 @@ export async function createOrder(data: {
                 shippingCost: data.shippingCost || 0,
                 skydropxRateId: data.skydropxRateId || null,
                 skydropxQuotationId: data.skydropxQuotationId || null,
+                shippingCarrier: data.shippingCarrier || null,
+                shippingServiceName: data.shippingServiceName || null,
                 items: {
                     create: data.items.map(item => ({
                         variantId: item.variantId,
