@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Background -->
+  <rect width="64" height="64" rx="10" fill="#003087"/>
+
+  <!-- First P — light blue, shifted left -->
+  <!-- Stem -->
+  <rect x="11" y="13" width="7" height="30" rx="3.5" fill="#009cde"/>
+  <!-- Bowl -->
+  <path d="M18 13 L18 27 C18 27 31 27 31 20 C31 13 18 13 18 13 Z" fill="#009cde"/>
+  <!-- Inner cutout to form the bowl hollow -->
+  <path d="M18 17 L18 23 C18 23 27 23 27 20 C27 17 18 17 18 17 Z" fill="#003087"/>
+
+  <!-- Second P — white, shifted right and down -->
+  <!-- Stem -->
+  <rect x="20" y="21" width="7" height="30" rx="3.5" fill="white"/>
+  <!-- Bowl -->
+  <path d="M27 21 L27 35 C27 35 40 35 40 28 C40 21 27 21 27 21 Z" fill="white"/>
+  <!-- Inner cutout -->
+  <path d="M27 25 L27 31 C27 31 36 31 36 28 C36 25 27 25 27 25 Z" fill="#003087"/>
+</svg>

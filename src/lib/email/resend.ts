@@ -32,7 +32,9 @@ export async function sendEmail({
     const { data, error } = await resend.emails.send({
       from: domain?.includes('zonadelvestir') 
         ? 'Zona del Vestir <noreply@modazapotlanejo.com>'
-        : 'Moda Zapotlanejo <noreply@modazapotlanejo.com>',
+        : domain?.includes('kalexa')
+          ? 'Kalexa Fashion <noreply@modazapotlanejo.com>'
+          : 'Moda Zapotlanejo <noreply@modazapotlanejo.com>',
       to,
       subject,
       html,

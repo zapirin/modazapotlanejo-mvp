@@ -56,7 +56,7 @@ export async function loginCashierForPOS(email: string, password: string, seller
         });
         if (!seller) return { success: false, error: 'Tienda no encontrada' };
 
-        const user = await prisma.user.findUnique({
+        const user = await prisma.user.findFirst({
             where: { email: email.toLowerCase().trim() }
         });
 

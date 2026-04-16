@@ -23,7 +23,11 @@ export async function getMarketplaceSettings() {
                 }
             });
         }
-        return { success: true, data: settings };
+        const brands = await prisma.brandConfig.findMany({
+            where: { isActive: true },
+            orderBy: { domain: 'asc' }
+        });
+        return { success: true, data: { ...settings, brandsConfig: brands } };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
@@ -124,7 +128,7 @@ export async function getInactiveSellers() {
     try {
         await checkAdmin();
         return await (prisma.user as any).findMany({
-            where: { isActive: false },
+            where: { isActive: false, role: 'SELLER' },
             select: {
                 id: true, name: true, email: true, businessName: true,
                 isActive: true, planName: true, createdAt: true,
@@ -165,7 +169,7 @@ export async function reactivateSeller(sellerId: string) {
         await prisma.$transaction([
             (prisma.user as any).update({
                 where: { id: sellerId },
-                data: { isActive: true, role: 'SELLER' }
+                data: { isActive: true }
             }),
             prisma.product.updateMany({
                 where: { sellerId },
@@ -189,6 +193,7 @@ export async function updateSellerPermissions(sellerId: string, data: {
     maxLocations?: number;
     maxCashiers?: number;
     commission?: number;
+    fixedFee?: number;
 }) {
     try {
         await checkAdmin();
@@ -210,7 +215,7 @@ export async function getSellersWithPermissions() {
         return await (prisma.user as any).findMany({
             where: { role: 'SELLER' },
             select: {
-                id: true, name: true, email: true, businessName: true,
+                id: true, name: true, email: true, businessName: true, phone: true, whatsapp: true,
                 isActive: true, adminNotes: true, commission: true, fixedFee: true,
                 posEnabled: true, maxProducts: true, posRequested: true, logoUrl: true,
                 planName: true, maxLocations: true, maxCashiers: true,
@@ -253,7 +258,7 @@ export async function updatePhotographyRequest(id: string, status: string) {
 export async function updateAdminEmail(newEmail: string) {
     try {
         const user = await checkAdmin();
-        const existing = await prisma.user.findUnique({ where: { email: newEmail } });
+        const existing = await prisma.user.findFirst({ where: { email: newEmail } });
         if (existing && existing.id !== user.id) {
             return { success: false, error: 'Ese correo ya está en uso' };
         }
@@ -267,6 +272,7 @@ export async function updateAdminEmail(newEmail: string) {
 export async function updateMarketplaceSettingsFull(data: {
     title?: string;
     heroImage?: string;
+    heroImages?: string[];
     logoUrl?: string;
     adminEmail?: string;
     sellerLabel?: string;
@@ -275,6 +281,7 @@ export async function updateMarketplaceSettingsFull(data: {
     privacyUrl?: string;
     termsUrl?: string;
     photographyPrices?: any;
+    photographyEnabled?: boolean;
     brandColors?: Record<string, string>;
 }) {
     try {
@@ -351,13 +358,13 @@ export async function getFeaturedContent() {
         const [sellers, products] = await Promise.all([
             sellerIds.length > 0 ? prisma.user.findMany({
                 where: { id: { in: sellerIds }, role: 'SELLER', isActive: true },
-                select: { id: true, name: true, businessName: true, logoUrl: true,
+                select: { id: true, name: true, businessName: true, logoUrl: true, sellerSlug: true,
                     _count: { select: { ownedProducts: { where: { isOnline: true, isActive: true } } } }
                 }
             }) : Promise.resolve([]),
             productIds.length > 0 ? prisma.product.findMany({
                 where: { id: { in: productIds }, isOnline: true, isActive: true },
-                include: { brand: true, category: true, seller: { select: { id: true, name: true, businessName: true } } }
+                include: { brand: true, category: true, seller: { select: { id: true, name: true, businessName: true, sellerSlug: true } } }
             }) : Promise.resolve([]),
         ]);
 
@@ -389,4 +396,31 @@ export async function savePlans(plans: any[]) {
         }
         return { success: true };
     } catch (e: any) { return { success: false, error: e.message }; }
+}
+
+export async function updateBrandConfig(domain: string, data: {
+    name?: string;
+    tagline?: string;
+    description?: string;
+    logoUrl?: string;
+    heroImage?: string;
+    primaryColor?: string;
+}) {
+    try {
+        await checkAdmin();
+        const result = await prisma.brandConfig.upsert({
+            where: { domain },
+            update: data,
+            create: {
+                domain,
+                name: data.name || domain,
+                ...data
+            }
+        });
+        revalidatePath('/', 'layout');
+        revalidatePath('/catalog');
+        return { success: true, data: result };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
 }

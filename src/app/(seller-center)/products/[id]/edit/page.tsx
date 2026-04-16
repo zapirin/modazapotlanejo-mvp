@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { getProductForEdit, updateProduct } from './actions';
-import { getCategories, getBrands, createBrand, createSubcategory, getSuppliers, createSupplier } from '../../new/actions';
+import { getCategories, getBrands, createBrand, createSubcategory, getSuppliers, createSupplier, getStoreLocations } from '../../new/actions';
 import { getTags, createTag } from '../../../inventory/tags/actions';
 import { getSessionUser } from '@/app/actions/auth';
 
@@ -15,11 +15,43 @@ export default function EditProductPage() {
     const [step, setStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
+    const [aiPrompt, setAiPrompt] = useState('');
+
+    const handleGenerateDescription = async () => {
+        if (!formData.images || formData.images.length === 0) {
+            alert('Sube al menos una foto del producto para generar la descripción.');
+            return;
+        }
+        setIsGeneratingDesc(true);
+        try {
+            const response = await fetch('/api/ai-description', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    images: formData.images.slice(0, 3),
+                    productName: formData.name || '',
+                    customPrompt: aiPrompt || ''
+                })
+            });
+            const data = await response.json();
+            if (data.description) {
+                setFormData((prev: any) => ({ ...prev, description: data.description }));
+            } else {
+                alert(data.error || 'No se pudo generar la descripción. Verifica tu configuración de IA en Configuración > General.');
+            }
+        } catch (e) {
+            alert('Error al conectar con la IA. Intenta de nuevo.');
+        }
+        setIsGeneratingDesc(false);
+    };
     const [categories, setCategories] = useState<any[]>([]);
     const [brands, setBrands] = useState<any[]>([]);
     const [suppliers, setSuppliers] = useState<any[]>([]);
     const [tags, setTags] = useState<any[]>([]);
     const [user, setUser] = useState<any>(null);
+    const [locations, setLocations] = useState<any[]>([]);
+    const [stockByLocation, setStockByLocation] = useState<Record<string, number>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [formData, setFormData] = useState({
@@ -69,14 +101,16 @@ export default function EditProductPage() {
     useEffect(() => {
         async function load() {
             setLoading(true);
-            const [cats, brs, sups, tgs, userData, prod] = await Promise.all([
+            const [cats, brs, sups, tgs, userData, prod, locsRes] = await Promise.all([
                 getCategories(),
                 getBrands(),
                 getSuppliers(),
                 getTags(),
                 getSessionUser(),
-                getProductForEdit(params.id as string)
+                getProductForEdit(params.id as string),
+                getStoreLocations()
             ]);
+            if (locsRes) setLocations(locsRes);
             
             setCategories(cats);
             setBrands(brs);
@@ -97,12 +131,20 @@ export default function EditProductPage() {
                 }
 
                 const inventory: Record<string, string | number> = {};
+                const stockLevels: Record<string, number> = {};
                 if (prod.variants) {
                     prod.variants.forEach((v: any) => {
                         const attrKey = JSON.stringify(v.attributes || {});
                         inventory[attrKey] = v.stock;
+                        // Cargar stock por sucursal
+                        if (v.inventoryLevels) {
+                            v.inventoryLevels.forEach((level: any) => {
+                                stockLevels[`${attrKey}_${level.locationId}`] = level.stock;
+                            });
+                        }
                     });
                 }
+                setStockByLocation(stockLevels);
 
                 setFormData({
                     name: prod.name || '',
@@ -118,10 +160,7 @@ export default function EditProductPage() {
                     packageSize: prod.packageSize?.toString() || '6',
                     isOnline: prod.isOnline ?? true,
                     isPOS: prod.isPOS ?? true,
-                    variantOptions: (prod.variantOptions as any[]) || [
-                        { name: 'Color', values: [] },
-                        { name: 'Talla', values: [] }
-                    ],
+                    variantOptions: (prod.variantOptions as any[]) || [],
                     inventory, 
                     wholesaleMethods: wholesaleMethods,
                     activeMethodId: wholesaleMethods[0]?.id || '',
@@ -277,9 +316,18 @@ export default function EditProductPage() {
             const combinations = generateCombinations(formData.variantOptions);
             const variantsData = combinations.map(combo => {
                 const attrKey = JSON.stringify(combo);
+                const locationStock = locations.map((loc: any) => ({
+                    locationId: loc.id,
+                    stock: stockByLocation[`${attrKey}_${loc.id}`] || 0
+                }));
+                // Si hay sucursales configuradas, el stock total se calcula desde ellas
+                // Si no hay sucursales, se usa el stock inicial del campo manual
+                const stockFromLocations = locationStock.reduce((acc: number, l: any) => acc + l.stock, 0);
+                const totalStock = locations.length > 0 ? stockFromLocations : (parseInt(String(formData.inventory[attrKey])) || 0);
                 return {
                     attributes: combo,
-                    stock: parseInt((formData.inventory[attrKey] || "0").toString()) || 0
+                    stock: totalStock,
+                    locationStock
                 };
             });
 
@@ -294,13 +342,15 @@ export default function EditProductPage() {
             if (res.success) {
                 alert('Producto actualizado correctamente');
                 router.push('/inventory');
+                // No resetear isSubmitting — el botón queda en "Guardando..." mientras navega
+                return;
             } else {
                 alert('Error al actualizar: ' + res.error);
+                setIsSubmitting(false);
             }
         } catch (error) {
             console.error(error);
             alert('Error inesperado');
-        } finally {
             setIsSubmitting(false);
         }
     };
@@ -572,7 +622,24 @@ export default function EditProductPage() {
                             </div>
 
                             <div className="space-y-3">
-                                <label className="text-xs font-black uppercase tracking-widest text-gray-400">Descripción detallada</label>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-black uppercase tracking-widest text-gray-400">Descripción detallada</label>
+                                    <button
+                                        type="button"
+                                        onClick={handleGenerateDescription}
+                                        disabled={isGeneratingDesc || !formData.images || formData.images.length === 0}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-xs font-black rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                    >
+                                        {isGeneratingDesc ? '⏳ Generando...' : '✨ Generar con IA'}
+                                    </button>
+                                </div>
+                                <textarea
+                                    rows={2}
+                                    placeholder="Instrucciones para la IA (opcional). Ej: Solo describe el pantalón, ignora la blusa de la modelo."
+                                    className="w-full px-5 py-3 bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800 rounded-xl focus:ring-2 focus:ring-purple-500/50 outline-none transition text-foreground text-sm"
+                                    value={aiPrompt}
+                                    onChange={(e) => setAiPrompt(e.target.value)}
+                                />
                                 <textarea
                                     rows={3}
                                     placeholder="Detalla materiales y fit..."
@@ -818,7 +885,7 @@ export default function EditProductPage() {
                             ) : !formData.sellByPackage ? (
                                 <div className="bg-blue-50 p-8 rounded-3xl border border-blue-100 text-center">
                                     <p className="font-bold text-blue-900">La venta por corridas no está activada.</p>
-                                    <p className="text-sm text-blue-700 mt-2">No es necesario configurar el Paso 3 si solo vendes por pieza individual.</p>
+                                    <p className="text-sm text-blue-700 mt-2">No es necesario configurar la composición de mayoreo si solo vendes por pieza individual.</p>
                                 </div>
                             ) : (
                                 <div className="p-12 text-center rounded-3xl border-2 border-dashed border-border flex flex-col items-center opacity-60">
@@ -826,13 +893,72 @@ export default function EditProductPage() {
                                 </div>
                             )}
 
-                            <div className="bg-blue-50 dark:bg-blue-900/10 p-6 rounded-3xl border border-blue-100 flex gap-4">
-                                <span className="text-3xl">⚖️</span>
-                                <div>
-                                    <h4 className="font-bold text-blue-900 dark:text-blue-200">Ajuste de Stock</h4>
-                                    <p className="text-sm text-blue-700 mt-1">Para modificar lasexistencias físicas reales, usa la opción <b>"⚖️ Ajustar Stock"</b> directamente desde la tabla de inventario principal.</p>
+                            {/* Tabla de Stock por Sucursal — siempre visible en paso 3 */}
+                            {generateCombinations(formData.variantOptions).length > 0 && locations.length > 0 && (
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">⚖️</span>
+                                        <h4 className="font-black text-foreground">Stock por Sucursal</h4>
+                                    </div>
+                                    <div className="overflow-x-auto rounded-2xl border border-border shadow-sm">
+                                        <table className="w-full text-sm bg-card">
+                                            <thead className="bg-gray-50 dark:bg-gray-800/50 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                                <tr>
+                                                    <th className="p-3 border-b border-border text-left">Variante</th>
+                                                    {locations.map((loc: any) => (
+                                                        <th key={loc.id} className="p-3 border-b border-l border-border text-center min-w-[120px] bg-blue-50/30">
+                                                            {loc.name} {loc.isWebStore ? '🌐' : '🏪'}
+                                                        </th>
+                                                    ))}
+                                                    <th className="p-3 border-b border-l border-border text-center bg-gray-100/50">Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-border">
+                                                {generateCombinations(formData.variantOptions).map((combo: any, idx: number) => {
+                                                    const attrKey = JSON.stringify(combo);
+                                                    const rowTotal = locations.reduce((acc: number, loc: any) => acc + (stockByLocation[`${attrKey}_${loc.id}`] || 0), 0);
+                                                    return (
+                                                        <tr key={idx} className="hover:bg-input/50 transition-colors">
+                                                            <td className="p-3 font-bold text-foreground">
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {Object.entries(combo).map(([k, v], i) => (
+                                                                        <span key={i} className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg text-[10px] font-bold text-gray-600">
+                                                                            <span className="opacity-60">{k}:</span> {v as string}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </td>
+                                                            {locations.map((loc: any) => {
+                                                                const key = `${attrKey}_${loc.id}`;
+                                                                const val = stockByLocation[key] || 0;
+                                                                return (
+                                                                    <td key={loc.id} className="p-2 border-l border-border">
+                                                                        <div className="flex items-center justify-center gap-1 bg-input rounded-xl border border-border/50 p-1">
+                                                                            <button type="button"
+                                                                                onClick={() => setStockByLocation(prev => ({...prev, [key]: Math.max(0, (prev[key] || 0) - 1)}))}
+                                                                                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 font-black text-gray-500 transition-colors">-</button>
+                                                                            <input type="number" value={val}
+                                                                                onChange={(e) => setStockByLocation(prev => ({...prev, [key]: Math.max(0, parseInt(e.target.value) || 0)}))}
+                                                                                className="w-10 text-center font-bold bg-transparent outline-none text-base"
+                                                                            />
+                                                                            <button type="button"
+                                                                                onClick={() => setStockByLocation(prev => ({...prev, [key]: (prev[key] || 0) + 1}))}
+                                                                                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 font-black text-gray-500 transition-colors">+</button>
+                                                                        </div>
+                                                                    </td>
+                                                                );
+                                                            })}
+                                                            <td className="p-3 border-l border-border text-center font-black text-blue-600 bg-gray-50/30">
+                                                                {rowTotal}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -861,7 +987,7 @@ export default function EditProductPage() {
                             type="button"
                             disabled={isSubmitting}
                             onClick={handleSubmit}
-                            className="px-12 py-3 bg-green-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-green-700 shadow-xl shadow-green-500/20 transition-all disabled:opacity-50"
+                            className="min-w-[200px] px-12 py-3 bg-green-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-green-700 shadow-xl shadow-green-500/20 transition-all disabled:opacity-50 text-center"
                         >
                             {isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
                         </button>

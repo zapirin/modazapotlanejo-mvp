@@ -1,9 +1,225 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { updateOrderStatus, deleteOrder } from "@/app/actions/orders";
+import { updateOrderStatus, deleteOrder, searchOrderVariants, updateOrderItems } from "@/app/actions/orders";
+import { releasePayment, refundPayment } from "@/app/actions/escrow";
 import Link from "next/link";
+
+// ── Modal para editar artículos de un pedido ─────────────────────────────────
+function EditOrderModal({ order, onClose, onSaved }: {
+    order: any;
+    onClose: () => void;
+    onSaved: (orderId: string, newItems: any[], newTotal: number) => void;
+}) {
+    const [items, setItems] = useState<any[]>(
+        order.items.map((i: any) => ({ ...i, _key: i.id }))
+    );
+    const [query, setQuery]           = useState('');
+    const [results, setResults]       = useState<any[]>([]);
+    const [searching, setSearching]   = useState(false);
+    const [saving, setSaving]         = useState(false);
+    const [noteForBuyer, setNoteForBuyer] = useState('');
+    const timerRef = useRef<any>(null);
+
+    const doSearch = useCallback(async (q: string) => {
+        setSearching(true);
+        const res = await searchOrderVariants(order.sellerId, q);
+        setResults(res.variants || []);
+        setSearching(false);
+    }, [order.sellerId]);
+
+    useEffect(() => {
+        clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => doSearch(query), 350);
+        return () => clearTimeout(timerRef.current);
+    }, [query, doSearch]);
+
+    // Load initial results on open
+    useEffect(() => { doSearch(''); }, [doSearch]);
+
+    const addVariant = (v: any) => {
+        const exists = items.find(i => i.variantId === v.id);
+        if (exists) {
+            setItems(prev => prev.map(i => i.variantId === v.id ? { ...i, quantity: i.quantity + 1 } : i));
+        } else {
+            setItems(prev => [...prev, {
+                _key: `new-${v.id}`,
+                variantId: v.id,
+                quantity: 1,
+                price: v.product.wholesalePrice || v.product.price,
+                productName: v.product.name,
+                color: v.color || null,
+                size: v.size || null,
+            }]);
+        }
+    };
+
+    const removeItem = (key: string) => setItems(prev => prev.filter(i => i._key !== key));
+    const setQty = (key: string, qty: number) => {
+        if (qty < 1) return;
+        setItems(prev => prev.map(i => i._key === key ? { ...i, quantity: qty } : i));
+    };
+
+    const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
+
+    const handleSave = async (notifyBuyer: boolean) => {
+        if (items.length === 0) { toast.error('El pedido debe tener al menos un artículo'); return; }
+        setSaving(true);
+        const payload = items.map(i => ({
+            variantId: i.variantId,
+            quantity: i.quantity,
+            price: i.price,
+            productName: i.productName,
+            color: i.color,
+            size: i.size,
+        }));
+        const res = await updateOrderItems(order.id, payload, {
+            notifyBuyer,
+            sellerNotes: noteForBuyer || undefined,
+        });
+        if (res.success) {
+            toast.success(notifyBuyer ? 'Pedido actualizado y comprador notificado' : 'Pedido actualizado');
+            onSaved(order.id, items, res.newTotal ?? total);
+        } else {
+            toast.error(res.error || 'Error al guardar');
+        }
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-card rounded-3xl border border-border shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+
+                {/* Header */}
+                <div className="p-6 border-b border-border flex items-center justify-between shrink-0">
+                    <div>
+                        <h2 className="text-lg font-black text-foreground">Editar Pedido #{order.orderNumber}</h2>
+                        <p className="text-xs text-gray-500 mt-0.5">Agrega o quita productos según lo acordado con el comprador</p>
+                    </div>
+                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition font-bold">✕</button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0">
+
+                    {/* Artículos actuales */}
+                    <div>
+                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">Artículos del pedido</h3>
+                        {items.length === 0 ? (
+                            <div className="text-center py-6 border-2 border-dashed border-border rounded-2xl text-gray-400 text-sm font-medium">
+                                Sin artículos — agrega productos abajo
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {items.map(item => (
+                                    <div key={item._key} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-2xl">
+                                        <div className="w-9 h-9 bg-gray-200 dark:bg-gray-700 rounded-xl flex items-center justify-center text-base shrink-0">👕</div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold text-foreground truncate">{item.productName}</p>
+                                            <p className="text-[11px] text-gray-500">
+                                                {[item.color && item.color !== 'Único' ? item.color : null, item.size && item.size !== 'Único' ? `Talla ${item.size}` : null].filter(Boolean).join(' · ')}
+                                                {' · '}${item.price.toLocaleString('es-MX', { minimumFractionDigits: 2 })}/pz
+                                            </p>
+                                        </div>
+                                        {/* Cantidad */}
+                                        <div className="flex items-center gap-1 border border-border rounded-xl overflow-hidden shrink-0">
+                                            <button onClick={() => setQty(item._key, item.quantity - 1)} className="px-2.5 py-1.5 text-sm font-black hover:bg-gray-100 dark:hover:bg-gray-700 transition">−</button>
+                                            <span className="px-2 text-sm font-black tabular-nums min-w-[2ch] text-center">{item.quantity}</span>
+                                            <button onClick={() => setQty(item._key, item.quantity + 1)} className="px-2.5 py-1.5 text-sm font-black hover:bg-gray-100 dark:hover:bg-gray-700 transition">+</button>
+                                        </div>
+                                        <p className="text-sm font-black tabular-nums text-foreground shrink-0 w-20 text-right">
+                                            ${(item.price * item.quantity).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                        </p>
+                                        <button onClick={() => removeItem(item._key)} className="w-7 h-7 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 transition flex items-center justify-center shrink-0 text-xs font-black">✕</button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Buscador de productos de reemplazo */}
+                    <div>
+                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">Agregar producto de reemplazo</h3>
+                        <input
+                            type="text"
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            placeholder="Buscar por nombre de producto..."
+                            className="w-full px-4 py-3 bg-input border border-border rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+                        />
+                        {searching ? (
+                            <div className="text-center py-4 text-gray-400 text-xs font-black uppercase tracking-widest">Buscando...</div>
+                        ) : results.length === 0 ? (
+                            <div className="text-center py-4 text-gray-400 text-sm">Sin resultados</div>
+                        ) : (
+                            <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                                {results.map((v: any) => (
+                                    <div key={v.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-xl transition">
+                                        {v.product.images?.[0] ? (
+                                            <img src={v.product.images[0]} className="w-10 h-10 rounded-xl object-cover shrink-0 border border-border" />
+                                        ) : (
+                                            <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-lg shrink-0">👕</div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold text-foreground truncate">{v.product.name}</p>
+                                            <p className="text-[11px] text-gray-500">
+                                                {[v.color && v.color !== 'Único' ? v.color : null, v.size && v.size !== 'Único' ? `T.${v.size}` : null].filter(Boolean).join(' · ')}
+                                                {' · '}<span className="font-black">{v.stock} pz</span>
+                                                {' · '}${(v.product.wholesalePrice || v.product.price).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => addVariant(v)}
+                                            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-black rounded-xl hover:bg-blue-700 transition shrink-0"
+                                        >+ Agregar</button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="p-6 border-t border-border space-y-4 shrink-0">
+                    {/* Nota para el comprador */}
+                    <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-1.5">
+                            Mensaje para el comprador <span className="normal-case font-medium">(opcional)</span>
+                        </label>
+                        <textarea
+                            rows={2}
+                            value={noteForBuyer}
+                            onChange={e => setNoteForBuyer(e.target.value)}
+                            placeholder="Ej: Reemplazamos el modelo X por el Y que acordamos, mismo precio..."
+                            className="w-full px-4 py-3 bg-input border border-border rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        />
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Nuevo total</p>
+                            <p className="text-2xl font-black text-foreground tabular-nums">${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                        <div className="flex gap-2 flex-wrap justify-end">
+                            <button onClick={onClose} className="px-4 py-3 border border-border rounded-2xl text-sm font-black text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => handleSave(false)}
+                                disabled={saving || items.length === 0}
+                                className="px-4 py-3 bg-gray-800 dark:bg-gray-200 text-white dark:text-gray-900 font-black text-sm rounded-2xl hover:opacity-90 transition disabled:opacity-50"
+                            >{saving ? '...' : '✓ Solo guardar'}</button>
+                            <button
+                                onClick={() => handleSave(true)}
+                                disabled={saving || items.length === 0}
+                                className="px-4 py-3 bg-blue-600 text-white font-black text-sm rounded-2xl hover:bg-blue-700 transition disabled:opacity-50"
+                            >{saving ? 'Enviando...' : '✉️ Guardar y notificar al comprador'}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
     PENDING:         { label: "Pendiente",      class: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
@@ -56,16 +272,33 @@ function Timeline({ status }: { status: string }) {
     );
 }
 
-export default function OrdersClient({ orders: initial, isBuyer, isSeller }: {
+// Determina el origen legible del pedido basado en el dominio registrado del comprador
+function getOrderSource(registeredDomain?: string | null): { label: string; color: string } {
+    if (registeredDomain === 'kalexafashion.com') {
+        return { label: 'kalexafashion.com', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' };
+    }
+    if (registeredDomain === 'kalexa.modazapotlanejo.com') {
+        return { label: 'kalexa.modazapotlanejo.com', color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' };
+    }
+    if (registeredDomain === 'zonadelvestir.com') {
+        return { label: 'zonadelvestir.com', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' };
+    }
+    return { label: 'Moda Zapotlanejo', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' };
+}
+
+export default function OrdersClient({ orders: initial, isBuyer, isSeller, isAdmin, isKalexa }: {
     orders: any[];
     isBuyer: boolean;
     isSeller: boolean;
+    isAdmin?: boolean;
+    isKalexa?: boolean;
 }) {
     const [orders, setOrders]       = useState(initial);
     const [activeTab, setActiveTab] = useState("active");
     const [processing, setProcessing] = useState<string | null>(null);
     const [showNotes, setShowNotes]   = useState<string | null>(null);
     const [notes, setNotes]           = useState<Record<string, string>>({});
+    const [editingOrder, setEditingOrder] = useState<any | null>(null);
 
     const tabDef = TABS.find(t => t.key === activeTab)!;
     const visible = orders.filter(o => tabDef.statuses.includes(o.status));
@@ -84,6 +317,32 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller }: {
             setShowNotes(null);
         } else {
             toast.error(res.error || "Error");
+        }
+        setProcessing(null);
+    };
+
+    const handleRelease = async (orderId: string, orderNumber: number) => {
+        if (!confirm(`¿Liberar el pago del pedido #${orderNumber} al vendedor?\n\nEsto es irreversible.`)) return;
+        setProcessing(orderId + "RELEASE");
+        const res = await releasePayment(orderId);
+        if (res.success) {
+            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "COMPLETED", paymentReleasedAt: new Date().toISOString() } : o));
+            toast.success("Pago liberado al vendedor");
+        } else {
+            toast.error(res.error || "Error al liberar");
+        }
+        setProcessing(null);
+    };
+
+    const handleRefund = async (orderId: string, orderNumber: number) => {
+        if (!confirm(`¿Reembolsar el pago completo al comprador del pedido #${orderNumber}?\n\nEsto cancelará el cobro y no se puede revertir.`)) return;
+        setProcessing(orderId + "REFUND");
+        const res = await refundPayment(orderId);
+        if (res.success) {
+            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "REFUNDED", refundedAt: new Date().toISOString() } : o));
+            toast.success("Reembolso procesado al comprador");
+        } else {
+            toast.error(res.error || "Error al reembolsar");
         }
         setProcessing(null);
     };
@@ -115,6 +374,7 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller }: {
     );
 
     return (
+        <>
         <div className="space-y-6">
             {/* Pestañas */}
             <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl w-fit">
@@ -150,7 +410,18 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller }: {
                             {/* Cabecera */}
                             <div className="p-6 border-b border-border bg-gray-50/50 dark:bg-gray-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Pedido #{order.orderNumber}</p>
+                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Pedido #{order.orderNumber}</p>
+                                        {/* Badge de origen — solo para Kalexa */}
+                                        {isKalexa && order.buyer && (() => {
+                                            const src = getOrderSource(order.buyer.registeredDomain);
+                                            return (
+                                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide ${src.color}`}>
+                                                    🌐 {src.label}
+                                                </span>
+                                            );
+                                        })()}
+                                    </div>
                                     <p className="text-sm font-bold text-foreground">
                                         {new Date(order.createdAt).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                                     </p>
@@ -207,6 +478,12 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller }: {
                                                 <p className="text-sm text-foreground font-medium">{order.sellerNotes}</p>
                                             </div>
                                         )}
+                                        {order.paymentMethod && isSeller && (
+                                            <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-3">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400 mb-1">💳 Forma de Pago</p>
+                                                <p className="text-sm font-bold text-foreground">{order.paymentMethod}</p>
+                                            </div>
+                                        )}
                                         {order.shippingAddress && (
                                             <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 space-y-0.5">
                                                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">📦 Envío</p>
@@ -222,9 +499,50 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller }: {
                                             </div>
                                         )}
 
+                                        {/* ── CONTACTO DEL COMPRADOR — solo Kalexa ── */}
+                                        {isKalexa && order.buyer && (
+                                            <div className="bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800 rounded-xl p-4 space-y-2">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-purple-600">👤 Datos del Comprador</p>
+                                                <p className="text-sm font-bold text-foreground">{order.buyer.businessName || order.buyer.name}</p>
+                                                <div className="flex flex-col gap-1">
+                                                    <a href={`mailto:${order.buyer.email}`}
+                                                        className="text-xs text-blue-600 font-bold flex items-center gap-1.5 hover:underline">
+                                                        ✉️ {order.buyer.email}
+                                                    </a>
+                                                    {(order.buyer.phone || order.shippingAddress?.phone) && (
+                                                        <a href={`tel:${order.buyer.phone || order.shippingAddress?.phone}`}
+                                                            className="text-xs text-emerald-600 font-bold flex items-center gap-1.5 hover:underline">
+                                                            📞 {order.buyer.phone || order.shippingAddress?.phone}
+                                                        </a>
+                                                    )}
+                                                    {(order.buyer.phone || order.shippingAddress?.phone) && (
+                                                        <a href={`https://wa.me/52${(order.buyer.phone || order.shippingAddress?.phone || '').replace(/\D/g, '')}`}
+                                                            target="_blank" rel="noopener noreferrer"
+                                                            className="text-xs text-green-600 font-bold flex items-center gap-1.5 hover:underline">
+                                                            💬 WhatsApp
+                                                        </a>
+                                                    )}
+                                                    {order.shippingAddress && (
+                                                        <p className="text-xs text-gray-500 font-medium pt-1 border-t border-purple-100 dark:border-purple-800 mt-1">
+                                                            📍 {order.shippingAddress.street}, {order.shippingAddress.colonia}, {order.shippingAddress.city}, {order.shippingAddress.state} <span className="font-black text-foreground">CP {order.shippingAddress.zip}</span>
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* ── ACCIONES VENDEDOR ── */}
                                         {isSeller && (
                                             <div className="space-y-2 pt-1">
+                                                {/* Editar artículos */}
+                                                {["PENDING", "PENDING_PAYMENT", "ACCEPTED", "PAID"].includes(order.status) && (
+                                                    <button
+                                                        onClick={() => setEditingOrder(order)}
+                                                        className="w-full py-2.5 border-2 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-50 dark:hover:bg-blue-900/20 transition flex items-center justify-center gap-2"
+                                                    >
+                                                        ✏️ Editar artículos del pedido
+                                                    </button>
+                                                )}
                                                 {order.status === "PENDING" && (
                                                     <>
                                                         {showNotes === order.id && (
@@ -283,6 +601,33 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller }: {
                                             </div>
                                         )}
 
+                                        {/* ── ACCIONES ADMIN (Escrow) ── */}
+                                        {isAdmin && order.status === "PAID" && !order.paymentReleasedAt && !order.refundedAt && (
+                                            <div className="space-y-2 pt-2 border-t border-border mt-2">
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-amber-600">💰 Control de Pago (Admin)</p>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleRelease(order.id, order.orderNumber)}
+                                                        disabled={!!processing}
+                                                        className="flex-1 py-2.5 bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition disabled:opacity-50">
+                                                        {processing === order.id + "RELEASE" ? "..." : "✅ Liberar pago"}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleRefund(order.id, order.orderNumber)}
+                                                        disabled={!!processing}
+                                                        className="flex-1 py-2.5 bg-rose-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-rose-700 transition disabled:opacity-50">
+                                                        {processing === order.id + "REFUND" ? "..." : "💸 Reembolsar"}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {isAdmin && order.paymentReleasedAt && (
+                                            <p className="text-[10px] text-emerald-600 font-bold pt-2 border-t border-border mt-2">✅ Pago liberado al vendedor</p>
+                                        )}
+                                        {isAdmin && order.refundedAt && (
+                                            <p className="text-[10px] text-rose-600 font-bold pt-2 border-t border-border mt-2">💸 Reembolsado al comprador</p>
+                                        )}
+
                                         {/* ── INFO COMPRADOR ── */}
                                         {isBuyer && (
                                             <>
@@ -300,5 +645,21 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller }: {
                 </div>
             )}
         </div>
+
+        {/* Modal de edición de artículos */}
+        {editingOrder && (
+            <EditOrderModal
+                order={editingOrder}
+                onClose={() => setEditingOrder(null)}
+                onSaved={(orderId, newItems, newTotal) => {
+                    setOrders(prev => prev.map(o => o.id === orderId
+                        ? { ...o, items: newItems, total: newTotal }
+                        : o
+                    ));
+                    setEditingOrder(null);
+                }}
+            />
+        )}
+        </>
     );
 }

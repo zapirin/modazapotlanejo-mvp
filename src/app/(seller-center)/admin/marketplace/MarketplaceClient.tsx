@@ -19,6 +19,7 @@ import {
     getInactiveSellers,
     deleteSellerForever,
     reactivateSeller,
+    updateBrandConfig,
 } from '@/app/actions/marketplace';
 import { updateApplicationStatus } from '@/app/(seller-center)/admin/applications/actions';
 import { getSellerApplications } from '@/app/actions/admin';
@@ -45,9 +46,17 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     // Tab: Site
     const [title, setTitle] = useState(initialSettings?.title || '');
     const [heroImage, setHeroImage] = useState(initialSettings?.heroImage || '');
+    const [heroImages, setHeroImages] = useState<string[]>(
+        initialSettings?.heroImages?.length > 0
+            ? initialSettings.heroImages
+            : (initialSettings?.heroImage ? [initialSettings.heroImage] : [])
+    );
+    const [newHeroUrl, setNewHeroUrl] = useState('');
+    const [loadingHero, setLoadingHero] = useState(false);
     const [logoUrl, setLogoUrl] = useState(initialSettings?.logoUrl || '');
     const [sellerLabel, setSellerLabel] = useState(initialSettings?.sellerLabel || 'Vendedor');
     const heroInputRef = useRef<HTMLInputElement>(null);
+    const newHeroRef = useRef<HTMLInputElement>(null);
     const logoInputRef = useRef<HTMLInputElement>(null);
 
     // Tab: Sellers
@@ -87,8 +96,9 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
         'modazapotlanejo.com': (initialSettings?.brandColors as any)?.['modazapotlanejo.com'] || 'blue',
         'zonadelvestir.com': (initialSettings?.brandColors as any)?.['zonadelvestir.com'] || 'violet',
     });
-    const [brands, setBrands] = useState<any[]>([]);
+    const [brands, setBrands] = useState<any[]>(initialSettings?.brandsConfig || []);
     const [editingBrand, setEditingBrand] = useState<any>(null);
+    const [photographyEnabled, setPhotographyEnabled] = useState(initialSettings?.photographyEnabled !== false);
     const [photoPrices, setPhotoPrices] = useState(initialSettings?.photographyPrices || [
         { paquete: 'Básico', piezas: '1–10 piezas', precio: '$800', includes: 'Fondo blanco · 1 toma/pieza' },
         { paquete: 'Estándar', piezas: '11–30 piezas', precio: '$1,500', includes: 'Fondo blanco · 2 tomas/pieza' },
@@ -161,7 +171,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
 
     const loadAllSellers = async () => {
         const res = await getSellersList();
-        if (res.success) setAllSellers(res.data);
+        if (res.success) setAllSellers(res.data || []);
     };
 
     const loadPhotos = async () => {
@@ -196,10 +206,43 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
             reader.readAsDataURL(file);
         }
     };
+    const handleAddHeroImage = async (file: File) => {
+        const validation = validateImageFile(file);
+        if (!validation.valid) { toast.error(validation.error); return; }
+        setLoadingHero(true);
+        try {
+            const { url, sizeKB } = await processImage(file, 'hero');
+            const newImages = [...heroImages, url];
+            setHeroImages(newImages);
+            const res = await updateMarketplaceSettingsFull({ heroImages: newImages });
+            if (res.success) toast.success(`Imagen agregada al slider (${sizeKB}KB)`);
+            else toast.error(res.error || 'Error al guardar');
+        } catch {
+            toast.error('Error al procesar la imagen');
+        } finally {
+            setLoadingHero(false);
+        }
+    };
+
+    const handleBrandImageUpload = async (brandDomain: string, target: 'logoUrl' | 'heroImage', file: File) => {
+        const validation = validateImageFile(file);
+        if (!validation.valid) { toast.error(validation.error); return; }
+        setLoading(true);
+        try {
+            const folder = target === 'heroImage' ? 'brand-hero' : 'brand-logos';
+            const { url, sizeKB } = await processImage(file, folder);
+            setBrands(prev => prev.map(b => b.domain === brandDomain ? { ...b, [target]: url } : b));
+            toast.success(`Imagen procesada (${sizeKB}KB). No olvides guardar los cambios.`);
+        } catch {
+            toast.error('Error al procesar la imagen');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleSaveSite = async () => {
         setLoading(true);
-        const res = await updateMarketplaceSettingsFull({ title, heroImage, logoUrl, sellerLabel, privacyUrl, termsUrl });
+        const res = await updateMarketplaceSettingsFull({ title, heroImage: heroImages[0] || '', heroImages, logoUrl, sellerLabel, privacyUrl, termsUrl });
         if (res.success) { toast.success('Configuración guardada'); setSettings(res.data); }
         else toast.error(res.error || 'Error al guardar');
         setLoading(false);
@@ -220,7 +263,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
         setProductQuery(q);
         if (q.length < 2) { setSearchResults([]); return; }
         const res = await getProductsSearch(q);
-        if (res.success) setSearchResults(res.data);
+        if (res.success) setSearchResults(res.data || []);
     };
 
     const handleTogglePOS = async (seller: any) => {
@@ -410,26 +453,50 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                             </div>
                         </div>
 
-                        {/* Hero image */}
+                        {/* Hero images slider */}
                         <div className="space-y-3">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Imagen de Fondo (Landing)</label>
-                            {heroImage && (
-                                <div className="relative w-full h-40 rounded-2xl overflow-hidden border border-border">
-                                    <Image src={heroImage} alt="Hero" fill className="object-cover" />
-                                    <button onClick={() => setHeroImage('')}
-                                        className="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-black hover:bg-red-600">×</button>
+                            <div className="flex items-center justify-between">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Imágenes del Slider (Landing)</label>
+                                <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-full text-[9px] font-black text-gray-500">
+                                    {heroImages.length} imagen{heroImages.length !== 1 ? 'es' : ''}
+                                </span>
+                            </div>
+
+                            {heroImages.length > 0 && (
+                                <div className="grid grid-cols-3 gap-3">
+                                    {heroImages.map((img, idx) => (
+                                        <div key={idx} className="relative h-24 rounded-xl overflow-hidden border border-border group">
+                                            <Image src={img} alt={`Slide ${idx + 1}`} fill className="object-cover" unoptimized />
+                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition" />
+                                            <button
+                                                onClick={() => setHeroImages(prev => prev.filter((_, i) => i !== idx))}
+                                                className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-black opacity-0 group-hover:opacity-100 transition hover:bg-red-600">×</button>
+                                            <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 bg-black/60 text-white text-[9px] font-black rounded">{idx + 1}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
+                            {heroImages.length === 0 && (
+                                <p className="text-xs text-gray-400 font-medium py-2">Sin imágenes — se mostrarán fotos de productos automáticamente.</p>
+                            )}
+
                             <div className="flex gap-3">
-                                <input ref={heroInputRef} type="file" accept="image/*" className="hidden"
-                                    onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], 'hero')} />
-                                <button onClick={() => heroInputRef.current?.click()}
-                                    className="px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-border rounded-xl text-xs font-black hover:bg-gray-200 transition">
-                                    📁 Subir imagen
+                                <input ref={newHeroRef} type="file" accept="image/*" className="hidden"
+                                    onChange={e => e.target.files?.[0] && handleAddHeroImage(e.target.files[0])} />
+                                <button onClick={() => newHeroRef.current?.click()} disabled={loadingHero}
+                                    className="shrink-0 px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-border rounded-xl text-xs font-black hover:bg-gray-200 transition disabled:opacity-50">
+                                    {loadingHero ? '⏳ Subiendo...' : '📁 Subir imagen'}
                                 </button>
-                                <input type="text" value={heroImage} onChange={e => setHeroImage(e.target.value)}
-                                    placeholder="O pega una URL de imagen..."
+                                <input type="text" value={newHeroUrl} onChange={e => setNewHeroUrl(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter' && newHeroUrl.trim()) { setHeroImages(prev => [...prev, newHeroUrl.trim()]); setNewHeroUrl(''); }}}
+                                    placeholder="O pega una URL y presiona Enter..."
                                     className="flex-1 px-4 py-2.5 bg-input border border-border rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500/50 outline-none" />
+                                {newHeroUrl.trim() && (
+                                    <button onClick={() => { setHeroImages(prev => [...prev, newHeroUrl.trim()]); setNewHeroUrl(''); }}
+                                        className="shrink-0 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition">
+                                        + Agregar
+                                    </button>
+                                )}
                             </div>
                         </div>
 
@@ -446,15 +513,18 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                 <div className="space-y-6">
 
                     {/* Solicitudes pendientes */}
-                    {(applications.length > 0 || loadingApps) && (
-                        <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-2xl p-5 space-y-4">
-                            <h3 className="text-sm font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 flex items-center gap-2">
-                                📬 Solicitudes Pendientes
-                                <span className="px-2 py-0.5 bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 rounded-full text-[9px] font-black">{applications.length}</span>
-                            </h3>
-                            {loadingApps ? (
-                                <div className="flex justify-center p-4"><div className="w-6 h-6 border-4 border-amber-200 border-t-amber-600 rounded-full animate-spin" /></div>
-                            ) : applications.map((app: any) => (
+                    <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-2xl p-5 space-y-4">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                            📬 Solicitudes Pendientes
+                            <span className="px-2 py-0.5 bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 rounded-full text-[9px] font-black">{applications.length}</span>
+                        </h3>
+                        {loadingApps ? (
+                            <div className="flex justify-center p-4"><div className="w-6 h-6 border-4 border-amber-200 border-t-amber-600 rounded-full animate-spin" /></div>
+                        ) : applications.length === 0 ? (
+                            <div className="p-8 text-center text-amber-700 dark:text-amber-400 bg-amber-100/50 dark:bg-amber-900/20 rounded-xl border border-dashed border-amber-200 dark:border-amber-900/50 font-medium">
+                                No hay solicitudes pendientes nuevas
+                            </div>
+                        ) : applications.map((app: any) => (
                                 <div key={app.id} className="bg-white dark:bg-gray-900 rounded-xl p-4 flex flex-col md:flex-row md:items-center gap-4 border border-border">
                                     <div className="flex-1 min-w-0">
                                         <p className="font-black text-foreground">{app.storeName}</p>
@@ -486,7 +556,6 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                 </div>
                             ))}
                         </div>
-                    )}
 
                     {/* Subpestañas activos / desactivados */}
                     <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl w-fit">
@@ -584,6 +653,9 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             <div>
                                                 <p className="font-black text-foreground">{seller.businessName || seller.name}</p>
                                                 <p className="text-xs text-gray-400 font-medium">{seller.email} · {seller._count?.ownedProducts || 0} productos</p>
+                                                {(seller.phone || seller.whatsapp) && (
+                                                    <p className="text-xs text-emerald-600 font-bold">📱 {seller.whatsapp || seller.phone}</p>
+                                                )}
                                                 <p className="text-[10px] text-gray-400">
                                                     Miembro desde {new Date((seller as any).createdAt).toLocaleDateString('es-MX', {month:'short', year:'numeric'})}
                                                 </p>
@@ -623,7 +695,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
 
                                     {expandedSellers.has(seller.id) && (
                                         <div className="space-y-3 px-5 pb-5 border-t border-border pt-4">
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                                                 <div className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${seller.posEnabled ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-gray-50 dark:bg-gray-800/30 border-border'}`}>
                                                     <span className="text-base">🖥️</span>
                                                     <div className="flex-1 min-w-0">
@@ -653,6 +725,25 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                                                 }}
                                                                 className="w-16 px-2 py-1 text-sm font-black text-blue-600 bg-white dark:bg-gray-900 border border-blue-200 dark:border-blue-800 rounded-lg text-center focus:ring-2 focus:ring-blue-500 outline-none" />
                                                             <span className="text-sm font-black text-blue-600">%</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3 p-3 rounded-xl border border-border bg-gray-50 dark:bg-gray-800/30">
+                                                    <span className="text-base">📅</span>
+                                                    <div className="flex-1">
+                                                        <p className="text-[10px] font-black text-foreground uppercase tracking-wide">Mensualidad $</p>
+                                                        <div className="flex items-center gap-1 mt-0.5">
+                                                            <span className="text-sm font-black text-emerald-600">$</span>
+                                                            <input type="number" min={0} step={1}
+                                                                defaultValue={seller.fixedFee ?? 0}
+                                                                onBlur={async (e) => {
+                                                                    const val = parseFloat(e.target.value);
+                                                                    if (isNaN(val) || val < 0) return;
+                                                                    const res = await updateSellerPermissions(seller.id, { fixedFee: val });
+                                                                    if (res.success) toast.success(`Mensualidad actualizada a $${val}`);
+                                                                    else toast.error(res.error || 'Error');
+                                                                }}
+                                                                className="w-20 px-2 py-1 text-sm font-black text-emerald-600 bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-800 rounded-lg text-center focus:ring-2 focus:ring-emerald-500 outline-none" />
                                                         </div>
                                                     </div>
                                                 </div>
@@ -753,6 +844,27 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                 <div className="space-y-6">
                     <div className="flex items-center justify-between">
                         <h2 className="text-xl font-black">📸 Solicitudes de Fotografía</h2>
+                    </div>
+
+                    {/* Toggle activar/desactivar módulo */}
+                    <div className="bg-card border border-border rounded-2xl p-5 flex items-center justify-between">
+                        <div>
+                            <p className="font-black text-foreground">Módulo Solicitar Fotos</p>
+                            <p className="text-xs text-gray-400 mt-1">Activa o desactiva este módulo para todos los vendedores.</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                const newVal = !photographyEnabled;
+                                setPhotographyEnabled(newVal);
+                                const res = await updateMarketplaceSettingsFull({ photographyEnabled: newVal });
+                                if (res.success) toast.success(newVal ? 'Módulo activado' : 'Módulo desactivado');
+                                else toast.error('Error al guardar');
+                            }}
+                            className={"w-14 h-8 rounded-full transition-all relative " + (photographyEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-700')}
+                        >
+                            <div className={"absolute top-1 w-6 h-6 bg-white rounded-full transition-all " + (photographyEnabled ? 'left-7' : 'left-1')}></div>
+                        </button>
                     </div>
 
                     {/* Precios del servicio — editables */}
@@ -968,35 +1080,76 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="space-y-1">
                                             <label className="text-[9px] font-black uppercase text-gray-400">URL del Logo</label>
-                                            <input value={brand.logoUrl || ''}
-                                                onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? {...b, logoUrl: e.target.value} : b))}
-                                                placeholder="https://... o /logo.png"
-                                                className="w-full px-3 py-2 bg-input border border-border rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
+                                            <div className="flex gap-2">
+                                                <input value={brand.logoUrl || ''}
+                                                    onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? {...b, logoUrl: e.target.value} : b))}
+                                                    placeholder="/logo.png"
+                                                    className="flex-1 px-3 py-2 bg-input border border-border rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
+                                                <label className="cursor-pointer p-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl transition">
+                                                    <input type="file" className="hidden" accept="image/*" 
+                                                        onChange={e => e.target.files?.[0] && handleBrandImageUpload(brand.domain, 'logoUrl', e.target.files[0])} />
+                                                    <span title="Subir imagen">📤</span>
+                                                </label>
+                                            </div>
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-[9px] font-black uppercase text-gray-400">Color principal</label>
-                                            <select value={brand.primaryColor || 'blue'}
-                                                onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? {...b, primaryColor: e.target.value} : b))}
-                                                className="w-full px-3 py-2 bg-input border border-border rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none">
-                                                <option value="blue">🔵 Azul</option>
-                                                <option value="violet">🟣 Violeta</option>
-                                                <option value="emerald">🟢 Esmeralda</option>
-                                                <option value="amber">🟡 Ámbar</option>
-                                                <option value="rose">🌸 Rosa</option>
-                                            </select>
+                                            <label className="text-[9px] font-black uppercase text-gray-400">Imagen Hero</label>
+                                            <div className="flex gap-2">
+                                                <input value={brand.heroImage || ''}
+                                                    onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? {...b, heroImage: e.target.value} : b))}
+                                                    placeholder="/hero.png"
+                                                    className="flex-1 px-3 py-2 bg-input border border-border rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
+                                                <label className="cursor-pointer p-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl transition">
+                                                    <input type="file" className="hidden" accept="image/*" 
+                                                        onChange={e => e.target.files?.[0] && handleBrandImageUpload(brand.domain, 'heroImage', e.target.files[0])} />
+                                                    <span title="Subir imagen">📤</span>
+                                                </label>
+                                            </div>
                                         </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase text-gray-400">Color principal</label>
+                                        <select value={brand.primaryColor || 'blue'}
+                                            onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? {...b, primaryColor: e.target.value} : b))}
+                                            className="w-full px-3 py-2 bg-input border border-border rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none">
+                                            <option value="blue">🔵 Azul (Modazapo)</option>
+                                            <option value="violet">🟣 Violeta (Zona Vestir)</option>
+                                            <option value="kalexa">⚛️ Kalexa Purple</option>
+                                            <option value="emerald">🟢 Esmeralda</option>
+                                            <option value="amber">🟡 Ámbar</option>
+                                            <option value="rose">🌸 Rosa</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <button onClick={async () => {
-                                    const res = await updateMarketplaceSettingsFull({ [`brandColor_${brand.domain}`]: brand.primaryColor } as any);
-                                    if (res.success) toast.success(`Color guardado para ${brand.name}`);
+                                    setLoading(true);
+                                    const res = await updateBrandConfig(brand.domain, {
+                                        name: brand.name,
+                                        tagline: brand.tagline,
+                                        description: brand.description,
+                                        logoUrl: brand.logoUrl,
+                                        heroImage: brand.heroImage,
+                                        primaryColor: brand.primaryColor
+                                    });
+                                    setLoading(false);
+                                    if (res.success) toast.success(`Configuración guardada para ${brand.name}`);
                                     else toast.error(res.error || 'Error al guardar');
-                                }} className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition">
-                                    💾 Guardar color
+                                }} disabled={loading}
+                                className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition disabled:opacity-50">
+                                    {loading ? 'Guardando...' : '💾 Guardar Configuración de Marca'}
                                 </button>
                             </div>
                         ))}
                     </div>
+                    {brands.length === 0 && (
+                        <div className="p-12 text-center bg-gray-50 dark:bg-gray-900/50 rounded-3xl border border-dashed border-border mt-6">
+                            <p className="text-sm font-bold text-gray-400">No hay configuraciones de marca en la base de datos.</p>
+                            <button onClick={() => setBrands([{ domain: 'kalexafashion.com', name: 'Kalexa Fashion', primaryColor: 'kalexa' }])}
+                                className="mt-4 text-xs font-black text-blue-600 hover:underline">
+                                + Agregar borrador para Kalexa
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 

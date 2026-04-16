@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { applyAsSeller } from '@/app/actions/admin';
 
-export default function SellerRegistrationForm({ plans }: { plans: any[] }) {
+export default function SellerRegistrationForm({ plans, domain }: { plans: any[]; domain?: string }) {
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
     const [formData, setFormData] = useState({
@@ -14,6 +14,7 @@ export default function SellerRegistrationForm({ plans }: { plans: any[] }) {
         phone: '',
         categories: [] as string[],
         storeAddress: '',
+        shippingZip: '',
     });
     const [selectedPlan, setSelectedPlan] = useState('');
 
@@ -45,6 +46,14 @@ export default function SellerRegistrationForm({ plans }: { plans: any[] }) {
             setStatus({ type: 'error', message: 'El domicilio de la tienda o fábrica es obligatorio.' });
             return;
         }
+        if (!formData.storeAddress.split('|')[1]?.trim()) {
+            setStatus({ type: 'error', message: 'La calle y número de la tienda o fábrica es obligatorio.' });
+            return;
+        }
+        if (!formData.shippingZip || formData.shippingZip.length !== 5) {
+            setStatus({ type: 'error', message: 'El Código Postal de envío es obligatorio (5 dígitos).' });
+            return;
+        }
 
         setLoading(true);
         setStatus(null);
@@ -53,12 +62,14 @@ export default function SellerRegistrationForm({ plans }: { plans: any[] }) {
             ...formData,
             category: formData.categories,
             storeAddress: formData.storeAddress,
+            shippingZip: formData.shippingZip,
             planName: selectedPlan,
+            registeredDomain: domain,
         });
 
         if (result.success) {
             setStatus({ type: 'success', message: '¡Solicitud enviada! Nos pondremos en contacto contigo pronto.' });
-            setFormData({ storeName: '', contactName: '', email: '', phone: '', categories: [], storeAddress: '' }); setSelectedPlan('');
+            setFormData({ storeName: '', contactName: '', email: '', phone: '', categories: [], storeAddress: '', shippingZip: '' }); setSelectedPlan('');
         } else {
             setStatus({ type: 'error', message: result.error || 'Ocurrió un error.' });
         }
@@ -204,15 +215,28 @@ export default function SellerRegistrationForm({ plans }: { plans: any[] }) {
                                     </select>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[9px] font-black uppercase tracking-widest text-gray-400 pl-2">Calle y número (opcional)</label>
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-gray-400 pl-2">Calle y número <span className="text-red-500">*</span></label>
                                     <input
                                         type="text"
+                                        required
                                         placeholder="Ej: Av. Industria #45, Local 12"
                                         value={formData.storeAddress.split('|')[1] || ''}
                                         onChange={(e) => {
                                             const city = formData.storeAddress.split('|')[0] || '';
                                             setFormData({...formData, storeAddress: `${city}|${e.target.value}`});
                                         }}
+                                        className="w-full px-6 py-5 bg-gray-50 dark:bg-gray-900 border border-border rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 outline-none transition-all font-bold text-sm"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-gray-400 pl-2">Código Postal <span className="text-red-500">*</span></label>
+                                    <input
+                                        type="text"
+                                        required
+                                        maxLength={5}
+                                        placeholder="Ej: 45430"
+                                        value={formData.shippingZip}
+                                        onChange={(e) => setFormData({...formData, shippingZip: e.target.value.replace(/\D/g, '')})}
                                         className="w-full px-6 py-5 bg-gray-50 dark:bg-gray-900 border border-border rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 outline-none transition-all font-bold text-sm"
                                     />
                                 </div>

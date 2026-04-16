@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import { addLayawayPayment, deleteSale, updateSaleNotes } from '../products/new/actions';
 import { 
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -57,6 +58,101 @@ export default function DashboardClient({
     const [editNotes, setEditNotes] = useState('');
     const [layawayAbono, setLayawayAbono] = useState<string>('');
     const [isProcessing, setIsProcessing] = useState(false);
+
+    // Filtro de últimas ventas por sucursal y fecha
+    const [salesLocationFilter, setSalesLocationFilter] = useState<string>('all');
+    const [salesActiveFilter, setSalesActiveFilter] = useState<string>('today');
+    const [salesDateRange, setSalesDateRange] = useState<{ startDate: Date; endDate: Date }>(() => {
+        const now = new Date();
+        const start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        return { startDate: start, endDate: now };
+    });
+
+    const handleSalesFilterChange = (preset: string) => {
+        setSalesActiveFilter(preset);
+        const now = new Date();
+        const start = new Date(now);
+        switch (preset) {
+            case 'today':  start.setHours(0, 0, 0, 0); break;
+            case 'week':   { const day = start.getDay() || 7; start.setHours(-24 * (day - 1), 0, 0, 0); break; }
+            case 'month':  start.setDate(1); start.setHours(0, 0, 0, 0); break;
+            case 'last_month': start.setMonth(now.getMonth() - 1, 1); start.setHours(0, 0, 0, 0); now.setDate(0); now.setHours(23, 59, 59, 999); break;
+            case 'quarter':  { const q = Math.floor(now.getMonth() / 3); start.setMonth(q * 3, 1); start.setHours(0, 0, 0, 0); break; }
+            case 'last_quarter': { const lq = Math.floor(now.getMonth() / 3) - 1; start.setMonth(lq * 3, 1); if (lq < 0) { start.setFullYear(now.getFullYear() - 1); start.setMonth(9); } start.setHours(0, 0, 0, 0); now.setTime(start.getTime()); now.setMonth(start.getMonth() + 3, 0); now.setHours(23, 59, 59, 999); break; }
+            case 'year':   start.setMonth(0, 1); start.setHours(0, 0, 0, 0); break;
+            case 'last_year': start.setFullYear(now.getFullYear() - 1, 0, 1); start.setHours(0, 0, 0, 0); now.setFullYear(now.getFullYear() - 1, 11, 31); now.setHours(23, 59, 59, 999); break;
+        }
+        setSalesDateRange({ startDate: start, endDate: now });
+    };
+
+    const handleSalesCustomDate = (type: 'start' | 'end', value: string) => {
+        setSalesActiveFilter('custom');
+        const [y, m, d] = value.split('-').map(Number);
+        const newDate = new Date(type === 'start' ? salesDateRange.startDate : salesDateRange.endDate);
+        newDate.setFullYear(y, m - 1, d);
+        type === 'start' ? newDate.setHours(0, 0, 0, 0) : newDate.setHours(23, 59, 59, 999);
+        setSalesDateRange(prev => type === 'start' ? { ...prev, startDate: newDate } : { ...prev, endDate: newDate });
+    };
+
+    const fmtDate = (d: Date) => d.toISOString().split('T')[0];
+
+    const salesLocations = Array.from(new Set(recentSales.map((s: any) => s.locationName || 'General')));
+    const filteredSales = recentSales.filter((s: any) => {
+        // Excluir ventas en espera, apartados y canceladas — solo completadas y devoluciones
+        if (s.status !== 'COMPLETED' && s.status !== 'REFUNDED') return false;
+        if (salesLocationFilter !== 'all' && (s.locationName || 'General') !== salesLocationFilter) return false;
+        const d = new Date(s.date);
+        if (d < salesDateRange.startDate) return false;
+        if (d > salesDateRange.endDate)   return false;
+        return true;
+    });
+
+    const handlePrintSalesTable = () => {
+        const rows = filteredSales.map((s: any) => `
+            <tr>
+                <td>${new Date(s.date).toLocaleDateString('es-MX', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })}<br/><b>#PDV${s.receiptNumber}</b>${s.isLayaway ? ' · Apartado' : s.isReturn ? ' · Devolución' : ''}</td>
+                <td>${s.locationName || 'General'}${s.cashierName ? '<br/>👤 ' + s.cashierName : ''}${s.salespersonName ? '<br/>🧑‍💼 ' + s.salespersonName : ''}</td>
+                <td><b>$${s.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</b></td>
+                <td>${s.paymentMethodName}</td>
+            </tr>`).join('');
+        const total = filteredSales.reduce((a: number, s: any) => a + s.total, 0);
+        const w = window.open('', '_blank');
+        if (!w) return;
+        w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Ventas</title>
+        <style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px}
+        h2{margin-bottom:4px}p{margin:2px 0 12px;color:#666}
+        table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;vertical-align:top}
+        th{background:#f3f4f6;font-weight:700;font-size:11px;text-transform:uppercase}
+        tfoot td{font-weight:700;background:#f9fafb}
+        @media print{button{display:none}}</style></head><body>
+        <h2>Últimas Ventas</h2>
+        <p>${fmtDate(salesDateRange.startDate)} → ${fmtDate(salesDateRange.endDate)} · ${salesLocationFilter === 'all' ? 'Todas las sucursales' : salesLocationFilter}</p>
+        <table><thead><tr><th>Fecha / #</th><th>Sucursal / Cajero / Vendedor</th><th>Monto</th><th>Pago</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="2">Total (${filteredSales.length} ventas)</td><td>$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}</td><td></td></tr></tfoot>
+        </table>
+        <script>window.onload=()=>{window.print();}</script></body></html>`);
+        w.document.close();
+    };
+
+    // Visibilidad de métricas sensibles (ocultas por default)
+    const [showSalesToday,      setShowSalesToday]      = useState(false);
+    const [showStockGeneral,    setShowStockGeneral]     = useState(false);
+    const [showValorInventario, setShowValorInventario]  = useState(false);
+
+    const toggleMetric = (key: string, current: boolean, setter: (v: boolean) => void) => (e: React.MouseEvent) => {
+        e.preventDefault(); e.stopPropagation();
+        setter(!current);
+    };
+    const eyeIcon = (visible: boolean) => (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {visible
+                ? <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>
+                : <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>
+            }
+        </svg>
+    );
 
     const handleAbono = async () => {
         if (!selectedLayaway) return;
@@ -120,33 +216,59 @@ export default function DashboardClient({
 
             {/* Tarjetas de Métricas Interactivas */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Ventas de Hoy */}
                 <Link href="/reports" className="bg-card rounded-3xl shadow-sm border border-border p-6 flex flex-col justify-between hover:border-blue-500/50 hover:shadow-md transition-all group overflow-hidden relative">
                     <div className="absolute -right-4 -bottom-4 text-8xl opacity-[0.03] group-hover:scale-110 group-hover:-rotate-6 transition-transform blur-[2px]">💰</div>
                     <div>
-                        <p className="text-xs font-black uppercase tracking-widest text-blue-500 mb-1">Ventas de Hoy</p>
-                        <p className="text-3xl font-black text-foreground tabular-nums">${salesTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                        <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs font-black uppercase tracking-widest text-blue-500">Ventas de Hoy</p>
+                            <button onClick={toggleMetric('sales', showSalesToday, setShowSalesToday)} className="text-gray-400 hover:text-blue-500 transition-colors z-10">
+                                {eyeIcon(showSalesToday)}
+                            </button>
+                        </div>
+                        <p className="text-3xl font-black text-foreground tabular-nums">
+                            {showSalesToday ? `$${salesTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : <span className="tracking-widest text-gray-400">••••••</span>}
+                        </p>
                     </div>
                     <div className="mt-4 flex items-center text-sm font-bold text-gray-500 group-hover:text-blue-600 transition-colors">
                         Ver Reportes <svg className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
                     </div>
                 </Link>
 
+                {/* Stock General */}
                 <Link href="/inventory" className="bg-card rounded-3xl shadow-sm border border-border p-6 flex flex-col justify-between hover:border-purple-500/50 hover:shadow-md transition-all group overflow-hidden relative">
                     <div className="absolute -right-4 -bottom-4 text-8xl opacity-[0.03] group-hover:scale-110 group-hover:-rotate-6 transition-transform blur-[2px]">📦</div>
                     <div>
-                        <p className="text-xs font-black uppercase tracking-widest text-purple-500 mb-1">Stock General</p>
-                        <p className="text-3xl font-black text-foreground tabular-nums">{inventoryTotal.toLocaleString()} <span className="text-lg font-medium text-gray-400">Pzs</span></p>
+                        <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs font-black uppercase tracking-widest text-purple-500">Stock General</p>
+                            <button onClick={toggleMetric('stock', showStockGeneral, setShowStockGeneral)} className="text-gray-400 hover:text-purple-500 transition-colors z-10">
+                                {eyeIcon(showStockGeneral)}
+                            </button>
+                        </div>
+                        <p className="text-3xl font-black text-foreground tabular-nums">
+                            {showStockGeneral
+                                ? <>{inventoryTotal.toLocaleString()} <span className="text-lg font-medium text-gray-400">Pzs</span></>
+                                : <span className="tracking-widest text-gray-400">••••••</span>}
+                        </p>
                     </div>
                     <div className="mt-4 flex items-center text-sm font-bold text-gray-500 group-hover:text-purple-600 transition-colors">
                         Gestionar Inventario <svg className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
                     </div>
                 </Link>
 
+                {/* Valor de Inventario */}
                 <div className="bg-card rounded-3xl shadow-sm border border-border p-6 flex flex-col justify-between hover:border-amber-500/50 hover:shadow-md transition-all group overflow-hidden relative">
                     <div className="absolute -right-4 -bottom-4 text-8xl opacity-[0.03] group-hover:scale-110 group-hover:-rotate-6 transition-transform blur-[2px]">🏛️</div>
                     <div>
-                        <p className="text-xs font-black uppercase tracking-widest text-amber-500 mb-1">Valor de Inventario</p>
-                        <p className="text-3xl font-black text-foreground tabular-nums">${inventoryValue.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                        <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs font-black uppercase tracking-widest text-amber-500">Valor de Inventario</p>
+                            <button onClick={toggleMetric('valor', showValorInventario, setShowValorInventario)} className="text-gray-400 hover:text-amber-500 transition-colors z-10">
+                                {eyeIcon(showValorInventario)}
+                            </button>
+                        </div>
+                        <p className="text-3xl font-black text-foreground tabular-nums">
+                            {showValorInventario ? `$${inventoryValue.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` : <span className="tracking-widest text-gray-400">••••••</span>}
+                        </p>
                     </div>
                     <div className="mt-4 flex items-center text-sm font-bold text-gray-500 group-hover:text-amber-600 transition-colors">
                         Capital en Mercancía <div className="ml-2 w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
@@ -195,64 +317,75 @@ export default function DashboardClient({
                 </div>
             </div>
 
-            {/* Gráfica Avanzada 30 Días */}
-            <div className="bg-card rounded-3xl shadow-sm border border-border p-8">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                    <div>
-                        <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">Tendencia de Ventas (30 Días)</h3>
-                        <p className="text-xl font-black">Análisis de Crecimiento</p>
+            {/* Gráfica Tendencia de Ventas */}
+            {(() => {
+                const [trendPeriod, setTrendPeriod] = React.useState<'30' | '7'>('30');
+                const trendData = trendPeriod === '7' ? thirtyDayTrend.slice(-7) : thirtyDayTrend;
+                const trendTotal = trendData.reduce((a, d) => a + d.total, 0);
+                return (
+                <div className="bg-card rounded-3xl shadow-sm border border-border p-8">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                        <div>
+                            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">Tendencia de Ventas</h3>
+                            <p className="text-xl font-black">
+                                ${trendTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                <span className="text-sm font-medium text-gray-400 ml-2">últimos {trendPeriod === '7' ? '7' : '30'} días</span>
+                            </p>
+                        </div>
+                        <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+                            <button
+                                onClick={() => setTrendPeriod('7')}
+                                className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition ${trendPeriod === '7' ? 'bg-white dark:bg-gray-700 shadow-sm text-foreground' : 'text-gray-400 hover:text-foreground'}`}
+                            >Semana</button>
+                            <button
+                                onClick={() => setTrendPeriod('30')}
+                                className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition ${trendPeriod === '30' ? 'bg-white dark:bg-gray-700 shadow-sm text-foreground' : 'text-gray-400 hover:text-foreground'}`}
+                            >30 Días</button>
+                        </div>
                     </div>
-                    <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
-                        <button className="px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-white dark:bg-gray-700 rounded-lg shadow-sm">Mensual</button>
+
+                    <div className="h-72 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={trendData} barCategoryGap="30%">
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
+                                <XAxis
+                                    dataKey={trendPeriod === '7' ? 'dayName' : 'day'}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+                                    minTickGap={trendPeriod === '30' ? 10 : 0}
+                                />
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+                                    tickFormatter={(v) => `$${v.toLocaleString()}`}
+                                    width={70}
+                                />
+                                <Tooltip
+                                    contentStyle={{
+                                        borderRadius: '20px',
+                                        border: 'none',
+                                        boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+                                        padding: '12px'
+                                    }}
+                                    formatter={(value: any) => [`$${Number(value).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, 'Ventas']}
+                                    labelFormatter={(label) => trendPeriod === '7' ? `${label}` : `Día ${label}`}
+                                    labelStyle={{ fontWeight: 900, marginBottom: '4px' }}
+                                    cursor={{ fill: 'rgba(59,130,246,0.08)' }}
+                                />
+                                <Bar
+                                    dataKey="total"
+                                    fill="#3b82f6"
+                                    radius={[6, 6, 0, 0]}
+                                    animationDuration={800}
+                                />
+                            </BarChart>
+                        </ResponsiveContainer>
                     </div>
                 </div>
-                
-                <div className="h-72 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={thirtyDayTrend}>
-                            <defs>
-                                <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
-                            <XAxis 
-                                dataKey="day" 
-                                axisLine={false} 
-                                tickLine={false} 
-                                tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
-                                minTickGap={10}
-                            />
-                            <YAxis 
-                                axisLine={false} 
-                                tickLine={false} 
-                                tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
-                                tickFormatter={(value) => `$${value.toLocaleString()}`}
-                            />
-                            <Tooltip 
-                                contentStyle={{ 
-                                    borderRadius: '20px', 
-                                    border: 'none', 
-                                    boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
-                                    padding: '12px'
-                                }}
-                                formatter={(value: any) => [`$${Number(value).toLocaleString()}`, 'Ventas']}
-                                labelStyle={{ fontWeight: 'black', marginBottom: '4px' }}
-                            />
-                            <Area 
-                                type="monotone" 
-                                dataKey="total" 
-                                stroke="#3b82f6" 
-                                strokeWidth={4}
-                                fillOpacity={1} 
-                                fill="url(#colorTotal)" 
-                                animationDuration={1500}
-                            />
-                        </AreaChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
+                );
+            })()}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                  {/* Distribución por Categorías */}
@@ -402,22 +535,75 @@ export default function DashboardClient({
 
             {/* Actividad Reciente */}
             <div className="bg-card rounded-3xl shadow-sm border border-border overflow-hidden">
-                <div className="px-6 py-4 border-b border-border bg-gray-50/50 dark:bg-gray-800/50 flex justify-between items-center">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Últimas Ventas ({userLocationName})</h3>
+                <div className="px-6 py-4 border-b border-border bg-gray-50/50 dark:bg-gray-800/50 flex flex-wrap justify-between items-start gap-3">
+                    <div>
+                        <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">Últimas Ventas</h3>
+                        {/* Filtro por sucursal */}
+                        <div className="flex flex-wrap gap-1.5">
+                            <button
+                                onClick={() => setSalesLocationFilter('all')}
+                                className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-colors ${salesLocationFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                            >Todas</button>
+                            {salesLocations.map(loc => (
+                                <button
+                                    key={loc}
+                                    onClick={() => setSalesLocationFilter(loc)}
+                                    className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-colors ${salesLocationFilter === loc ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+                                >{loc}</button>
+                            ))}
+                        </div>
+                    </div>
+                    {/* Selector de fechas — igual que reportes */}
+                    <div className="flex flex-col gap-2 items-end">
+                        <div className="flex flex-wrap shadow-sm bg-input border border-border p-1 rounded-2xl overflow-x-auto">
+                            {[
+                                { id: 'today',        name: 'Hoy' },
+                                { id: 'week',         name: 'Semana' },
+                                { id: 'month',        name: 'Mes' },
+                                { id: 'last_month',   name: 'Mes Ant.' },
+                                { id: 'quarter',      name: 'Trimestre' },
+                                { id: 'last_quarter', name: 'Trimes Ant.' },
+                                { id: 'year',         name: 'Año' },
+                                { id: 'last_year',    name: 'Año Ant.' },
+                            ].map(f => (
+                                <button
+                                    key={f.id}
+                                    onClick={() => handleSalesFilterChange(f.id)}
+                                    className={`px-4 py-2 text-xs font-bold rounded-xl transition whitespace-nowrap ${salesActiveFilter === f.id ? 'bg-foreground text-background shadow-md' : 'text-gray-500 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5'}`}
+                                >{f.name}</button>
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-2 bg-input border border-border rounded-2xl p-1.5">
+                            <span className="text-xs font-bold text-gray-400 pl-3 uppercase tracking-widest">Desde</span>
+                            <input
+                                type="date"
+                                value={fmtDate(salesDateRange.startDate)}
+                                onChange={e => handleSalesCustomDate('start', e.target.value)}
+                                className="bg-transparent text-sm font-bold text-foreground outline-none px-2"
+                            />
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest px-2">Hasta</span>
+                            <input
+                                type="date"
+                                value={fmtDate(salesDateRange.endDate)}
+                                onChange={e => handleSalesCustomDate('end', e.target.value)}
+                                className="bg-transparent text-sm font-bold text-foreground outline-none px-2"
+                            />
+                        </div>
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-border">
                             <thead className="bg-gray-50/30 dark:bg-gray-800/30">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Fecha / # Venta</th>
-                                    <th className="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Sucursal / Cajero</th>
+                                    <th className="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Sucursal / Cajero / Vendedor</th>
                                     <th className="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Monto</th>
                                     <th className="px-6 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Pago</th>
                                     <th className="px-6 py-3 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
-                                {recentSales.map((sale: any) => (
+                                {filteredSales.map((sale: any) => (
                                     <tr key={sale.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="text-sm font-bold text-foreground">
@@ -435,6 +621,11 @@ export default function DashboardClient({
                                             {sale.cashierName && (
                                                 <div className="text-[10px] text-gray-400 font-bold flex items-center gap-1">
                                                     <span>👤</span> {sale.cashierName}
+                                                </div>
+                                            )}
+                                            {sale.salespersonName && (
+                                                <div className="text-[10px] text-blue-500 font-bold flex items-center gap-1">
+                                                    <span>🧑‍💼</span> {sale.salespersonName}
                                                 </div>
                                             )}
                                         </td>
@@ -486,6 +677,20 @@ export default function DashboardClient({
                                 ))}
                             </tbody>
                         </table>
+                </div>
+                {/* Pie con total y botón imprimir */}
+                <div className="px-6 py-3 border-t border-border bg-gray-50/50 dark:bg-gray-800/50 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-gray-500 font-bold">
+                        {filteredSales.length} venta{filteredSales.length !== 1 ? 's' : ''} ·
+                        Total: <span className="text-foreground font-black">${filteredSales.reduce((a: number, s: any) => a + s.total, 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                    </p>
+                    <button
+                        onClick={handlePrintSalesTable}
+                        className="flex items-center gap-2 px-4 py-2 bg-gray-800 dark:bg-white text-white dark:text-gray-900 rounded-xl text-xs font-black uppercase tracking-widest hover:opacity-80 transition-opacity shadow-sm"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                        Imprimir tabla
+                    </button>
                 </div>
             </div>
 

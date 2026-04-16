@@ -35,13 +35,26 @@ export default function CatalogClient({
     const selectedSort = searchParams.get('sort') || '';
     const onlyWithStock = searchParams.get('onlyWithStock') === 'true';
     const priceType = searchParams.get('priceType') || 'all';
-    const [expandedCategory, setExpandedCategory] = useState<string | null>(selectedCategory || null);
+    const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({ [selectedCategory || '']: true });
     const [showMobileFilters, setShowMobileFilters] = useState(false);
     const [isCategoriesOpen, setIsCategoriesOpen] = useState(!!selectedCategory);
 
     useEffect(() => {
         setProducts(initialProducts);
+        window.scrollTo(0, 0);
     }, [initialProducts]);
+
+    const getCatalogHref = (key: string, value: string) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (value) {
+            params.set(key, value);
+        } else {
+            params.delete(key);
+        }
+        if (key === 'category') params.delete('subcategory');
+        if (key !== 'page') params.delete('page');
+        return `/catalog?${params.toString()}`;
+    };
 
     const handleFilterChange = (key: string, value: string) => {
         const params = new URLSearchParams(searchParams.toString());
@@ -51,8 +64,7 @@ export default function CatalogClient({
             params.delete(key);
         }
         if (key === 'category') params.delete('subcategory');
-        // Resetear página al cambiar filtros
-        params.delete('page');
+        if (key !== 'page') params.delete('page');
         router.push(`/catalog?${params.toString()}`);
     };
 
@@ -189,7 +201,7 @@ export default function CatalogClient({
                     </button>
                     <div className={`flex flex-col gap-0.5 overflow-hidden transition-all duration-300 ease-in-out ${isCategoriesOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
                         <button 
-                            onClick={() => { handleFilterChange('category', ''); setExpandedCategory(null); }}
+                            onClick={() => { handleFilterChange('category', ''); }}
                             className={`text-left text-sm font-bold py-2.5 px-4 rounded-xl transition-all ${!selectedCategory ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500'}`}
                         >
                             Todas las categorías
@@ -197,10 +209,7 @@ export default function CatalogClient({
                         {categories.map((cat: any) => (
                             <div key={cat.id}>
                                 <button 
-                                    onClick={() => {
-                                        handleFilterChange('category', cat.slug);
-                                        setExpandedCategory(expandedCategory === cat.slug ? null : cat.slug);
-                                    }}
+                                    onClick={() => handleFilterChange('category', cat.slug)}
                                     className={`w-full text-left text-sm font-bold py-2.5 px-4 rounded-xl transition-all flex justify-between items-center ${selectedCategory === cat.slug ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500'}`}
                                 >
                                     <span>{cat.name}</span>
@@ -209,11 +218,19 @@ export default function CatalogClient({
                                             {cat._count?.products || 0}
                                         </span>
                                         {cat.subcategories?.length > 0 && (
-                                            <svg className={`w-3 h-3 transition-transform ${expandedCategory === cat.slug ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                                            <div 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setExpandedCategories(prev => ({ ...prev, [cat.slug]: !prev[cat.slug] }));
+                                                }}
+                                                className="p-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-md transition-colors"
+                                            >
+                                                <svg className={`w-3 h-3 transition-transform ${expandedCategories[cat.slug] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                                            </div>
                                         )}
                                     </span>
                                 </button>
-                                {expandedCategory === cat.slug && cat.subcategories?.length > 0 && (
+                                {expandedCategories[cat.slug] && cat.subcategories?.length > 0 && (
                                     <div className="ml-4 mt-1 mb-2 flex flex-col gap-0.5 border-l-2 border-blue-100 dark:border-blue-900/30 pl-3">
                                         {cat.subcategories.map((sub: any) => (
                                             <button
@@ -307,14 +324,14 @@ export default function CatalogClient({
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
                     {products.map((product: any) => (
                         <div key={product.id} className="group space-y-4">
-                            <Link href={`/catalog/${product.id}`}>
+                            <Link href={`/catalog/${product.slug || product.id}`}>
                                 <div className="aspect-[3/4] rounded-3xl overflow-hidden bg-gray-200 dark:bg-gray-800 relative shadow-sm group-hover:shadow-xl transition-all group-hover:-translate-y-2">
                                     {product.images?.[0] ? (
                                         <Image 
                                             src={product.images[0]}
                                             alt={product.name}
                                             fill
-                                            className="object-cover"
+                                            className="object-contain p-2"
                                         />
                                     ) : (
                                         <div className="absolute inset-0 flex items-center justify-center text-gray-400 font-bold uppercase tracking-widest text-[10px]">Sin Imagen</div>
@@ -325,9 +342,11 @@ export default function CatalogClient({
                                                 ✨ Nuevo
                                             </span>
                                         )}
-                                        <span className="px-3 py-1 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm">
-                                            {product.brand?.name || 'Genérico'}
-                                        </span>
+                                        {product.brand?.name && (
+                                            <span className="px-3 py-1 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm">
+                                                {product.brand.name}
+                                            </span>
+                                        )}
                                         {isWholesale && product.sellByPackage && (
                                             <span className="px-3 py-1 bg-emerald-500 text-white rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm">
                                                 Mayoreo
@@ -345,7 +364,7 @@ export default function CatalogClient({
                                 </div>
                             </Link>
                             <div className="space-y-1">
-                                <Link href={`/catalog/${product.id}`}>
+                                <Link href={`/catalog/${product.slug || product.id}`}>
                                     <h4 className="font-bold text-sm tracking-tight group-hover:text-blue-600 transition-colors uppercase">{product.name}</h4>
                                 </Link>
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -380,7 +399,7 @@ export default function CatalogClient({
                                 </p>
                                 {product.seller && (
                                     <Link 
-                                        href={`/vendor/${product.seller.id}`}
+                                        href={`/vendor/${product.seller.sellerSlug || product.seller.id}`}
                                         className="text-[10px] font-bold text-blue-500 uppercase tracking-widest flex items-center gap-1 hover:text-blue-700 transition-colors"
                                     >
                                         🏭 {product.seller.businessName || product.seller.name}
@@ -407,38 +426,38 @@ export default function CatalogClient({
                 {totalPages > 1 && (
                     <div className="flex items-center justify-center gap-3 pt-8 border-t border-border">
                         {currentPage > 1 && (
-                            <button
-                                onClick={() => handleFilterChange('page', String(currentPage - 1))}
+                            <Link
+                                href={getCatalogHref('page', String(currentPage - 1))}
                                 className="px-5 py-2.5 bg-card border border-border rounded-xl text-xs font-black uppercase tracking-widest hover:border-blue-600 hover:text-blue-600 transition-all"
                             >
                                 ← Anterior
-                            </button>
+                            </Link>
                         )}
                         <div className="flex items-center gap-2">
                             {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                                let page = i + 1;
+                                let pageNum = i + 1;
                                 if (totalPages > 5 && currentPage > 3) {
-                                    page = currentPage - 2 + i;
+                                    pageNum = currentPage - 2 + i;
                                 }
-                                if (page > totalPages) return null;
+                                if (pageNum > totalPages) return null;
                                 return (
-                                    <button
-                                        key={page}
-                                        onClick={() => handleFilterChange('page', String(page))}
-                                        className={`w-9 h-9 rounded-xl text-xs font-black transition-all ${page === currentPage ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-card border border-border hover:border-blue-600 hover:text-blue-600'}`}
+                                    <Link
+                                        key={pageNum}
+                                        href={getCatalogHref('page', String(pageNum))}
+                                        className={`w-9 h-9 rounded-xl text-xs font-black transition-all flex items-center justify-center ${pageNum === currentPage ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-card border border-border hover:border-blue-600 hover:text-blue-600'}`}
                                     >
-                                        {page}
-                                    </button>
+                                        {pageNum}
+                                    </Link>
                                 );
                             })}
                         </div>
                         {currentPage < totalPages && (
-                            <button
-                                onClick={() => handleFilterChange('page', String(currentPage + 1))}
+                            <Link
+                                href={getCatalogHref('page', String(currentPage + 1))}
                                 className="px-5 py-2.5 bg-card border border-border rounded-xl text-xs font-black uppercase tracking-widest hover:border-blue-600 hover:text-blue-600 transition-all"
                             >
                                 Siguiente →
-                            </button>
+                            </Link>
                         )}
                     </div>
                 )}

@@ -1,9 +1,10 @@
 /**
- * Utilidad de imágenes con compresión y soporte Supabase Storage
+ * Utilidad de imágenes con compresión y upload local al VPS
  * 
  * Estrategia:
- * - Imágenes nuevas → Supabase Storage (CDN, sin egress de BD)
- * - Fallback → base64 comprimido (80-90% menos peso)
+ * - Compresión en el navegador (Canvas)
+ * - Upload via /api/upload (almacenamiento local en disco)
+ * - Fallback → base64 comprimido
  */
 
 // ── COMPRESIÓN ────────────────────────────────────────────────────────────────
@@ -79,14 +80,10 @@ export function estimateBase64SizeKB(base64: string): number {
     return Math.round((b64.length * 0.75) / 1024);
 }
 
-// ── SUPABASE STORAGE ──────────────────────────────────────────────────────────
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const BUCKET = 'product-images';
+// ── UPLOAD LOCAL (VPS) ─────────────────────────────────────────────────────────
 
 /**
- * Sube una imagen a Supabase Storage y devuelve la URL pública.
+ * Sube una imagen al servidor local via /api/upload y devuelve la URL pública.
  * Si falla, devuelve null (el caller puede hacer fallback a base64).
  */
 export async function uploadToStorage(
@@ -94,45 +91,24 @@ export async function uploadToStorage(
     folder = 'products'
 ): Promise<string | null> {
     try {
-        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
-
-        // Convertir base64 a Blob
-        const [header, b64] = base64DataUrl.split(',');
-        const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
-        const binary = atob(b64);
-        const arr = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
-        const blob = new Blob([arr], { type: mime });
-
-        // Nombre único
-        const ext = mime.split('/')[1] || 'jpg';
-        const filename = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-
-        // Upload via REST API (no requiere Service Key para buckets públicos)
-        const res = await fetch(
-            `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${filename}`,
-            {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                    'Content-Type': mime,
-                    'x-upsert': 'true',
-                },
-                body: blob,
-            }
-        );
+        const res = await fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ base64: base64DataUrl, folder }),
+        });
 
         if (!res.ok) return null;
 
-        return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${filename}`;
+        const data = await res.json();
+        return data.url || null;
     } catch {
         return null;
     }
 }
 
 /**
- * Función principal: comprime + intenta subir a Storage.
- * Si Storage falla, devuelve base64 comprimido (fallback).
+ * Función principal: comprime + intenta subir al servidor.
+ * Si falla, devuelve base64 comprimido (fallback).
  */
 export async function processImage(
     file: File,

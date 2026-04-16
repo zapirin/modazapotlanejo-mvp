@@ -11,9 +11,28 @@ export type BrandConfig = {
     };
     domain: string;
     heroImage?: string;
+    heroImages?: string[];
     featuredSellerIds?: string[];
     featuredProductIds?: string[];
     featuredCategories?: string[];
+    // Single-vendor store fields
+    sellerId?: string;
+    isSingleVendor?: boolean;
+    excludeCategories?: string[];
+    whatsapp?: string;
+    socialLinks?: {
+        instagram?: string;
+        facebook?: string;
+        tiktok?: string;
+        youtube?: string;
+        telegram?: string;
+        twitter?: string;
+    };
+    storeInfo?: {
+        address?: string;
+        schedule?: string;
+        since?: string;
+    };
 };
 
 export const BRANDS: Record<string, BrandConfig> = {
@@ -42,9 +61,43 @@ export const BRANDS: Record<string, BrandConfig> = {
         logo: {
             text: 'ZONA DEL VESTIR',
             initial: 'Z',
-            url: 'https://ynbcslgimrrccqohirzl.supabase.co/storage/v1/object/public/product-images/logo_zonadelvestir_transparent.png'
+            url: '/logo_zonadelvestir.png'
         },
         domain: 'zonadelvestir.com',
+        featuredSellerIds: [],
+        featuredProductIds: [],
+        featuredCategories: [],
+    },
+    'kalexafashion.com': {
+        name: 'Kalexa Fashion',
+        tagline: 'Moda que te define',
+        description: 'Jeans de moda, blusas y mucho más. Tienda en línea oficial de Kalexa Fashion desde Zapotlanejo.',
+        footerDescription: 'Tu destino de moda desde 1996. Envíos a todo México.',
+        primaryColor: 'kalexa',
+        logo: {
+            text: 'KALEXA FASHION',
+            initial: 'K',
+            url: '/logo_kalexa.png'
+        },
+        domain: 'kalexafashion.com',
+        heroImage: '/kalexa_hero.png',
+        sellerId: 'cmn9kxcdu0001lh04fjib51wi',
+        isSingleVendor: true,
+        excludeCategories: ['Accesorios', 'Calzado'],
+        whatsapp: '523339242571',
+        socialLinks: {
+            instagram: 'https://instagram.com/kalexafashion',
+            facebook: 'https://facebook.com/kalexafashion',
+            tiktok: 'https://tiktok.com/@kalexafashion',
+            youtube: 'https://youtube.com/c/KalexafashionZapotlanejo',
+            telegram: 'https://t.me/Kalexafashion',
+            twitter: 'https://twitter.com/kalexafashion',
+        },
+        storeInfo: {
+            address: 'Guadalupe Victoria 101, Zapotlanejo, Jalisco',
+            schedule: 'Lun-Sáb 9:00am - 7:00pm · Dom 9:00am - 4:00pm',
+            since: '1996',
+        },
         featuredSellerIds: [],
         featuredProductIds: [],
         featuredCategories: [],
@@ -54,8 +107,11 @@ export const BRANDS: Record<string, BrandConfig> = {
 export function getBrandConfig(host: string | null): BrandConfig {
     if (!host) return BRANDS['modazapotlanejo.com'];
     const cleanHost = host.split(':')[0].toLowerCase().replace(/^www\./, '');
+    if (cleanHost.includes('kalexa')) return BRANDS['kalexafashion.com'];
+    if (cleanHost.includes('kalexa.modazapotlanejo')) return BRANDS['kalexafashion.com'];
     if (cleanHost.includes('zonadelvestir')) return BRANDS['zonadelvestir.com'];
-    if (cleanHost.includes('tienda-modazapo') || cleanHost.includes('localhost')) return BRANDS['modazapotlanejo.com'];
+    if (cleanHost.includes('tienda-modazapo')) return BRANDS['modazapotlanejo.com'];
+    if (cleanHost.includes('localhost')) return BRANDS['kalexafashion.com'];
     return BRANDS[cleanHost] || BRANDS['modazapotlanejo.com'];
 }
 

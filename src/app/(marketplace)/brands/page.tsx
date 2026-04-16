@@ -1,9 +1,43 @@
-import React from 'react';
 import Link from 'next/link';
-import { getBrandsWithCounts } from '../actions';
+import { getBrands } from '../actions';
+import { headers } from 'next/headers';
+import { getBrandConfig } from '@/lib/brand';
+import type { Metadata } from 'next';
+
+export async function generateMetadata(): Promise<Metadata> {
+    const headersList = await headers();
+    const host = (headersList.get('host') || '').split(',')[0].trim().replace(/^https?:\/\//, '');
+    const brand = getBrandConfig(host);
+    const isModa = host.includes('modazapotlanejo');
+    const isZona = host.includes('zonadelvestir');
+
+    const title = isModa
+        ? 'Marcas de Ropa Mayoreo — Zapotlanejo'
+        : isZona
+        ? 'Marcas de Moda Mayorista — Zona del Vestir'
+        : `Marcas — ${brand.name}`;
+
+    const description = isModa
+        ? 'Descubre las mejores marcas de ropa al mayoreo de Zapotlanejo, Jalisco. Jeans, blusas, vestidos y más de fabricantes locales.'
+        : isZona
+        ? 'Explora las marcas de moda mayorista disponibles en Zona del Vestir. Los mejores fabricantes textiles de México.'
+        : `Todas las marcas disponibles en ${brand.name}. Moda de calidad con los mejores precios.`;
+
+    return {
+        title,
+        description,
+        keywords: ['marcas ropa mayoreo', 'fabricantes ropa Zapotlanejo', 'marcas jeans México', brand.name, 'moda mayorista'],
+        openGraph: { title: `${title} | ${brand.name}`, description, type: 'website', locale: 'es_MX' },
+        twitter: { card: 'summary', title: `${title} | ${brand.name}`, description },
+    };
+}
 
 export default async function BrandsPage() {
-    const brands = await getBrandsWithCounts();
+    const headersList = await headers();
+    const host = (headersList.get('host') || '').split(',')[0].trim().replace(/^https?:\/\//, '');
+    const brandConfig = getBrandConfig(host);
+    const sellerId = brandConfig.sellerId || undefined;
+    const brands = await getBrands(sellerId);
 
     return (
         <div className="max-w-7xl mx-auto px-6 py-24 min-h-[70vh]">

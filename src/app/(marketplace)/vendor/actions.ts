@@ -10,6 +10,7 @@ export async function getVendorProfile(vendorId: string) {
                 id: true,
                 name: true,
                 businessName: true,
+                sellerSlug: true,
                 createdAt: true,
                 logoUrl: true,
                 _count: {
@@ -22,6 +23,33 @@ export async function getVendorProfile(vendorId: string) {
         return vendor;
     } catch (error) {
         console.error("Error fetching vendor:", error);
+        return null;
+    }
+}
+
+export async function getVendorBySlug(slug: string) {
+    try {
+        const vendor = await prisma.user.findFirst({
+            where: { sellerSlug: slug, role: 'SELLER', isActive: true },
+            select: {
+                id: true,
+                name: true,
+                businessName: true,
+                sellerSlug: true,
+                createdAt: true,
+                logoUrl: true,
+                phone: true,
+                whatsapp: true,
+                _count: {
+                    select: {
+                        ownedProducts: { where: { isOnline: true, isActive: true } }
+                    }
+                }
+            }
+        });
+        return vendor;
+    } catch (error) {
+        console.error("Error fetching vendor by slug:", error);
         return null;
     }
 }
@@ -70,6 +98,7 @@ export async function getVendors() {
                 id: true,
                 name: true,
                 businessName: true,
+                sellerSlug: true,
                 createdAt: true,
                 logoUrl: true,
                 _count: {

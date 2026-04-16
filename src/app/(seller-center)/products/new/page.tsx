@@ -33,10 +33,7 @@ export default function NewProductPage() {
         packageSize: '6',
         isOnline: true,
         isPOS: true,
-        variantOptions: [
-            { name: 'Color', values: [] as string[] },
-            { name: 'Talla', values: [] as string[] }
-        ],
+        variantOptions: [],
         inventory: {} as Record<string, string | number>, // Key will be JSON.stringify(attributes)
         wholesaleMethods: [] as any[],
         activeMethodId: '',
@@ -46,6 +43,36 @@ export default function NewProductPage() {
     });
     const [newTag, setNewTag] = useState('');
     const [isCreatingTag, setIsCreatingTag] = useState(false);
+    const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
+    const [aiPrompt, setAiPrompt] = useState('');
+
+    const handleGenerateDescription = async () => {
+        if (formData.images.length === 0) {
+            alert('Sube al menos una foto del producto para generar la descripción.');
+            return;
+        }
+        setIsGeneratingDesc(true);
+        try {
+            const response = await fetch('/api/ai-description', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    images: formData.images.slice(0, 3),
+                    productName: formData.name || '',
+                    customPrompt: aiPrompt || ''
+                })
+            });
+            const data = await response.json();
+            if (data.description) {
+                setFormData(prev => ({ ...prev, description: data.description }));
+            } else {
+                alert(data.error || 'No se pudo generar la descripción. Verifica tu configuración de IA en Configuración > General.');
+            }
+        } catch (e) {
+            alert('Error al conectar con la IA. Intenta de nuevo.');
+        }
+        setIsGeneratingDesc(false);
+    };
 
     // Genera el SKU automático basado en categoría, subcategoría, marca y nombre del producto
     const generateSKU = (
@@ -588,7 +615,24 @@ export default function NewProductPage() {
                             </div>
 
                             <div className="space-y-3">
-                                <label className="text-xs font-black uppercase tracking-widest text-gray-400">Descripción detallada</label>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-black uppercase tracking-widest text-gray-400">Descripción detallada</label>
+                                    <button
+                                        type="button"
+                                        onClick={handleGenerateDescription}
+                                        disabled={isGeneratingDesc || formData.images.length === 0}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-xs font-black rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                    >
+                                        {isGeneratingDesc ? '⏳ Generando...' : '✨ Generar con IA'}
+                                    </button>
+                                </div>
+                                <textarea
+                                    rows={2}
+                                    placeholder="Instrucciones para la IA (opcional). Ej: Solo describe el pantalón, ignora la blusa de la modelo."
+                                    className="w-full px-5 py-3 bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800 rounded-xl focus:ring-2 focus:ring-purple-500/50 outline-none transition text-foreground text-sm"
+                                    value={aiPrompt}
+                                    onChange={(e) => setAiPrompt(e.target.value)}
+                                />
                                 <textarea
                                     rows={3}
                                     placeholder="Detalla materiales y fit..."

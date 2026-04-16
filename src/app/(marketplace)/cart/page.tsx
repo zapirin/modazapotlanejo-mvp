@@ -6,8 +6,9 @@ import Image from 'next/image';
 import { useCart } from '@/lib/CartContext';
 import { createOrder } from '@/app/actions/orders';
 import { createCheckoutSession } from '@/app/actions/stripe';
-import { getMarketplacePriceTiers, getProductImages } from '../actions';
+import { getMarketplacePriceTiers, getProductImages, getSellerTransferSettings } from '../actions';
 import { calculateAutoDiscount } from '@/lib/discountUtils';
+import { validateCoupon, incrementCouponUsage } from '@/app/actions/coupons';
 import { toast } from 'sonner';
 import {
     getMyShippingAddresses,
@@ -33,6 +34,21 @@ export default function CartPage() {
     const [orderNumbers, setOrderNumbers] = useState<number[]>([]);
     const [sellerTiers, setSellerTiers] = useState<Map<string, any[]>>(new Map());
     const [freshImages, setFreshImages] = useState<Record<string, string>>({});
+    const [paymentMethod, setPaymentMethod] = useState<'stripe' | 'paypal' | 'transfer'>('stripe');
+    const [isKalexa, setIsKalexa] = useState(false);
+    // Cupones: { [sellerId]: { code, couponId, discountType, discountValue, discountAmount } }
+    const [appliedCoupons, setAppliedCoupons] = useState<Map<string, any>>(new Map());
+    const [couponInputs, setCouponInputs] = useState<Record<string, string>>({});
+    const [couponLoading, setCouponLoading] = useState<Record<string, boolean>>({});
+    const [couponErrors, setCouponErrors] = useState<Record<string, string>>({});
+
+    // Detect if we're on kalexafashion.com
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.location.hostname.includes('kalexa')) {
+            setIsKalexa(true);
+            setPaymentMethod('paypal'); // Default to PayPal for Kalexa
+        }
+    }, []);
 
     // Shipping state
     const [addresses, setAddresses] = useState<any[]>([]);
@@ -47,19 +63,43 @@ export default function CartPage() {
     const [isLoadingRates, setIsLoadingRates] = useState(false);
     const [savingAddress, setSavingAddress] = useState(false);
 
+    // Transferencia bancaria del vendedor
+    const [sellerTransfer, setSellerTransfer] = useState<{
+        acceptsTransfer: boolean;
+        transferBank?: string;
+        transferAccountHolder?: string;
+        transferCLABE?: string;
+        transferAccountNumber?: string;
+        transferInstructions?: string;
+    }>({ acceptsTransfer: false });
+
     const sellerGroups = getItemsBySeller();
 
     // Cargar niveles de precio de cada vendedor en el carrito
     useEffect(() => {
         const loadTiers = async () => {
+            const groups = getItemsBySeller();
+            if (groups.size === 0) return;
             const tierMap = new Map<string, any[]>();
-            for (const [sellerId] of sellerGroups) {
+            for (const [sellerId] of groups) {
                 const tiers = await getMarketplacePriceTiers(sellerId);
                 if (tiers.length > 0) tierMap.set(sellerId, tiers);
             }
             setSellerTiers(tierMap);
         };
-        if (sellerGroups.size > 0) loadTiers();
+        loadTiers();
+
+        // Cargar datos de transferencia del primer vendedor
+        const firstId = Array.from(getItemsBySeller().keys())[0];
+        if (firstId) {
+            getSellerTransferSettings(firstId).then(data => {
+                setSellerTransfer(data);
+                // Si el vendedor solo acepta transferencia (no Stripe), seleccionarla por defecto
+                if (data.acceptsTransfer && !isKalexa) {
+                    setPaymentMethod(prev => prev === 'stripe' ? 'transfer' : prev);
+                }
+            });
+        }
 
         // Recargar imágenes frescas para items sin imagen (base64 no persiste en localStorage)
         const missingIds = [...new Set(items.filter(i => !i.image).map(i => i.productId))];
@@ -79,6 +119,8 @@ export default function CartPage() {
 
     // Cotizar envío cuando cambie la dirección seleccionada
     useEffect(() => {
+        // No cotizar envío para Kalexa — se coordina por WhatsApp
+        if (isKalexa) return;
         if (!selectedAddressId || items.length === 0) {
             setShippingRates([]);
             setSelectedRate(null);
@@ -93,12 +135,14 @@ export default function CartPage() {
             if (!firstSellerId) return;
 
             const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
-            // Paquete estimado basado en la cantidad de artículos
+            // Peso estimado: 1 kg por prenda (cubre pantalones hasta 0.8 kg)
+            // + 0.5 kg fijo de empaque. Se sobreestima intencionalmente para
+            // evitar cargos por sobrepeso de Skydropx.
             const parcel = {
-                weight: Math.max(1, totalQty * 0.3), // ~300g por artículo
-                height: 15,
-                width: 30,
-                length: 40,
+                weight: Math.round((totalQty * 1.0 + 0.5) * 10) / 10,
+                height: 20,
+                width:  40,
+                length: 50,
             };
 
             const result = await quoteShipping(firstSellerId, selectedAddressId, parcel);
@@ -193,7 +237,33 @@ export default function CartPage() {
         };
     };
 
-    // Total con descuentos aplicados (sin envío)
+    // Aplica el cupón para un vendedor
+    const handleApplyCoupon = async (sellerId: string, groupTotal: number) => {
+        const code = (couponInputs[sellerId] || '').trim();
+        if (!code) return;
+        setCouponLoading(prev => ({ ...prev, [sellerId]: true }));
+        setCouponErrors(prev => ({ ...prev, [sellerId]: '' }));
+        const result = await validateCoupon(code, sellerId, groupTotal);
+        setCouponLoading(prev => ({ ...prev, [sellerId]: false }));
+        if (result.error) {
+            setCouponErrors(prev => ({ ...prev, [sellerId]: result.error! }));
+            return;
+        }
+        setAppliedCoupons(prev => {
+            const next = new Map(prev);
+            next.set(sellerId, result.coupon);
+            return next;
+        });
+        toast.success(`Cupón ${result.coupon!.code} aplicado ✓`);
+    };
+
+    const handleRemoveCoupon = (sellerId: string) => {
+        setAppliedCoupons(prev => { const next = new Map(prev); next.delete(sellerId); return next; });
+        setCouponInputs(prev => ({ ...prev, [sellerId]: '' }));
+        setCouponErrors(prev => ({ ...prev, [sellerId]: '' }));
+    };
+
+    // Total con descuentos de volumen aplicados (sin envío, sin cupones)
     const getSubtotalWithDiscounts = () => {
         let total = 0;
         for (const [sellerId, group] of sellerGroups) {
@@ -203,9 +273,24 @@ export default function CartPage() {
         return total;
     };
 
+    // Total con descuentos de volumen + cupones aplicados (sin envío)
+    const getSubtotalWithAll = () => {
+        let total = 0;
+        for (const [sellerId, group] of sellerGroups) {
+            const discountResult = getGroupDiscount(sellerId, group);
+            const volumeTotal = discountResult ? discountResult.finalTotal : group.total;
+            const coupon = appliedCoupons.get(sellerId);
+            const couponDiscount = coupon ? coupon.discountAmount : 0;
+            total += Math.max(0, volumeTotal - couponDiscount);
+        }
+        return total;
+    };
+
+    const totalCouponSavings = Array.from(appliedCoupons.values()).reduce((s, c) => s + c.discountAmount, 0);
+
     // Total final con envío
     const getTotalWithShipping = () => {
-        return getSubtotalWithDiscounts() + (selectedRate?.totalPrice || 0);
+        return getSubtotalWithAll() + (!pickupMode && selectedRate ? selectedRate.totalPrice : 0);
     };
 
     const handleCheckout = async () => {
@@ -213,10 +298,12 @@ export default function CartPage() {
         const loadingToast = toast.loading('Preparando tu pedido...');
         try {
             const orderIds: string[] = [];
+            const realOrderNumbers: number[] = [];
             const allItems: any[] = [];
 
             for (const [sellerId, group] of sellerGroups) {
                 const discountResult = getGroupDiscount(sellerId, group);
+                const coupon = appliedCoupons.get(sellerId);
                 const result = await createOrder({
                     sellerId,
                     items: group.items.map((item: any) => ({
@@ -229,17 +316,23 @@ export default function CartPage() {
                     })),
                     notes: pickupMode ? '📍 RECOGER EN TIENDA DEL VENDEDOR' : (notes || undefined),
                     priceTierId: discountResult?.tier?.id || undefined,
-                    discount: discountResult?.discount || 0,
+                    discount: (discountResult?.discount || 0) + (coupon?.discountAmount || 0),
                     status: 'PENDING_PAYMENT',
                     shippingAddressId: pickupMode ? undefined : (selectedAddressId || undefined),
-                    shippingCost: selectedRate?.totalPrice || 0,
-                    skydropxRateId: selectedRate?.rateId || undefined,
-                    skydropxQuotationId: selectedRate?.quotationId || undefined,
+                    shippingCost: pickupMode ? 0 : (selectedRate?.totalPrice || 0),
+                    skydropxRateId: pickupMode ? undefined : (selectedRate?.rateId || undefined),
+                    skydropxQuotationId: pickupMode ? undefined : (selectedRate?.quotationId || undefined),
+                    paymentMethod: isKalexa
+                        ? (paymentMethod === 'paypal' ? 'Tarjeta de Débito/Crédito' : 'Depósito/Transferencia')
+                        : (paymentMethod === 'transfer' ? 'Depósito/Transferencia' : undefined),
+                    domain: isKalexa ? 'kalexa' : 'modazapotlanejo',
                 });
 
                 if (result.success && result.orderId) {
                     orderIds.push(result.orderId);
-                    // Denormalize items for Stripe Checkout session display
+                    if (result.orderNumber) realOrderNumbers.push(result.orderNumber);
+                    // Incrementar uso del cupón si se aplicó
+                    if (coupon?.id) await incrementCouponUsage(coupon.id);
                     group.items.forEach((item: any) => {
                         allItems.push({
                             productName: item.productName,
@@ -255,7 +348,31 @@ export default function CartPage() {
                 }
             }
 
-            // Iniciar sesión de pago en Stripe
+            // Kalexa domain: PayPal or Transfer flows
+            if (isKalexa) {
+                if (paymentMethod === 'paypal') {
+                    toast.success('Pedido creado. Te contactaremos por WhatsApp para coordinar el pago por PayPal.', { id: loadingToast });
+                } else {
+                    toast.success('Pedido creado. Revisa los datos de transferencia en pantalla.', { id: loadingToast });
+                }
+                clearCart();
+                setSuccess(true);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                setOrderNumbers(realOrderNumbers);
+                return;
+            }
+
+            // Transferencia bancaria para vendedores normales
+            if (paymentMethod === 'transfer') {
+                toast.success('Pedido creado. Realiza tu transferencia con los datos indicados.', { id: loadingToast });
+                clearCart();
+                setSuccess(true);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                setOrderNumbers(realOrderNumbers);
+                return;
+            }
+
+            // Default: Stripe Checkout
             const stripeResult = await createCheckoutSession({
                 orderIds,
                 items: allItems,
@@ -276,10 +393,11 @@ export default function CartPage() {
     };
 
     if (success) {
+        const showTransferDetails = paymentMethod === 'transfer' && sellerTransfer.acceptsTransfer;
         return (
             <div className="pt-32 pb-20 max-w-2xl mx-auto px-6 text-center">
                 <div className="bg-card rounded-3xl border border-border shadow-xl p-12 space-y-6">
-                    <span className="text-6xl block">🎉</span>
+                    <span className="text-6xl block">{showTransferDetails ? '🏦' : '🎉'}</span>
                     <h1 className="text-3xl font-black text-foreground">¡Pedido Enviado!</h1>
                     <p className="text-gray-500 font-medium">
                         {orderNumbers.length > 1
@@ -293,9 +411,56 @@ export default function CartPage() {
                             </span>
                         ))}
                     </div>
-                    <p className="text-sm text-gray-400">
-                        El vendedor revisará tu pedido y te contactará para coordinar el pago y envío.
-                    </p>
+
+                    {/* Datos bancarios para transferencia */}
+                    {showTransferDetails && (
+                        <div className="text-left bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-6 space-y-4">
+                            <p className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400 text-center">
+                                Realiza tu transferencia o depósito a:
+                            </p>
+                            <div className="grid grid-cols-1 gap-3">
+                                {sellerTransfer.transferBank && (
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-black uppercase tracking-wider text-gray-400">Banco</span>
+                                        <span className="text-sm font-black text-foreground">{sellerTransfer.transferBank}</span>
+                                    </div>
+                                )}
+                                {sellerTransfer.transferAccountHolder && (
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-black uppercase tracking-wider text-gray-400">Titular</span>
+                                        <span className="text-sm font-bold text-foreground">{sellerTransfer.transferAccountHolder}</span>
+                                    </div>
+                                )}
+                                {sellerTransfer.transferCLABE && (
+                                    <div className="flex justify-between items-center gap-4">
+                                        <span className="text-xs font-black uppercase tracking-wider text-gray-400 shrink-0">CLABE</span>
+                                        <span className="text-sm font-black text-foreground tracking-widest font-mono select-all">{sellerTransfer.transferCLABE}</span>
+                                    </div>
+                                )}
+                                {sellerTransfer.transferAccountNumber && (
+                                    <div className="flex justify-between items-center gap-4">
+                                        <span className="text-xs font-black uppercase tracking-wider text-gray-400 shrink-0">No. Cuenta</span>
+                                        <span className="text-sm font-black text-foreground tracking-widest font-mono select-all">{sellerTransfer.transferAccountNumber}</span>
+                                    </div>
+                                )}
+                            </div>
+                            {sellerTransfer.transferInstructions && (
+                                <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium border-t border-emerald-200 dark:border-emerald-700 pt-3 mt-2">
+                                    {sellerTransfer.transferInstructions}
+                                </p>
+                            )}
+                            <p className="text-[10px] text-gray-400 text-center">
+                                Guarda una captura de tu comprobante. El vendedor confirmará el pedido al recibir el pago.
+                            </p>
+                        </div>
+                    )}
+
+                    {!showTransferDetails && (
+                        <p className="text-sm text-gray-400">
+                            El vendedor revisará tu pedido y te contactará para coordinar el pago y envío.
+                        </p>
+                    )}
+
                     <div className="flex gap-4 justify-center pt-4">
                         <Link href="/orders" className="px-8 py-4 bg-foreground text-background font-black rounded-xl hover:opacity-90 transition">
                             Ver Mis Pedidos
@@ -461,7 +626,7 @@ export default function CartPage() {
                                         ))}
                                     </div>
 
-                                    <div className="px-6 py-4 border-t border-border bg-gray-50/50 dark:bg-gray-800/50 space-y-1">
+                                    <div className="px-6 py-4 border-t border-border bg-gray-50/50 dark:bg-gray-800/50 space-y-3">
                                         {discountResult ? (
                                             <>
                                                 <div className="flex justify-between items-center text-sm">
@@ -479,6 +644,61 @@ export default function CartPage() {
                                                 <span className="text-lg font-black text-foreground">${group.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
                                             </div>
                                         )}
+
+                                        {/* ── CAMPO DE CUPÓN ── */}
+                                        {(() => {
+                                            const applied = appliedCoupons.get(sellerId);
+                                            const volumeTotal = discountResult ? discountResult.finalTotal : group.total;
+                                            return applied ? (
+                                                <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
+                                                    <div>
+                                                        <p className="text-xs font-black text-green-700 dark:text-green-300 font-mono tracking-wider">{applied.code}</p>
+                                                        <p className="text-[10px] text-green-600 font-bold">
+                                                            -{applied.discountType === 'PERCENTAGE' ? `${applied.discountValue}%` : `$${applied.discountValue.toFixed(2)}`}
+                                                            {' '}= -${applied.discountAmount.toFixed(2)}
+                                                        </p>
+                                                    </div>
+                                                    <button onClick={() => handleRemoveCoupon(sellerId)} className="text-green-400 hover:text-red-500 transition-colors text-xs font-bold px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">✕ Quitar</button>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">🏷️ {isKalexa ? 'Cupón de descuento' : `Cupón de ${group.sellerName}`}</label>
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={couponInputs[sellerId] || ''}
+                                                            onChange={e => setCouponInputs(p => ({ ...p, [sellerId]: e.target.value.toUpperCase() }))}
+                                                            onKeyDown={e => e.key === 'Enter' && handleApplyCoupon(sellerId, volumeTotal)}
+                                                            placeholder="Código"
+                                                            className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-foreground font-mono font-black text-sm uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                        />
+                                                        <button
+                                                            onClick={() => handleApplyCoupon(sellerId, volumeTotal)}
+                                                            disabled={couponLoading[sellerId]}
+                                                            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-black hover:bg-blue-700 transition disabled:opacity-60 whitespace-nowrap"
+                                                        >
+                                                            {couponLoading[sellerId] ? '...' : 'Aplicar'}
+                                                        </button>
+                                                    </div>
+                                                    {couponErrors[sellerId] && (
+                                                        <p className="text-[10px] text-red-500 font-bold">⚠️ {couponErrors[sellerId]}</p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {/* Total del grupo tras cupón */}
+                                        {appliedCoupons.has(sellerId) && (() => {
+                                            const volumeTotal = discountResult ? discountResult.finalTotal : group.total;
+                                            const coupon = appliedCoupons.get(sellerId)!;
+                                            const groupFinal = Math.max(0, volumeTotal - coupon.discountAmount);
+                                            return (
+                                                <div className="flex justify-between items-center pt-1 border-t border-green-200 dark:border-green-800">
+                                                    <span className="text-xs font-black uppercase tracking-widest text-green-700 dark:text-green-300">Total con cupón</span>
+                                                    <span className="text-xl font-black text-green-600">${groupFinal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             );
@@ -493,12 +713,13 @@ export default function CartPage() {
                             <div className="space-y-2">
                                 {Array.from(sellerGroups.entries()).map(([sellerId, group]) => {
                                     const discountResult = getGroupDiscount(sellerId, group);
+                                    const coupon = appliedCoupons.get(sellerId);
+                                    const volumeTotal = discountResult ? discountResult.finalTotal : group.total;
+                                    const groupFinal = coupon ? Math.max(0, volumeTotal - coupon.discountAmount) : volumeTotal;
                                     return (
                                         <div key={sellerId} className="flex justify-between text-sm">
                                             <span className="text-gray-500 font-medium truncate mr-4">{group.sellerName}</span>
-                                            <span className="font-bold text-foreground">
-                                                ${(discountResult ? discountResult.finalTotal : group.total).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                                            </span>
+                                            <span className="font-bold text-foreground">${groupFinal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
                                         </div>
                                     );
                                 })}
@@ -506,8 +727,14 @@ export default function CartPage() {
 
                             {totalSavings > 0 && (
                                 <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-200 dark:border-emerald-800">
-                                    <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Ahorro total por descuentos</p>
+                                    <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Ahorro por descuentos de volumen</p>
                                     <p className="text-lg font-black text-emerald-600">-${totalSavings.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                                </div>
+                            )}
+                            {totalCouponSavings > 0 && (
+                                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-2xl border border-green-200 dark:border-green-800">
+                                    <p className="text-[10px] font-black text-green-700 dark:text-green-300 uppercase tracking-wider">🏷️ Ahorro por cupones</p>
+                                    <p className="text-lg font-black text-green-600">-${totalCouponSavings.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
                                 </div>
                             )}
 
@@ -658,8 +885,8 @@ export default function CartPage() {
                                 }
                             </div>
 
-                            {/* ── OPCIONES DE ENVÍO — ocultar si va a recoger ── */}
-                            {!pickupMode && <>
+                            {/* ── OPCIONES DE ENVÍO — ocultar si va a recoger o es Kalexa ── */}
+                            {!pickupMode && !isKalexa && <>
                             {selectedAddressId && (
                                 <div className="border-t border-border pt-4 space-y-3">
                                     <h4 className="text-xs font-black uppercase tracking-widest text-gray-400">🚚 Paquetería</h4>
@@ -707,13 +934,23 @@ export default function CartPage() {
                             </>
                             }
 
+                            {/* ── MENSAJE DE COORDINACIÓN PARA KALEXA ── */}
+                            {isKalexa && !pickupMode && (
+                                <div className="border-t border-border pt-4">
+                                    <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border border-emerald-200 dark:border-emerald-800">
+                                        <p className="text-xs font-black text-emerald-700 dark:text-emerald-300">🚚 Envío coordinado</p>
+                                        <p className="text-[11px] text-emerald-600 mt-0.5">Coordinaremos el pago y envío contigo por WhatsApp después de confirmar tu pedido.</p>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* ── TOTALES ── */}
                             <div className="border-t border-border pt-4 space-y-2">
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-500 font-medium">Subtotal</span>
-                                    <span className="font-bold text-foreground">${totalWithDiscounts.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                                    <span className="font-bold text-foreground">${getSubtotalWithAll().toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
                                 </div>
-                                {selectedRate && (
+                                {selectedRate && !pickupMode && (
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-500 font-medium">Envío ({selectedRate.carrier})</span>
                                         <span className="font-bold text-foreground">${selectedRate.totalPrice.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
@@ -735,27 +972,114 @@ export default function CartPage() {
                                 />
                             </div>
 
+                            {/* Payment Method Selector (Kalexa) */}
+                            {isKalexa && (
+                                <div className="border-t border-border pt-4 space-y-3">
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-400">💳 Método de Pago</h4>
+                                    <div className="space-y-2">
+                                        <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${paymentMethod === 'paypal' ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/20' : 'border-border hover:border-blue-300'}`}>
+                                            <input type="radio" name="paymentMethod" value="paypal" checked={paymentMethod === 'paypal'} onChange={() => setPaymentMethod('paypal')} className="accent-blue-600" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-black text-foreground">💳 Tarjeta de Débito/Crédito</p>
+                                                <p className="text-[10px] text-gray-500 font-medium">Visa, Mastercard, American Express</p>
+                                            </div>
+                                        </label>
+                                        <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${paymentMethod === 'transfer' ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20' : 'border-border hover:border-emerald-300'}`}>
+                                            <input type="radio" name="paymentMethod" value="transfer" checked={paymentMethod === 'transfer'} onChange={() => setPaymentMethod('transfer')} className="accent-emerald-600" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-black text-foreground">🏦 Depósito / Transferencia</p>
+                                                <p className="text-[10px] text-gray-500 font-medium">Te enviaremos los datos por WhatsApp</p>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Payment Method Selector (vendedores normales con transferencia activa) */}
+                            {!isKalexa && sellerTransfer.acceptsTransfer && (
+                                <div className="border-t border-border pt-4 space-y-3">
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-400">💳 Método de Pago</h4>
+                                    <div className="space-y-2">
+                                        <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${paymentMethod === 'stripe' ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/20' : 'border-border hover:border-blue-300'}`}>
+                                            <input type="radio" name="paymentMethod" value="stripe" checked={paymentMethod === 'stripe'} onChange={() => setPaymentMethod('stripe')} className="accent-blue-600" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-black text-foreground">💳 Tarjeta de Débito/Crédito</p>
+                                                <p className="text-[10px] text-gray-500 font-medium">Visa, Mastercard — pago inmediato</p>
+                                            </div>
+                                        </label>
+                                        <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${paymentMethod === 'transfer' ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20' : 'border-border hover:border-emerald-300'}`}>
+                                            <input type="radio" name="paymentMethod" value="transfer" checked={paymentMethod === 'transfer'} onChange={() => setPaymentMethod('transfer')} className="accent-emerald-600" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-black text-foreground">🏦 Depósito / Transferencia SPEI</p>
+                                                <p className="text-[10px] text-gray-500 font-medium">Los datos bancarios aparecen al confirmar</p>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+
                             <button
                                 onClick={handleCheckout}
-                                disabled={isSubmitting || (!pickupMode && (!selectedAddressId || !selectedRate))}
+                                disabled={isSubmitting || (!pickupMode && (!selectedAddressId || (!isKalexa && !selectedRate)))}
                                 className={`w-full py-4 rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-xl ${
-                                    isSubmitting || (!pickupMode && (!selectedAddressId || !selectedRate))
+                                    isSubmitting || (!pickupMode && (!selectedAddressId || (!isKalexa && !selectedRate)))
                                         ? 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed text-gray-500'
-                                        : pickupMode
-                                            ? 'bg-emerald-600 text-white hover:bg-emerald-700 hover:scale-[1.02] shadow-emerald-500/20'
-                                            : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-[1.02] shadow-blue-500/20'
+                                        : isKalexa
+                                            ? 'text-white hover:scale-[1.02]'
+                                            : pickupMode
+                                                ? 'bg-emerald-600 text-white hover:bg-emerald-700 hover:scale-[1.02] shadow-emerald-500/20'
+                                                : 'bg-blue-600 text-white hover:bg-blue-700 hover:scale-[1.02] shadow-blue-500/20'
                                 }`}
+                                style={isKalexa && !(isSubmitting || (!pickupMode && !selectedAddressId)) ? {backgroundColor: '#8124E3'} : undefined}
                             >
                                 {isSubmitting ? 'Procesando...' : pickupMode
                                     ? `Confirmar Pedido — Recoger en Tienda`
                                     : !selectedAddressId ? 'Agrega una dirección o selecciona Recoger en Tienda'
-                                    : !selectedRate ? 'Selecciona paquetería'
-                                    : `Pagar $\${getTotalWithShipping().toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
+                                    : (!isKalexa && !selectedRate) ? 'Selecciona paquetería'
+                                    : isKalexa
+                                        ? `Confirmar Pedido — ${paymentMethod === 'paypal' ? 'Tarjeta Déb/Créd' : 'Transferencia'}`
+                                        : paymentMethod === 'transfer'
+                                            ? `Confirmar Pedido — Transferencia`
+                                            : `Pagar $${getTotalWithShipping().toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
                             </button>
 
                             <p className="text-[10px] text-center text-gray-400 font-medium leading-relaxed">
-                                Tu pedido será procesado y el vendedor preparará tu envío con la paquetería seleccionada.
+                                {isKalexa
+                                    ? 'Tu pedido será confirmado y te contactaremos por WhatsApp para coordinar el pago.'
+                                    : 'Tu pedido será procesado y el vendedor preparará tu envío con la paquetería seleccionada.'
+                                }
                             </p>
+
+                            {isKalexa && (
+                                
+                                <a
+                                    href={'https://wa.me/523339242571?text=' + encodeURIComponent(
+                                        'Hola! Me interesa hacer el siguiente pedido:' + String.fromCharCode(10) +
+                                        items.map(i => i.productName + ' - ' + i.color + ' / ' + i.size + ' x' + i.quantity + ' = $' + (i.price * i.quantity).toLocaleString('es-MX')).join(String.fromCharCode(10)) +
+                                        String.fromCharCode(10) + 'Total: $' + getSubtotalWithDiscounts().toLocaleString('es-MX', { minimumFractionDigits: 2 }) +
+                                        String.fromCharCode(10) + 'Forma de pago preferida: ' + (paymentMethod === 'paypal' ? 'Tarjeta de Debito/Credito' : 'Deposito/Transferencia')
+                                    )}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-full py-4 rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 text-white hover:scale-[1.02] shadow-lg"
+                                    style={{backgroundColor: '#25D366'}}
+                                >
+                                    💬 Enviar pedido por WhatsApp
+                                </a>
+                            )}
+
+                            {isKalexa && success && (
+                                
+                                <a
+                                    href={'https://wa.me/523339242571?text=' + encodeURIComponent('Hola! Acabo de hacer un pedido en Kalexa Fashion.' + String.fromCharCode(10) + 'Metodo de pago: ' + (paymentMethod === 'paypal' ? 'Tarjeta de Debito/Credito' : 'Deposito/Transferencia') + String.fromCharCode(10) + 'Total: $' + getTotalWithShipping().toLocaleString('es-MX', { minimumFractionDigits: 2 }) + String.fromCharCode(10) + 'Quedo en espera de confirmacion.')}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-full py-4 rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2 text-white hover:scale-[1.02]"
+                                    style={{backgroundColor: '#25D366'}}
+                                >
+                                    💬 Contactar por WhatsApp
+                                </a>
+                            )}
                         </div>
                     </div>
                 </div>

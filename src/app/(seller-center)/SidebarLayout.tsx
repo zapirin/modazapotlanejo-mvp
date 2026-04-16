@@ -3,16 +3,33 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useState, useEffect } from 'react';
-import { logout } from '../actions/auth';
 import { getUnreadCount } from '../actions/messages';
+import { logout } from '@/app/actions/auth';
+import { BRANDS, type BrandConfig } from '@/lib/brand';
+
+const BRAND_TEXT_COLOR: Record<string, string> = {
+  blue:   'text-blue-600',
+  violet: 'text-violet-600',
+  kalexa: 'text-purple-600',
+};
 
 export default function SidebarLayout({
   children,
-  user
+  user,
+  sellerInfo,
+  brand: brandProp,
 }: {
   children: React.ReactNode;
   user: any;
+  sellerInfo?: any;
+  brand?: BrandConfig;
 }) {
+    const activeBrand: BrandConfig = brandProp ?? BRANDS['modazapotlanejo.com'];
+    const lastSpace  = activeBrand.name.lastIndexOf(' ');
+    const namePart   = activeBrand.name.slice(0, lastSpace);
+    const colorPart  = activeBrand.name.slice(lastSpace + 1);
+    const colorClass = BRAND_TEXT_COLOR[activeBrand.primaryColor] ?? 'text-blue-600';
+
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
     const [isInventoryOpen, setIsInventoryOpen] = useState(false);
@@ -52,9 +69,9 @@ export default function SidebarLayout({
     } else if (savedTheme === 'light') {
       document.documentElement.classList.remove('dark');
     } else {
-      // Default to light if no preference is saved, to avoid system theme sync
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
+      // No saved preference — follow the OS/browser setting
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.classList.toggle('dark', prefersDark);
     }
   }, []);
 
@@ -78,9 +95,15 @@ export default function SidebarLayout({
           {/* Toggle */}
           <div className="flex items-center justify-between px-3 py-4 border-b border-white/10">
             {isSidebarOpen && (
-              <div className="min-w-0">
-                <p className="font-black text-white text-sm truncate">{user.name}</p>
-                <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Cajero</p>
+              <div className="min-w-0 flex flex-col gap-1">
+                {sellerInfo?.logoUrl && (
+                  <img src={sellerInfo.logoUrl} alt="Logo" className="h-8 object-contain mb-1" />
+                )}
+                <p className="font-black text-white text-sm truncate">{sellerInfo?.businessName || sellerInfo?.name || user.name}</p>
+                <p className="text-[9px] text-gray-400 font-bold truncate">
+                  Por {sellerInfo?.registeredDomain?.includes('zonadelvestir') ? 'Zona del Vestir' : 'Moda Zapotlanejo'}
+                </p>
+                <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">{user.name} · Cajero</p>
               </div>
             )}
             <button onClick={() => setSidebarOpen(!isSidebarOpen)}
@@ -90,12 +113,20 @@ export default function SidebarLayout({
               <span className="block w-4 h-0.5 bg-gray-400"/>
             </button>
           </div>
-          <nav className="flex-1 p-2">
+          <nav className="flex-1 p-2 space-y-1">
             <Link href="/pos"
               className={`flex items-center gap-2 px-2 py-3 rounded-xl font-black text-xs transition-all ${pathname === '/pos' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}>
               <span className="text-base shrink-0">🖥️</span>
               {isSidebarOpen && <span className="uppercase tracking-wider truncate">Punto de Venta</span>}
             </Link>
+
+            {(user as any).canViewReports && (
+              <Link href="/reports"
+                className={`flex items-center gap-2 px-2 py-3 rounded-xl font-black text-xs transition-all ${pathname === '/reports' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}>
+                <span className="text-base shrink-0">📊</span>
+                {isSidebarOpen && <span className="uppercase tracking-wider truncate">Reportes</span>}
+              </Link>
+            )}
           </nav>
           <div className="p-2 border-t border-white/10">
             <button onClick={async () => { await logout(); window.location.href = '/login'; }}
@@ -132,9 +163,9 @@ export default function SidebarLayout({
         {/* Logo block */}
         <div className={`p-6 border-b border-border flex shrink-0 items-center ${isDesktopCollapsed ? 'justify-center' : 'justify-between'}`}>
           <div className={`${isDesktopCollapsed ? 'hidden' : 'block'}`}>
-            <a href="https://tienda-modazapo.vercel.app" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity group flex items-center gap-1.5" title="Ir al Marketplace">
+            <a href={`https://${activeBrand.domain}`} target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity group flex items-center gap-1.5" title="Ir al Marketplace">
               <h2 className="text-2xl font-bold tracking-tight">
-                Moda<span className="text-blue-600">Zapotlanejo</span>
+                {namePart}<span className={colorClass}>{colorPart}</span>
               </h2>
               <span className="text-[9px] text-gray-400 group-hover:text-blue-500 transition-colors opacity-0 group-hover:opacity-100">↗</span>
             </a>
@@ -143,7 +174,7 @@ export default function SidebarLayout({
             </p>
           </div>
           {isDesktopCollapsed && (
-            <div className="text-2xl font-bold tracking-tight text-blue-600 hidden lg:block">MZ</div>
+            <div className={`text-2xl font-bold tracking-tight ${colorClass} hidden lg:block`}>{activeBrand.logo.initial}</div>
           )}
           <button
             className="lg:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -173,7 +204,8 @@ export default function SidebarLayout({
                 </span>
             </Link>
 
-            {/* Common: Messages */}
+            {/* Common: Messages — solo visible si hay mensajes sin leer o si estamos en /messages */}
+            {(unreadCount > 0 || pathname.startsWith('/messages')) && (
             <Link
                 href="/messages"
                 onClick={() => setSidebarOpen(false)}
@@ -189,6 +221,7 @@ export default function SidebarLayout({
                     </span>
                 )}
             </Link>
+            )}
             <Link
                 href="/reviews"
                 className={`flex items-center gap-3 px-4 py-3 rounded-2xl font-bold text-sm transition-all ${pathname === '/reviews' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
@@ -225,6 +258,15 @@ export default function SidebarLayout({
                 >
                     <span className="text-lg group-hover:scale-110 transition-transform shrink-0">📈</span>
                     <span className={`whitespace-nowrap ${isDesktopCollapsed ? 'hidden' : 'block'}`}>Reportes</span>
+                </Link>
+
+                <Link
+                    href="/coupons"
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all duration-200 group ${pathname.startsWith('/coupons') ? 'font-bold bg-gray-100 dark:bg-gray-800 text-foreground' : 'font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'}`}
+                >
+                    <span className="text-lg group-hover:scale-110 transition-transform shrink-0">🏷️</span>
+                    <span className={`whitespace-nowrap ${isDesktopCollapsed ? 'hidden' : 'block'}`}>Cupones</span>
                 </Link>
               </>
             )}
@@ -300,6 +342,7 @@ export default function SidebarLayout({
                       <div className="ml-9 border-l border-gray-200 dark:border-gray-700 pl-3 space-y-1 flex flex-col">
                           {[
                               { href: '/inventory', label: 'Todos los Productos' },
+                              { href: '/products', label: '✏️ Gestión de Productos' },
                               { href: '/products/new', label: 'Nuevo Producto' },
                               { href: '/inventory/brands', label: 'Marcas' },
                               { href: '/inventory/categories', label: 'Categorías' },

@@ -9,7 +9,17 @@ import { useCart } from '@/lib/CartContext';
 import { useRecentlyViewed } from '@/lib/RecentlyViewedContext';
 import { getUnreadCount } from '@/app/actions/messages';
 
-export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig, user: any }) {
+export default function Navbar({ 
+    brandConfig, 
+    user,
+    categories = [],
+    brands = []
+}: { 
+    brandConfig: BrandConfig, 
+    user: any,
+    categories?: any[],
+    brands?: any[]
+}) {
     const pathname = usePathname();
     const router = useRouter();
     const [scrolled, setScrolled] = useState(false);
@@ -21,6 +31,8 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
     const { getItemCount } = useCart();
     const itemCount = getItemCount();
     const [isDark, setIsDark] = useState(false);
+    const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+    const [expandedNavCategories, setExpandedNavCategories] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         // Check initial state from localStorage or DOM
@@ -84,9 +96,9 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
     const navLinks = [
         { name: 'Inicio', href: '/' },
         { name: 'Catálogo', href: '/catalog' },
-        { name: 'Categorías', href: '/categories' },
-        { name: 'Marcas', href: '/brands' },
-        { name: 'Vendedores', href: '/vendors' },
+        { name: 'Categorías', href: '#', isDropdown: true, id: 'categories' },
+        { name: 'Marcas', href: '#', isDropdown: true, id: 'brands' },
+        ...(!brandConfig.isSingleVendor ? [{ name: 'Vendedores', href: '/vendors' }] : []),
     ];
 
     return (
@@ -100,48 +112,137 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
             >
                 <div className="max-w-7xl mx-auto px-6 flex items-center justify-between gap-4">
                     <Link href="/" className="flex items-center gap-3 group shrink-0">
-                        <div className="relative w-12 h-12 rounded-xl group-hover:scale-105 transition-transform overflow-hidden">
+                        <div className={`relative ${brandConfig.isSingleVendor ? 'w-40 h-16' : 'w-12 h-12'} rounded-xl group-hover:scale-105 transition-transform overflow-hidden`}>
                             <Image
                                 src={brandConfig.logo.url}
                                 alt={brandConfig.name}
                                 fill
                                 className="object-contain"
+                                priority
                             />
                         </div>
-                        <div className="flex flex-col leading-[0.9] hidden sm:flex">
-                            {(() => {
-                                const words = brandConfig.logo.text.split(' ');
-                                if (words.length >= 3) {
-                                    // Ej: "ZONA DEL VESTIR" → "ZONA DEL" arriba, "VESTIR" grande abajo
-                                    const top = words.slice(0, -1).join(' ');
-                                    const bottom = words[words.length - 1];
-                                    return (<>
-                                        <span className="font-black tracking-tight text-foreground uppercase text-[11px] opacity-70">{top}</span>
-                                        <span className="font-black tracking-tight text-foreground uppercase text-xl">{bottom}</span>
-                                    </>);
-                                }
-                                // Ej: "MODA ZAPOTLANEJO" → primera grande, resto pequeño
-                                return words.map((word: string, i: number) => (
-                                    <span key={i} className={`font-black tracking-tight text-foreground uppercase ${i === 0 ? 'text-xl' : 'text-[11px] opacity-70'}`}>
-                                        {word}
-                                    </span>
-                                ));
-                            })()}
-                        </div>
+                        {!brandConfig.isSingleVendor && (
+                            <div className="flex flex-col leading-[0.9] hidden sm:flex">
+                                {(() => {
+                                    const words = brandConfig.logo.text.split(' ');
+                                    if (words.length >= 3) {
+                                        // Ej: "ZONA DEL VESTIR" → "ZONA DEL" arriba, "VESTIR" grande abajo
+                                        const top = words.slice(0, -1).join(' ');
+                                        const bottom = words[words.length - 1];
+                                        return (<>
+                                            <span className="font-black tracking-tight text-foreground uppercase text-[11px] opacity-70">{top}</span>
+                                            <span className="font-black tracking-tight text-foreground uppercase text-xl">{bottom}</span>
+                                        </>);
+                                    }
+                                    // Ej: "MODA ZAPOTLANEJO" → primera grande, resto pequeño
+                                    return words.map((word: string, i: number) => (
+                                        <span key={i} className={`font-black tracking-tight text-foreground uppercase ${i === 0 ? 'text-xl' : 'text-[11px] opacity-70'}`}>
+                                            {word}
+                                        </span>
+                                    ));
+                                })()}
+                            </div>
+                        )}
                     </Link>
 
                     {/* Desktop Nav */}
                     <div className="hidden lg:flex items-center gap-6">
                         {navLinks.map((link) => (
-                            <Link 
-                                key={link.href} 
-                                href={link.href}
-                                className={`text-xs font-black uppercase tracking-widest transition-colors hover:text-blue-600 ${
-                                    pathname === link.href ? 'text-[color:var(--brand-600)]' : 'text-gray-500 dark:text-gray-400'
-                                }`}
-                            >
-                                {link.name}
-                            </Link>
+                            <div key={link.name} className="relative">
+                                {link.isDropdown ? (
+                                    <button
+                                        onMouseEnter={() => setActiveDropdown(link.id!)}
+                                        className={`text-xs font-black uppercase tracking-widest transition-colors flex items-center gap-1 ${
+                                            activeDropdown === link.id ? 'text-[color:var(--brand-600)]' : 'text-gray-500 dark:text-gray-400 hover:text-blue-600'
+                                        }`}
+                                    >
+                                        {link.name}
+                                        <svg className={`w-3 h-3 transition-transform ${activeDropdown === link.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                                    </button>
+                                ) : (
+                                    <Link 
+                                        href={link.href}
+                                        className={`text-xs font-black uppercase tracking-widest transition-colors hover:text-blue-600 ${
+                                            pathname === link.href ? 'text-[color:var(--brand-600)]' : 'text-gray-500 dark:text-gray-400'
+                                        }`}
+                                    >
+                                        {link.name}
+                                    </Link>
+                                )}
+
+                                {/* Dropdowns */}
+                                {link.isDropdown && activeDropdown === link.id && (
+                                    <div 
+                                        onMouseLeave={() => setActiveDropdown(null)}
+                                        className="absolute top-full left-0 pt-4 w-56 z-[60]"
+                                    >
+                                        <div className="bg-white/90 dark:bg-gray-950/90 backdrop-blur-xl border border-border rounded-2xl shadow-2xl p-4 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                            <div className="grid grid-cols-1 gap-1 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                                                {link.id === 'categories' ? (
+                                                    <div className="grid grid-cols-1 gap-1">
+                                                        {categories.map((cat) => (
+                                                            <div key={cat.id} className="flex flex-col">
+                                                                <div className="flex items-center">
+                                                                    <Link
+                                                                        href={`/catalog?category=${cat.slug}`}
+                                                                        onClick={() => setActiveDropdown(null)}
+                                                                        className="flex-1 flex items-center justify-between px-3 py-1.5 rounded-xl hover:bg-brand-500/10 hover:text-[color:var(--brand-600)] group transition-all"
+                                                                    >
+                                                                        <span className="text-[11px] font-bold uppercase tracking-wider truncate mr-2">{cat.name}</span>
+                                                                        <span className="text-[9px] text-gray-400 group-hover:text-[color:var(--brand-500)] shrink-0">{cat._count?.products || 0}</span>
+                                                                    </Link>
+                                                                    {cat.subcategories?.length > 0 && (
+                                                                        <button 
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                setExpandedNavCategories(prev => ({ ...prev, [cat.id]: !prev[cat.id] }));
+                                                                            }}
+                                                                            className="p-1.5 ml-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 transition-colors"
+                                                                        >
+                                                                            <svg className={`w-3 h-3 transition-transform duration-200 ${expandedNavCategories[cat.id] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${expandedNavCategories[cat.id] ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                                                    {cat.subcategories?.length > 0 && (
+                                                                        <div className="ml-4 mt-1 mb-1 flex flex-col gap-0.5 border-l-2 border-blue-100 dark:border-blue-900/30 pl-2">
+                                                                            {cat.subcategories.map((sub: any) => (
+                                                                                <Link
+                                                                                    key={sub.id}
+                                                                                    href={`/catalog?category=${cat.slug}&subcategory=${sub.slug}`}
+                                                                                    onClick={() => setActiveDropdown(null)}
+                                                                                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-gray-500 hover:text-[color:var(--brand-600)] hover:bg-brand-500/5 transition-all truncate"
+                                                                                >
+                                                                                    {sub.name}
+                                                                                </Link>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="grid grid-cols-1 gap-0.5">
+                                                        {brands.map((brand) => (
+                                                            <Link
+                                                                key={brand.id}
+                                                                href={`/catalog?brand=${brand.id}`}
+                                                                onClick={() => setActiveDropdown(null)}
+                                                                className="flex items-center justify-between px-3 py-1.5 rounded-xl hover:bg-brand-500/10 hover:text-[color:var(--brand-600)] group transition-all"
+                                                            >
+                                                                <span className="text-[11px] font-bold uppercase tracking-wider truncate mr-2">{brand.name}</span>
+                                                                <span className="text-[9px] text-gray-400 group-hover:text-[color:var(--brand-500)] shrink-0">{brand._count?.products || 0}</span>
+                                                            </Link>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         ))}
                     </div>
 
@@ -175,7 +276,8 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
                             </svg>
                         </Link>
 
-                        {/* Messages Icon */}
+                        {/* Messages Icon — solo visible si hay sesión y mensajes sin leer, o si está en /messages */}
+                        {user && (unreadCount > 0 || pathname.startsWith('/messages')) && (
                         <Link href="/messages" className="p-2 text-gray-700 dark:text-gray-300 hover:text-blue-600 transition-colors relative" title="Mis Mensajes">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -184,6 +286,16 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
                                 <span className="absolute top-2 right-2 w-2.5 h-2.5 border-2 border-white dark:border-gray-950 rounded-full" style={{backgroundColor:"var(--brand-600)"}}></span>
                             )}
                         </Link>
+                        )}
+
+                        {/* Orders Icon — solo compradores logueados */}
+                        {user && (user.role === 'BUYER' || user.role === 'WHOLESALE_BUYER') && (
+                        <Link href="/mis-pedidos" className="p-2 text-gray-700 dark:text-gray-300 hover:text-blue-600 transition-colors relative" title="Mis Pedidos">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                        </Link>
+                        )}
 
                         {/* Cart Icon */}
                         <Link href="/cart" className="relative p-2 text-gray-700 dark:text-gray-300 hover:text-blue-600 transition-colors">
@@ -231,7 +343,7 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
                             <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                             <input
                                 type="text"
-                                placeholder="Buscar productos, categorías, vendedores..."
+                                placeholder={brandConfig.isSingleVendor ? `Buscar en ${brandConfig.name}...` : "Buscar productos, categorías, vendedores..."}
                                 className="flex-1 bg-transparent outline-none text-sm font-bold placeholder:text-gray-400"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -279,7 +391,7 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
                             <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                             <input
                                 type="text"
-                                placeholder="Buscar..."
+                                placeholder={brandConfig.isSingleVendor ? `Buscar...` : "Buscar..."}
                                 className="flex-1 bg-transparent outline-none text-sm font-bold placeholder:text-gray-400"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -287,20 +399,97 @@ export default function Navbar({ brandConfig, user }: { brandConfig: BrandConfig
                             />
                         </div>
                         
-                        {navLinks.map((link) => (
-                            <Link 
-                                key={link.href} 
-                                href={link.href}
-                                onClick={() => setMobileMenuOpen(false)}
-                                className={`px-4 py-4 rounded-2xl text-lg font-black tracking-tight transition-colors ${
-                                    pathname === link.href 
-                                        ? 'text-[color:var(--brand-600)] bg-[color:var(--brand-50)] dark:bg-gray-800' 
-                                        : 'text-foreground hover:bg-gray-100 dark:hover:bg-gray-800'
-                                }`}
-                            >
-                                {link.name}
-                            </Link>
-                        ))}
+                        <div className="flex flex-col gap-1">
+                            {navLinks.map((link) => (
+                                <div key={link.name}>
+                                    {link.isDropdown ? (
+                                        <div className="space-y-1">
+                                            <button
+                                                onClick={() => setActiveDropdown(activeDropdown === link.id ? null : link.id!)}
+                                                className="w-full flex items-center justify-between px-4 py-4 rounded-2xl text-lg font-black tracking-tight transition-colors text-foreground hover:bg-gray-100 dark:hover:bg-gray-800"
+                                            >
+                                                {link.name}
+                                                <svg className={`w-5 h-5 transition-transform ${activeDropdown === link.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                                            </button>
+                                            {activeDropdown === link.id && (
+                                                <div className="grid grid-cols-2 gap-2 p-2 animate-in slide-in-from-top-2 duration-200">
+                                                    {link.id === 'categories' ? (
+                                                        <div className="col-span-2 flex flex-col gap-2 w-full">
+                                                            {categories.map((cat) => (
+                                                                <div key={cat.id} className="w-full flex flex-col border border-border rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900">
+                                                                    <div className="flex items-center">
+                                                                        <Link
+                                                                            href={`/catalog?category=${cat.slug}`}
+                                                                            onClick={() => setMobileMenuOpen(false)}
+                                                                            className="flex-1 px-4 py-3.5 text-[11px] font-black uppercase tracking-wider flex justify-between items-center"
+                                                                        >
+                                                                            <span className="truncate">{cat.name}</span>
+                                                                            <span className="ml-2 text-[9px] opacity-50 font-normal">{cat._count?.products || 0} pz</span>
+                                                                        </Link>
+                                                                        {cat.subcategories?.length > 0 && (
+                                                                            <button 
+                                                                                onClick={(e) => {
+                                                                                    e.preventDefault();
+                                                                                    e.stopPropagation();
+                                                                                    setExpandedNavCategories(prev => ({ ...prev, [cat.id]: !prev[cat.id] }));
+                                                                                }}
+                                                                                className="p-3.5 border-l border-border bg-white dark:bg-gray-950"
+                                                                            >
+                                                                                <svg className={`w-4 h-4 transition-transform duration-200 ${expandedNavCategories[cat.id] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className={`overflow-hidden transition-all duration-300 ease-in-out ${expandedNavCategories[cat.id] ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                                                        {cat.subcategories?.length > 0 && (
+                                                                            <div className="flex flex-col bg-white dark:bg-gray-950 border-t border-border">
+                                                                                {cat.subcategories.map((sub: any) => (
+                                                                                    <Link
+                                                                                        key={sub.id}
+                                                                                        href={`/catalog?category=${cat.slug}&subcategory=${sub.slug}`}
+                                                                                        onClick={() => setMobileMenuOpen(false)}
+                                                                                        className="px-6 py-3 text-[10px] font-bold text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-900 border-b border-border/50 last:border-0"
+                                                                                    >
+                                                                                        {sub.name}
+                                                                                    </Link>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        brands.map((brand) => (
+                                                            <Link
+                                                                key={brand.id}
+                                                                href={`/catalog?brand=${brand.id}`}
+                                                                onClick={() => setMobileMenuOpen(false)}
+                                                                className="px-3 py-3 rounded-xl bg-gray-50 dark:bg-gray-900 border border-border text-[10px] font-black uppercase tracking-wider text-center flex flex-col items-center justify-center"
+                                                            >
+                                                                <span className="truncate w-full">{brand.name}</span>
+                                                                <span className="text-[8px] opacity-50">{brand._count?.products || 0} pz</span>
+                                                            </Link>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <Link 
+                                            href={link.href}
+                                            onClick={() => setMobileMenuOpen(false)}
+                                            className={`px-4 py-4 rounded-2xl text-lg font-black tracking-tight transition-colors ${
+                                                pathname === link.href 
+                                                    ? 'text-[color:var(--brand-600)] bg-[color:var(--brand-50)] dark:bg-gray-800' 
+                                                    : 'text-foreground hover:bg-gray-100 dark:hover:bg-gray-800'
+                                            }`}
+                                        >
+                                            {link.name}
+                                        </Link>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
                         {/* Recently Viewed (Mobile) */}
                         {recentlyViewed.length > 0 && (
                             <div className="mt-8 space-y-4">

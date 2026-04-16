@@ -8,7 +8,7 @@ export async function getProductForEdit(productId: string) {
         const product = await prisma.product.findUnique({
             where: { id: productId },
             include: {
-                variants: true,
+                variants: { include: { inventoryLevels: true } },
                 tags: true
             }
         });
@@ -66,46 +66,62 @@ export async function updateProduct(productId: string, data: any) {
                 for (const vData of data.variantsData) {
                     const attrs = vData.attributes || {};
                     const color = vData.color || (attrs.Color || attrs.color || null);
-                    const size = vData.size || (attrs.Talla || attrs.talla || attrs.Size || attrs.size || null);
+                    const size = vData.size || (attrs.Talla || attrs.talla || attrs.Size || attrs.size || attrs.Tamaño || attrs.tamaño || null);
                     
                     // Find existing by exact attributes match (simple JSON string comparison for this project's scope)
                     const existing = currentVariants.find(curr => 
                         JSON.stringify(curr.attributes) === JSON.stringify(attrs)
                     );
 
+                    let variantId: string;
                     if (existing) {
-                        // Update existing (mostly stock)
                         await tx.variant.update({
                             where: { id: existing.id },
-                            data: {
-                                stock: vData.stock,
-                                color,
-                                size
-                            }
+                            data: { stock: vData.stock, color, size }
                         });
+                        variantId = existing.id;
                         touchedVariantIds.add(existing.id);
                     } else {
-                        // Create new
                         const created = await tx.variant.create({
-                            data: {
-                                productId,
-                                attributes: attrs,
-                                stock: vData.stock,
-                                color,
-                                size
-                            }
+                            data: { productId, attributes: attrs, stock: vData.stock, color, size }
                         });
+                        variantId = created.id;
                         touchedVariantIds.add(created.id);
+                    }
+
+                    // Guardar stock por sucursal si viene locationStock
+                    if (vData.locationStock && vData.locationStock.length > 0) {
+                        for (const level of vData.locationStock) {
+                            const existing = await tx.inventoryLevel.findFirst({
+                                where: { variantId, locationId: level.locationId }
+                            });
+                            if (existing) {
+                                await tx.inventoryLevel.update({
+                                    where: { id: existing.id },
+                                    data: { stock: level.stock }
+                                });
+                            } else {
+                                await tx.inventoryLevel.create({
+                                    data: { id: "il-" + variantId + "-" + level.locationId, variantId, locationId: level.locationId, stock: level.stock, updatedAt: new Date() }
+                                });
+                            }
+                        }
                     }
                 }
 
                 // Delete variants that were NOT touched (removed from options)
                 const toDelete = currentVariants.filter(curr => !touchedVariantIds.has(curr.id));
                 if (toDelete.length > 0) {
+                    const toDeleteIds = toDelete.map(d => d.id);
+                    // Borrar dependencias antes de borrar variantes
+                    await tx.inventoryMovement.deleteMany({
+                        where: { variantId: { in: toDeleteIds } }
+                    });
+                    await tx.inventoryLevel.deleteMany({
+                        where: { variantId: { in: toDeleteIds } }
+                    });
                     await tx.variant.deleteMany({
-                        where: {
-                            id: { in: toDelete.map(d => d.id) }
-                        }
+                        where: { id: { in: toDeleteIds } }
                     });
                 }
             }

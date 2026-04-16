@@ -1,15 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, Suspense, useCallback } from 'react';
+import React, { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { getSessionUser } from '@/app/actions/auth';
 import { getDenominations, seedDefaultDenominations } from '../settings/denominations/actions';
 import { savePendingSale, getPendingSales, markSaleSynced, markSaleSyncError, countPendingSales } from '@/lib/posOfflineStore';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { searchProducts, getPriceTiers, getPaymentMethods, getPOSCategories, getProductsByCategory, processSale, getSuspendedSales, suspendSale, deleteSuspendedSale, createLayaway, getSaleById, updateSale } from '../products/new/actions';
-import { getCurrentCashSession, openCashSession, addCashMovement, closeCashSession, createTransfer, getAllowedLocations, checkSellerPOSAccess } from './actions';
+import { getCurrentCashSession, openCashSession, addCashMovement, closeCashSession, createTransfer, getAllowedLocations, checkSellerPOSAccess, getSalesBySession, getSalespersons } from './actions';
 import { getStoreSettings, getLocationsSettings } from '../settings/actions';
-import { createClient, searchClients } from '../clients/actions';
+import { createClient, searchClients, getClientById } from '../clients/actions';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
 import { toast } from 'sonner';
 
@@ -23,6 +23,10 @@ function POSContent() {
     const [categories, setCategories] = useState<any[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<any>(null);
     const [categoryProducts, setCategoryProducts] = useState<any[]>([]);
+
+    // Refs para hotkeys
+    const searchInputRef  = useRef<HTMLInputElement>(null);
+    const paymentInputRef = useRef<HTMLInputElement>(null);
 
     // Store data
     const [priceTiers, setPriceTiers] = useState<any[]>([]);
@@ -49,6 +53,10 @@ function POSContent() {
     // Edit State
     const [originalSale, setOriginalSale] = useState<any>(null);
 
+    // Salesperson State
+    const [salespersons, setSalespersons] = useState<{ id: string; name: string }[]>([]);
+    const [selectedSalesperson, setSelectedSalesperson] = useState<{ id: string; name: string } | null>(null);
+
     // Client Modal State
     const [showClientModal, setShowClientModal] = useState(false);
     const [selectedClient, setSelectedClient] = useState<any>(null);
@@ -57,6 +65,11 @@ function POSContent() {
     const [newClientName, setNewClientName] = useState('');
     const [newClientPhone, setNewClientPhone] = useState('');
     const [newClientEmail, setNewClientEmail] = useState('');
+
+    // Client History Modal State
+    const [showClientHistory, setShowClientHistory] = useState(false);
+    const [clientHistoryData, setClientHistoryData] = useState<any>(null);
+    const [loadingHistory, setLoadingHistory] = useState(false);
 
     // Discount Modal State
     const [showDiscountModal, setShowDiscountModal] = useState(false);
@@ -87,12 +100,21 @@ function POSContent() {
     const [selectedLocationId, setSelectedLocationId] = useState<string>('');
     const [showMovementModal, setShowMovementModal] = useState(false);
     const [showZReportModal, setShowZReportModal] = useState(false);
+    const [showTodayTicketsModal, setShowTodayTicketsModal] = useState(false);
+    const [todayTickets, setTodayTickets] = useState<any[]>([]);
+    const [loadingTickets, setLoadingTickets] = useState(false);
+    const [reprintSale, setReprintSale] = useState<any>(null);
     const [cashAmount, setCashAmount] = useState('');
     const [cashReason, setCashReason] = useState('');
     const [movementType, setMovementType] = useState<"IN" | "OUT">("IN");
 
     // Receipt State
     const [showReceiptModal, setShowReceiptModal] = useState(false);
+    const [showTicketOptions, setShowTicketOptions] = useState(false);
+    const [offlineSyncTime, setOfflineSyncTime] = useState<string>('');
+    useEffect(() => {
+        setOfflineSyncTime(new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }));
+    }, []);
 
     // Cajón de dinero
     const openCashDrawer = (reason?: string) => {
@@ -192,6 +214,46 @@ function POSContent() {
         }
     };
 
+    // ─── Hotkeys globales ────────────────────────────────────────────────
+    useEffect(() => {
+        const handleKey = (e: KeyboardEvent) => {
+            // Ignorar si el foco está en un input/textarea/select (excepto los nuestros)
+            const tag = (e.target as HTMLElement)?.tagName;
+            const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+            if (e.key === 'F1') {
+                e.preventDefault();
+                window.location.reload();
+            } else if (e.key === 'F2') {
+                e.preventDefault();
+                searchInputRef.current?.focus();
+                searchInputRef.current?.select();
+            } else if (e.key === 'F3') {
+                e.preventDefault();
+                setShowClientModal(true);
+            } else if (e.key === 'F7') {
+                e.preventDefault();
+                paymentInputRef.current?.focus();
+                paymentInputRef.current?.select();
+            }
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, []);
+    // ─────────────────────────────────────────────────────────────────────
+
+    // ─── Cart persistence ────────────────────────────────────────────────
+    const CART_STORAGE_KEY = 'pos_cart_draft';
+    const clearCartStorage = () => localStorage.removeItem(CART_STORAGE_KEY);
+
+    useEffect(() => {
+        const hasData = cart.length > 0 || selectedClient || selectedTier || globalDiscount || partialPayments.length > 0;
+        if (hasData) {
+            localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({ cart, selectedClient, selectedTier, globalDiscount, partialPayments }));
+        }
+    }, [cart, selectedClient, selectedTier, globalDiscount, partialPayments]);
+    // ─────────────────────────────────────────────────────────────────────
+
     useEffect(() => {
         async function loadData() {
             // Paso 1: cargar datos que no dependen de sesión ni locación
@@ -217,14 +279,37 @@ function POSContent() {
             setPaymentMethods(sortedMethods);
             setCategories(cats);
 
-            // Paso 2: usuario, locaciones y denominaciones
-            const [sessionUser, allowedLocs, dens] = await Promise.all([
+            // Restaurar carrito guardado (solo si no estamos editando una venta existente)
+            if (!editSaleId) {
+                try {
+                    const savedDraft = localStorage.getItem(CART_STORAGE_KEY);
+                    if (savedDraft) {
+                        const parsed = JSON.parse(savedDraft);
+                        if (parsed.cart?.length > 0)         setCart(parsed.cart);
+                        if (parsed.selectedClient)           setSelectedClient(parsed.selectedClient);
+                        if (parsed.selectedTier) {
+                            const match = tiers.find((t: any) => t.id === parsed.selectedTier.id);
+                            setSelectedTier(match ?? parsed.selectedTier);
+                        }
+                        if (parsed.globalDiscount)           setGlobalDiscount(parsed.globalDiscount);
+                        if (parsed.partialPayments?.length > 0) setPartialPayments(parsed.partialPayments);
+                    }
+                } catch { localStorage.removeItem(CART_STORAGE_KEY); }
+            }
+
+            // Paso 2: usuario, locaciones, denominaciones y vendedores de piso
+            const [sessionUser, allowedLocs, dens, spersons] = await Promise.all([
                 getSessionUser(),
                 getAllowedLocations(),
                 getDenominations(),
+                getSalespersons(undefined),
             ]);
             setCurrentUser(sessionUser);
+            setSalespersons(spersons);
             setAllowedLocations(allowedLocs);
+            if (allowedLocs.length === 1) {
+                setSelectedLocationId(allowedLocs[0].id);
+            }
 
             // Verificar que el vendedor tiene POS habilitado
             if (sessionUser?.role === 'SELLER') {
@@ -303,6 +388,12 @@ function POSContent() {
         }
         loadData();
     }, [editSaleId]);
+
+    // Re-fetch salespeople filtered by active location when location changes
+    useEffect(() => {
+        if (!selectedLocationId) return;
+        getSalespersons(selectedLocationId).then(spersons => setSalespersons(spersons));
+    }, [selectedLocationId]);
 
     const formatCurrency = (amount: number) => {
         return amount.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
@@ -397,7 +488,7 @@ function POSContent() {
         });
 
         if (newCartItems.length > 0) {
-            setCart([...cart, ...newCartItems]);
+            setCart([...newCartItems, ...cart]);
         }
         setShowVariationModal(false);
     };
@@ -419,7 +510,7 @@ function POSContent() {
             newCart[existingIdx].quantity += (isReturnMode ? -1 : 1);
             setCart(newCart);
         } else {
-            setCart([...cart, newItem]);
+            setCart([newItem, ...cart]);
         }
         setShowVariationModal(false);
     };
@@ -568,6 +659,7 @@ function POSContent() {
                 isReturn: isReturnMode,
                 cashSessionId: currentSession?.id || null,
                 partialPayments: paymentsToUse.length > 0 ? paymentsToUse : null,
+                soldBySalespersonId: selectedSalesperson?.id || null,
             };
 
             // === MODO OFFLINE ===
@@ -577,6 +669,7 @@ function POSContent() {
                 setPendingCount(newCount);
                 toast.warning(`📴 Sin conexión — venta guardada localmente (${newCount} pendiente${newCount > 1 ? 's' : ''})`);
                 // Limpiar carrito igual que si fuera exitosa
+                clearCartStorage();
                 setCart([]);
                 setSelectedClient(null);
                 setSelectedTier(null);
@@ -607,6 +700,7 @@ function POSContent() {
                 // Save data for the receipt before clearing the cart
                 setLastSaleData({
                     id: res.saleId,
+                    receiptNumber: res.receiptNumber,
                     date: new Date(),
                     cart: [...cart],
                     total: calculateTotal(),
@@ -615,16 +709,19 @@ function POSContent() {
                     paymentMethodName: selectedPaymentMethod,
                     tierName: selectedTier ? selectedTier.name : 'Precio Público',
                     clientName: selectedClient ? selectedClient.name : 'Venta de Mostrador',
+                    salespersonName: selectedSalesperson ? selectedSalesperson.name : null,
                     isReturn: isReturnMode,
-                    receivedAmount: explicitReceivedAmount !== undefined 
-                        ? explicitReceivedAmount 
+                    receivedAmount: explicitReceivedAmount !== undefined
+                        ? explicitReceivedAmount
                         : (selectedPaymentMethod?.toLowerCase().includes('efectivo') ? (parseFloat(receivedAmount) || 0) : null),
                     partialPayments: paymentsToUse.length > 0 ? paymentsToUse : null,
                 });
-                
+
+                clearCartStorage();
                 setCart([]);
                 setSelectedTier(null);
                 setSelectedClient(null);
+                setSelectedSalesperson(null);
                 setGlobalDiscount(null);
                 setReceivedAmount('');
                 setPartialPayments([]);
@@ -669,6 +766,7 @@ function POSContent() {
             const res = await suspendSale(suspendedData);
             if (res.success) {
                 toast.success("Venta suspendida exitosamente.");
+                clearCartStorage();
                 setCart([]);
                 setSelectedTier(null);
                 setSelectedClient(null);
@@ -728,6 +826,7 @@ function POSContent() {
                 // Preparamos el recibo
                 setLastSaleData({
                     id: res.saleId,
+                    receiptNumber: res.receiptNumber,
                     date: new Date(),
                     cart: [...cart],
                     total: calculateTotal(),
@@ -744,6 +843,7 @@ function POSContent() {
                 });
                 
                 toast.success("Apartado registrado exitosamente.");
+                clearCartStorage();
                 setCart([]);
                 setSelectedTier(null);
                 setGlobalDiscount(null);
@@ -892,6 +992,7 @@ function POSContent() {
             const res = await createTransfer(cart, transferSourceId, transferDestId);
             if (res.success) {
                 toast.success("¡Traspaso completado exitosamente!");
+                clearCartStorage();
                 setCart([]);
                 setTransferSourceId('');
                 setTransferDestId('');
@@ -909,7 +1010,8 @@ function POSContent() {
 
     const handlePreviewSuspended = (sale: any) => {
         setLastSaleData({
-            id: sale.id?.slice(-6).toUpperCase() || 'PND',
+            id: sale.id,
+            receiptNumber: sale.receiptNumber,
             date: new Date(sale.createdAt),
             cart: sale.items.map((i: any) => ({
                 name: `${i.variant.product.name} - ${i.variant.color} / ${i.variant.size}`,
@@ -925,8 +1027,7 @@ function POSContent() {
             isReturn: false,
             isLayaway: false,
             amountPaid: 0,
-            balance: sale.total,
-            receiptNumber: sale.id?.slice(-6).toUpperCase() || 'PND'
+            balance: sale.total
         });
         setShowReceiptModal(true);
     };
@@ -939,7 +1040,10 @@ function POSContent() {
         
         let text = `Hola ${sale.client.name}, aquí está el detalle de tus artículos en pausa en Moda Zapotlanejo:\n\n`;
         sale.items.forEach((item: any) => {
-            text += `• ${item.variant.product.name} (x${item.quantity}): $${(item.price * item.quantity).toFixed(2)}\n`;
+            const v = item.variant;
+            const variantLabel = formatVariantName(v);
+            const variantStr = variantLabel ? ` — Talla ${variantLabel}` : '';
+            text += `• ${v.product.name}${variantStr} (x${item.quantity}): $${(item.price * item.quantity).toFixed(2)}\n`;
         });
         text += `\nTotal: $${sale.total.toFixed(2)}\n\n¡Te esperamos en nuestra sucursal!`;
         
@@ -999,7 +1103,7 @@ function POSContent() {
     }, [selectedProduct]);
 
     return (
-        <div className="flex h-[calc(100vh-64px)] bg-background text-foreground transition-colors duration-300 overflow-hidden font-sans text-sm relative">
+        <div className="flex h-[calc(100dvh-64px)] bg-background text-foreground transition-colors duration-300 overflow-hidden font-sans text-sm relative">
             {/* Botón móvil para mostrar/ocultar panel de cobro */}
             <button
                 className="fixed bottom-4 right-4 z-50 lg:hidden bg-blue-600 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-2xl"
@@ -1102,6 +1206,12 @@ function POSContent() {
                             Sin Conexión
                         </div>
                     )}
+
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 dark:bg-green-900/10 rounded-full text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest hidden sm:flex border border-green-200/50 dark:border-green-800/30">
+                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                        Catálogo: {offlineSyncTime || '00:00 p.m.'}
+                    </div>
+
                     <InventoryRealtimeSync 
                         onInventoryChange={handleInventoryChange}
                         fetchInventory={async () => {
@@ -1115,15 +1225,16 @@ function POSContent() {
                 <div className="flex bg-card rounded-2xl shadow-sm border border-border relative z-20">
                     {/* Botón crear producto — visible para SELLER/ADMIN, y para cajeros con canCreateProducts */}
                     {(currentUser?.role !== 'CASHIER' || (currentUser as any)?.canCreateProducts) && (
-                        <Link href="/products/new" title="Crear Nuevo Producto" className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-4 flex items-center justify-center transition-colors rounded-l-2xl">
+                        <Link href="/products/new" title="Crear Nuevo Producto" className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-5 py-4 flex items-center justify-center transition-colors rounded-l-2xl">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                         </Link>
                     )}
                     <div className="flex-1 relative">
                         <input
+                            ref={searchInputRef}
                             type="text"
-                            placeholder="Ingrese o escanee un artículo o código de barras"
-                            className="w-full h-full px-5 outline-none bg-transparent font-medium"
+                            placeholder="Buscar o escanear..."
+                            className="w-full h-full px-3 sm:px-5 outline-none bg-transparent font-medium text-xs sm:text-sm"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
@@ -1154,7 +1265,7 @@ function POSContent() {
                     <div className="relative border-l border-border h-full flex shrink-0">
                         <button
                             onClick={() => setShowModeDropdown(!showModeDropdown)}
-                            className={`px-4 xl:px-6 py-4 font-bold uppercase tracking-wider text-xs transition flex items-center justify-between gap-3 h-full min-w-[160px] 
+                            className={`px-3 sm:px-6 py-4 font-bold uppercase tracking-wider text-[10px] sm:text-xs transition flex items-center justify-between gap-2 sm:gap-3 h-full min-w-0 sm:min-w-[160px] 
                                 ${!isReturnMode && !isTransferMode ? 'text-green-500 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40' : 
                                   isReturnMode ? 'text-orange-500 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/40' : 
                                   'text-purple-500 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40'}`}
@@ -1201,7 +1312,18 @@ function POSContent() {
                                         Modo Devolución
                                     </button>
                                     <button
-                                        onClick={() => { setIsTransferMode(true); setIsReturnMode(false); setShowModeDropdown(false); }}
+                                        onClick={() => {
+                                            setIsTransferMode(true);
+                                            setIsReturnMode(false);
+                                            setShowModeDropdown(false);
+                                            // Pre-seleccionar origen con la sucursal activa:
+                                            // Si hay sesión abierta → usar su locationId
+                                            // Si es cajero (sin sesión aún) → usar selectedLocationId
+                                            // Si es admin seller sin sesión → dejar vacío
+                                            const activeLocId = currentSession?.locationId
+                                                || ((currentUser as any)?.role === 'CASHIER' ? selectedLocationId : '');
+                                            if (activeLocId) setTransferSourceId(activeLocId);
+                                        }}
                                         className="w-full text-left px-4 py-4 text-xs font-bold uppercase tracking-wider text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 flex items-center gap-2 transition-colors"
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
@@ -1213,10 +1335,11 @@ function POSContent() {
                     </div>
                     <button
                         onClick={() => setShowGrid(!showGrid)}
-                        className="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 hover:bg-blue-100 px-6 py-4 font-bold uppercase tracking-wider text-xs transition flex items-center gap-2 border-l border-border"
+                        className="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 hover:bg-blue-100 px-3 sm:px-6 py-4 font-bold uppercase tracking-wider text-[10px] sm:text-xs transition flex items-center gap-2 border-l border-border"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
-                        {showGrid ? 'Ocultar Catálogo' : 'Mostrar Catálogo'}
+                        <span className="hidden sm:inline">{showGrid ? 'Ocultar Catálogo' : 'Catálogo'}</span>
+                        <span className="sm:hidden">{showGrid ? 'H' : 'G'}</span>
                     </button>
                 </div>
 
@@ -1236,24 +1359,50 @@ function POSContent() {
                             </span>
                         </div>
                         
-                        <div className="flex items-center gap-2">
-                            <Link href="/pos/peripherals"
-                                className="px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-border rounded-xl text-xs font-black hover:bg-gray-200 transition flex items-center gap-1.5"
-                                title="Configurar periféricos">
-                                🔌 Periféricos
-                            </Link>
-                            {/* Botón cajón de dinero — solo si tiene permiso */}
-                            {(currentUser?.role === 'SELLER' || (currentUser as any)?.canOpenDrawer) && (
+                        <div className="flex items-center gap-2 relative">
+                            <div className="relative">
                                 <button
-                                    onClick={() => {
-                                        openCashDrawer('Manual');
-                                        toast.success('💰 Comando enviado a cajón');
-                                    }}
-                                    className="px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 rounded-xl text-xs font-black hover:bg-amber-100 transition flex items-center gap-1.5"
-                                    title="Abrir cajón de dinero">
-                                    💰 Abrir cajón
+                                    onClick={() => setShowTicketOptions(!showTicketOptions)}
+                                    className="px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-border rounded-full text-xs font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition flex items-center justify-center text-foreground"
+                                >
+                                    ••• Opciones
                                 </button>
-                            )}
+                                {showTicketOptions && (
+                                    <>
+                                        <div className="fixed inset-0 z-40" onClick={() => setShowTicketOptions(false)}></div>
+                                        <div className="absolute top-full right-0 mt-2 w-48 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-border animate-in fade-in slide-in-from-top-2 duration-200">
+                                            <Link href="/pos/peripherals" className="w-full text-left px-4 py-4 text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-3 transition-colors">
+                                                🔌 Periféricos
+                                            </Link>
+                                            {(currentUser?.role === 'SELLER' || (currentUser as any)?.canOpenDrawer) && (
+                                                <button onClick={() => { openCashDrawer('Manual'); toast.success('💰 Comando enviado a cajón'); setShowTicketOptions(false); }} className="w-full text-left px-4 py-4 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 flex items-center gap-3 transition-colors">
+                                                    💰 Abrir cajón
+                                                </button>
+                                            )}
+                                            <button onClick={() => { setShowTicketOptions(false); if (!currentSession) { setShowOpenSessionModal(true); } else { toast.info("La caja ya está abierta."); } }} className="w-full text-left px-4 py-4 text-xs font-bold text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 flex items-center gap-3 transition-colors">
+                                                {currentSession ? '🔓 Caja Abierta' : '🪙 Abrir Caja'}
+                                            </button>
+                                            <button onClick={() => { setShowTicketOptions(false); if(currentSession) setShowMovementModal(true); else toast.warning("Abre la caja primero"); }} className="w-full text-left px-4 py-4 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-3 transition-colors">
+                                                ➕ Entrada / Salida
+                                            </button>
+                                            <button onClick={async () => { 
+                                                setShowTicketOptions(false); 
+                                                if (!currentSession) { toast.warning("Abre la caja primero"); return; }
+                                                setLoadingTickets(true);
+                                                setShowTodayTicketsModal(true);
+                                                const sales = await getSalesBySession(currentSession.id);
+                                                setTodayTickets(sales);
+                                                setLoadingTickets(false);
+                                            }} className="w-full text-left px-4 py-4 text-xs font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 flex items-center gap-3 transition-colors">
+                                                🖨️ Tickets del Día
+                                            </button>
+                                            <button onClick={() => { setShowTicketOptions(false); if(currentSession) { setDenCounts({}); setCashAmount(''); setShowZReportModal(true); } else toast.warning("Abre la caja primero"); }} className="w-full text-left px-4 py-4 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-3 transition-colors">
+                                                🧾 Corte Z
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                             {suspendedSales.length > 0 && (
                                 <button
                                     onClick={loadSuspendedSales}
@@ -1266,7 +1415,7 @@ function POSContent() {
                             {cart.length > 0 && (
                                 <button
                                     onClick={() => {
-                                        if(window.confirm("¿Seguro que deseas vaciar todo el carrito?")) setCart([]);
+                                        if(window.confirm("¿Seguro que deseas vaciar todo el carrito?")) { clearCartStorage(); setCart([]); }
                                     }}
                                     className="text-xs font-bold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/30 px-4 py-2 rounded-xl border border-red-200 dark:border-red-900/30 transition-colors flex items-center gap-2"
                                 >
@@ -1276,16 +1425,16 @@ function POSContent() {
                             )}
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto min-h-0">
+                    <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0">
                         <table className="w-full text-left border-collapse">
                             <thead className="sticky top-0 z-10 bg-gray-50/50 dark:bg-card/80 backdrop-blur-md">
                                 <tr className="border-b border-border text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider text-[10px]">
-                                    <th className="p-4 w-12 text-center">Acción</th>
+                                    <th className="p-4 w-12 text-center hidden sm:table-cell">Acción</th>
                                     <th className="p-4">Artículo</th>
-                                    <th className="p-4 text-center">Precio Base</th>
+                                    <th className="p-4 text-center hidden sm:table-cell">Precio Base</th>
                                     <th className="p-4 text-center">Cant</th>
-                                    <th className="p-4 text-center">Descuento</th>
-                                    <th className="p-4 text-right pr-6">Monto Total</th>
+                                    <th className="p-4 text-center hidden sm:table-cell">Descuento</th>
+                                    <th className="p-4 text-right pr-6">Total</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1315,16 +1464,19 @@ function POSContent() {
 
                                 return (
                                     <tr key={idx} className="border-b border-border/50 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                                        <td className="p-4 text-center">
+                                        <td className="p-4 text-center hidden sm:table-cell">
                                             <button onClick={() => removeFromCart(idx)} className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 w-8 h-8 rounded-full inline-flex items-center justify-center transition-colors">
                                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                                             </button>
                                         </td>
                                         <td className="p-4 font-bold text-foreground">
-                                            {item.name}
-                                            {isReturnMode && <span className="ml-2 text-[9px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full uppercase">Dev</span>}
+                                            <div className="flex flex-col gap-1">
+                                                <span className="truncate max-w-[120px] sm:max-w-none">{item.name}</span>
+                                                {isReturnMode && <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded-full uppercase text-[8px] w-fit">Dev</span>}
+                                                <button onClick={() => removeFromCart(idx)} className="text-red-500 text-[9px] font-bold uppercase sm:hidden w-fit">Eliminar</button>
+                                            </div>
                                         </td>
-                                        <td className="p-4 text-center text-blue-500 font-medium">
+                                        <td className="p-4 text-center text-blue-500 font-medium hidden sm:table-cell">
                                             <div className="flex items-center justify-center gap-1">
                                                 <span>$</span>
                                                 <input 
@@ -1346,17 +1498,17 @@ function POSContent() {
                                                     const val = parseInt(e.target.value, 10);
                                                     updateItemQuantity(idx, val);
                                                 }}
-                                                className="w-16 px-1 py-1 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 border-b border-dashed border-gray-300 dark:border-gray-600 focus:border-blue-500 outline-none text-center font-bold transition-colors rounded-t-sm"
+                                                className="w-12 sm:w-16 px-1 py-1 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 border-b border-dashed border-gray-300 dark:border-gray-600 focus:border-blue-500 outline-none text-center font-bold transition-colors rounded-t-sm"
                                                 placeholder="0"
                                             />
                                         </td>
-                                        <td className="p-4 text-center">
+                                        <td className="p-4 text-center hidden sm:table-cell">
                                             <span className={`font-black text-[10px] px-2 py-1 rounded-full ${itemDiscountStr !== '0%' ? 'bg-green-100 text-green-700' : 'text-gray-400'}`}>
                                                 {itemDiscountStr}
                                             </span>
                                         </td>
                                         <td className="p-4 text-right pr-6">
-                                            <span className="text-foreground font-black">${rowTotal.toFixed(2)}</span>
+                                            <span className="text-foreground font-black text-xs sm:text-sm">${rowTotal.toFixed(2)}</span>
                                             {itemDiscountStr !== '0%' && (
                                                 <span className="block text-[10px] text-gray-400 line-through">${(item.price * item.quantity).toFixed(2)}</span>
                                             )}
@@ -1571,13 +1723,28 @@ function POSContent() {
                                         </p>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => setSelectedClient(null)}
-                                    className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/40 p-1.5 rounded-full transition-colors"
-                                    title="Remover Cliente"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                </button>
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={async () => {
+                                            setShowClientHistory(true);
+                                            setLoadingHistory(true);
+                                            const res = await getClientById(selectedClient.id);
+                                            setClientHistoryData(res.success ? res.client : null);
+                                            setLoadingHistory(false);
+                                        }}
+                                        className="text-blue-500 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/40 px-2 py-1 rounded-lg transition-colors text-[10px] font-black uppercase tracking-wide"
+                                        title="Ver historial de compras"
+                                    >
+                                        Historial
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedClient(null)}
+                                        className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/40 p-1.5 rounded-full transition-colors"
+                                        title="Remover Cliente"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <>
@@ -1619,6 +1786,46 @@ function POSContent() {
                         )}
                     </div>
 
+                    {/* Vendedor de piso */}
+                    {salespersons.length > 1 && (
+                        <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+                            {selectedSalesperson ? (
+                                <div className="flex items-center justify-between px-4 py-2 bg-purple-50 dark:bg-purple-900/20">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded-full bg-purple-200 dark:bg-purple-800 flex items-center justify-center text-purple-700 dark:text-purple-300 font-bold text-sm">
+                                            {selectedSalesperson.name.substring(0, 2).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-purple-500">Vendedor</p>
+                                            <p className="text-sm font-bold text-purple-900 dark:text-purple-100">{selectedSalesperson.name}</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setSelectedSalesperson(null)}
+                                        className="text-red-400 hover:text-red-600 p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-900/40 transition-colors"
+                                        title="Quitar vendedor"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    </button>
+                                </div>
+                            ) : (
+                                <select
+                                    value=""
+                                    onChange={(e) => {
+                                        const sp = salespersons.find(s => s.id === e.target.value);
+                                        setSelectedSalesperson(sp || null);
+                                    }}
+                                    className="w-full px-4 py-3 bg-transparent outline-none text-sm font-medium text-gray-500 cursor-pointer"
+                                >
+                                    <option value="">— Asignar Vendedor (opcional) —</option>
+                                    {salespersons.map(sp => (
+                                        <option key={sp.id} value={sp.id}>{sp.name}</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+                    )}
+
                     {/* Niveles */}
                     <div className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-sm">
                         <div className="flex flex-col gap-2 pb-4 border-b border-border">
@@ -1636,20 +1843,12 @@ function POSContent() {
                                 ))}
                             </select>
                         </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => { setDiscountType('percent'); setShowDiscountModal(true); }}
-                                className="flex-1 py-2 text-[10px] uppercase font-bold tracking-wider text-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
-                            >
-                                Descuento Específico %
-                            </button>
-                            <button
-                                onClick={() => { setDiscountType('fixed'); setShowDiscountModal(true); }}
-                                className="flex-1 py-2 text-[10px] uppercase font-bold tracking-wider text-green-500 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
-                            >
-                                Descuento Global $
-                            </button>
-                        </div>
+                        <button
+                            onClick={() => { setDiscountType('percent'); setShowDiscountModal(true); }}
+                            className="w-full py-2 text-[10px] uppercase font-bold tracking-wider text-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                        >
+                            Descuento Manual (% o $)
+                        </button>
                     </div>
                     </>
                 ) : (
@@ -1740,52 +1939,63 @@ function POSContent() {
 
                     {!isTransferMode && (
                         <>
-                            {/* Operaciones de Caja */}
-                    <div className="grid grid-cols-3 gap-2">
-                        <button 
-                            onClick={() => { if (!currentSession) { setShowOpenSessionModal(true); } else { toast.info("La caja ya está abierta."); } }}
-                            className={`flex flex-col items-center justify-center gap-1 p-3 border shadow-sm rounded-xl transition-colors group ${currentSession ? 'bg-green-50 text-green-600 border-green-200 dark:bg-green-900/20 dark:border-green-900/50' : 'bg-white dark:bg-gray-800 border-border hover:border-blue-500 hover:text-blue-500 text-gray-500'}`}
-                        >
-                            <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                            <span className="text-[9px] uppercase font-black text-center tracking-tight leading-tight">
-                                {currentSession ? 'Caja Abierta' : 'Abrir Caja'}
-                            </span>
-                        </button>
-                        <button 
-                            onClick={() => { if(currentSession) setShowMovementModal(true); else toast.warning("Abre la caja primero"); }}
-                            className={`flex flex-col items-center justify-center gap-1 p-3 border shadow-sm rounded-xl transition-colors group ${currentSession ? 'bg-white dark:bg-gray-800 border-border hover:border-green-500 hover:text-green-500 text-gray-500' : 'bg-gray-100 text-gray-400 opacity-50 cursor-not-allowed border-transparent'}`}
-                        >
-                            <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                            <span className="text-[9px] uppercase font-black text-center tracking-tight leading-tight">Entrada / Salida</span>
-                        </button>
-                        <button 
-                            onClick={() => { if(currentSession) setShowZReportModal(true); else toast.warning("Abre la caja primero"); }}
-                            className={`flex flex-col items-center justify-center gap-1 p-3 border shadow-sm rounded-xl transition-colors group ${currentSession ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:border-red-900/50' : 'bg-gray-100 text-gray-400 opacity-50 cursor-not-allowed border-transparent'}`}
-                        >
-                            <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                            <span className="text-[9px] uppercase font-black text-center tracking-tight leading-tight">Corte z</span>
-                        </button>
-                    </div>
+                            {/* Operaciones de Caja movidas a Opciones superiores */}
 
-                    <div className="bg-card border border-border rounded-2xl p-5 space-y-4 shadow-sm">
+                    <div className="bg-card border border-border rounded-2xl p-4 space-y-3 shadow-sm">
                         <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest">Método de Pago</p>
 
-                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                        {/* Input de Efectivo / Abono — ARRIBA del grid para verlo de inmediato */}
+                        {!isReturnMode && calculateBalance() > 0 && (
+                            <div className="flex gap-2 animate-in slide-in-from-top-2 duration-200">
+                                <div className="relative flex-1">
+                                    <span className="absolute left-3 top-2.5 text-gray-400 font-bold text-sm">$</span>
+                                    <input
+                                        ref={paymentInputRef}
+                                        type="number"
+                                        placeholder={`Abonar (Faltan ${formatCurrency(calculateBalance())})`}
+                                        className="w-full pl-7 pr-3 py-2.5 bg-white dark:bg-card border-2 border-blue-400 dark:border-blue-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none font-black"
+                                        value={receivedAmount}
+                                        onChange={(e) => setReceivedAmount(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleAddPartialPayment()}
+                                        autoFocus
+                                    />
+                                </div>
+                                <button
+                                    onClick={handleAddPartialPayment}
+                                    className="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20 shrink-0"
+                                >
+                                    + Agregar
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Cambio */}
+                        {!isReturnMode && calculateBalance() === 0 && selectedPaymentMethod?.toLowerCase().includes('efectivo') && parseFloat(receivedAmount) > 0 && (
+                            <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl flex justify-between items-center">
+                                <span className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400">Cambio</span>
+                                <span className="text-lg font-black text-emerald-600">{formatCurrency(parseFloat(receivedAmount) - calculateTotal())}</span>
+                            </div>
+                        )}
+
+                        {/* Grid de métodos de pago — botones más compactos */}
+                        <div className="grid grid-cols-3 gap-1.5">
                             {paymentMethods.map((method) => {
-                                let icon = '💳';
                                 const lowerName = method.name.toLowerCase();
+                                // Logo-based brands
+                                let logoSrc: string | null = null;
+                                if (lowerName.includes('clip')) logoSrc = '/logos/clip.svg';
+                                else if (lowerName.includes('zettle') || lowerName.includes('paypal') || lowerName.includes('izettle')) logoSrc = '/logos/paypal.svg';
+                                else if (lowerName.includes('ualabis') || lowerName.includes('ualá') || lowerName.includes('uala bis')) logoSrc = '/logos/ualabis.svg';
+                                // Emoji fallbacks for non-branded methods
+                                let icon = '💳';
                                 if (lowerName.includes('efectivo') || lowerName.includes('cash')) icon = '💵';
-                                else if (lowerName.includes('transferencia') || lowerName.includes('spei')) icon = '🏦';
-                                else if (lowerName.includes('clip')) icon = '📱';
-                                else if (lowerName.includes('paypal')) icon = '🌐';
-                                else if (lowerName.includes('ualabis') || lowerName.includes('ahorro')) icon = '🤝';
+                                else if (lowerName.includes('transferencia') || lowerName.includes('deposito') || lowerName.includes('depósito') || lowerName.includes('spei')) icon = '🏦';
 
                                 return (
                                     <button
                                         key={method.id}
                                         onClick={() => {
                                             setSelectedPaymentMethod(method.name);
-                                            // Si NO es efectivo, auto-completar con el total pendiente
                                             const isEfectivo = method.name.toLowerCase().includes('efectivo') || method.type === 'CASH';
                                             if (!isEfectivo && calculateBalance() > 0) {
                                                 setReceivedAmount(calculateBalance().toFixed(2));
@@ -1793,10 +2003,19 @@ function POSContent() {
                                                 setReceivedAmount('');
                                             }
                                         }}
-                                        className={`px-3 py-3 text-xs font-bold rounded-xl border transition-all flex flex-col items-center justify-center gap-1.5 min-h-[85px] ${selectedPaymentMethod === method.name ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 border-blue-500 shadow-sm' : 'bg-card text-gray-500 border-border hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                        className={`px-2 py-2.5 text-xs font-bold rounded-xl border transition-all flex flex-col items-center justify-center gap-1 min-h-[62px] ${selectedPaymentMethod === method.name ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 border-blue-500 shadow-sm' : 'bg-card text-gray-500 border-border hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                                     >
-                                        <span className="text-xl shrink-0">{icon}</span>
-                                        <span className="text-[9px] uppercase tracking-tight text-center leading-[1.1] break-words line-clamp-2 w-full">{method.name}</span>
+                                        {logoSrc ? (
+                                            <img
+                                                src={logoSrc}
+                                                alt={method.name}
+                                                className="h-7 w-7 object-contain rounded-md shrink-0"
+                                                draggable={false}
+                                            />
+                                        ) : (
+                                            <span className="text-lg shrink-0">{icon}</span>
+                                        )}
+                                        <span className="text-[8px] uppercase tracking-tight text-center leading-[1.1] break-words line-clamp-2 w-full">{method.name}</span>
                                     </button>
                                 );
                             })}
@@ -1804,52 +2023,18 @@ function POSContent() {
 
                         {/* Modo devolución: mostrar monto a devolver */}
                         {isReturnMode && calculateTotal() > 0 && (
-                            <div className="mt-3 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-2xl space-y-3 animate-in slide-in-from-top-2">
+                            <div className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl space-y-2 animate-in slide-in-from-top-2">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-xs font-black uppercase tracking-widest text-orange-700 dark:text-orange-400">💰 Monto a devolver al cliente</span>
-                                    <span className="text-2xl font-black text-orange-600">{formatCurrency(calculateTotal())}</span>
+                                    <span className="text-xs font-black uppercase tracking-widest text-orange-700 dark:text-orange-400">💰 Monto a devolver</span>
+                                    <span className="text-xl font-black text-orange-600">{formatCurrency(calculateTotal())}</span>
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-[9px] font-black uppercase tracking-widest text-gray-400">Monto entregado al cliente (opcional)</label>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-2.5 text-gray-400 font-bold">$</span>
-                                        <input type="number" placeholder={calculateTotal().toFixed(2)}
-                                            className="w-full pl-7 pr-3 py-2.5 bg-white dark:bg-card border border-orange-200 dark:border-orange-800 rounded-xl text-sm font-bold focus:ring-2 focus:ring-orange-400 outline-none"
-                                            value={receivedAmount}
-                                            onChange={e => setReceivedAmount(e.target.value)} />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Input de Efectivo / Abono */}
-                        {!isReturnMode && calculateBalance() > 0 && (
-                            <div className="mt-3 space-y-2 animate-in slide-in-from-top-2 duration-200">
                                 <div className="relative">
-                                    <span className="absolute left-3 top-2 text-gray-400 font-bold">$</span>
-                                    <input
-                                        type="number"
-                                        placeholder={calculateBalance() > 0 ? `Abonar (Faltan ${formatCurrency(calculateBalance())})` : "Efectivo Recibido"}
-                                        className="w-full pl-7 pr-3 py-2 bg-white dark:bg-card border border-blue-200 dark:border-blue-900/50 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                                    <span className="absolute left-3 top-2.5 text-gray-400 font-bold">$</span>
+                                    <input type="number" placeholder={calculateTotal().toFixed(2)}
+                                        className="w-full pl-7 pr-3 py-2.5 bg-white dark:bg-card border border-orange-200 dark:border-orange-800 rounded-xl text-sm font-bold focus:ring-2 focus:ring-orange-400 outline-none"
                                         value={receivedAmount}
-                                        onChange={(e) => setReceivedAmount(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleAddPartialPayment()}
-                                    />
+                                        onChange={e => setReceivedAmount(e.target.value)} />
                                 </div>
-                                {calculateBalance() > 0 && (
-                                    <button
-                                        onClick={handleAddPartialPayment}
-                                        className="w-full py-2 bg-blue-600 text-white rounded-lg text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20"
-                                    >
-                                        AGREGAR PAGO
-                                    </button>
-                                )}
-                                {calculateBalance() === 0 && selectedPaymentMethod?.toLowerCase().includes('efectivo') && parseFloat(receivedAmount) > 0 && (
-                                    <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/30 rounded-lg flex justify-between items-center">
-                                        <span className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400">Cambio</span>
-                                        <span className="text-lg font-black text-emerald-600">{formatCurrency(parseFloat(receivedAmount) - calculateTotal())}</span>
-                                    </div>
-                                )}
                             </div>
                         )}
                     </div>
@@ -1933,8 +2118,21 @@ function POSContent() {
                         )}
                     </button>
 
-                    <div className="text-center pt-2 pb-6">
-                        <button className="text-blue-500 text-xs font-bold hover:underline opacity-60">Teclas de acceso rápido</button>
+                    <div className="pt-2 pb-6 px-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2 text-center">Teclas de acceso rápido</p>
+                        <div className="grid grid-cols-2 gap-1">
+                            {[
+                                { key: 'F1', label: 'Refrescar página' },
+                                { key: 'F2', label: 'Buscar producto' },
+                                { key: 'F3', label: 'Agregar cliente' },
+                                { key: 'F7', label: 'Campo de pago' },
+                            ].map(({ key, label }) => (
+                                <div key={key} className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 rounded-lg px-2 py-1">
+                                    <span className="shrink-0 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-[9px] font-black rounded px-1.5 py-0.5 shadow-sm">{key}</span>
+                                    <span className="text-[9px] text-gray-500 dark:text-gray-400 font-medium truncate">{label}</span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1978,8 +2176,8 @@ function POSContent() {
                                          En el selector de tallas se captura precio y cantidades manual
                                          Los botones de corrida/paquete están disponibles SIN el selector de tallas */}
 
-                                    <div className="border border-border rounded-2xl overflow-hidden shadow-sm">
-                                        <table className="w-full text-left text-sm">
+                                    <div className="border border-border rounded-2xl overflow-x-auto shadow-sm">
+                                        <table className="w-full text-left text-sm min-w-[500px]">
                                             <thead>
                                                 <tr className="border-b border-border bg-gray-50 dark:bg-gray-800/50 text-gray-400 font-bold text-[10px] uppercase tracking-widest">
                                                     <th className="py-4 px-6">Variante</th>
@@ -1996,9 +2194,18 @@ function POSContent() {
                                                     <tr key={v.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                                                         <td className="py-3 px-6">
                                                             <div className="flex items-center gap-3">
-                                                                <div className="px-3 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-[10px] font-black">{formatVariantName(v)}</div>
+                                                                <div className="px-3 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-[10px] font-black shrink-0">{formatVariantName(v)}</div>
                                                                 <div>
-                                                                    <p className="text-[9px] uppercase tracking-wider text-gray-400 font-bold">{v.stock} disponibles</p>
+                                                                    <p className="text-[10px] uppercase tracking-wider text-gray-600 dark:text-gray-300 font-bold">{v.stock} disponibles</p>
+                                                                    {v.inventoryLevels && v.inventoryLevels.length > 1 && (
+                                                                        <div className="flex flex-col gap-0.5 mt-0.5">
+                                                                            {v.inventoryLevels.map((il: any) => (
+                                                                                <span key={il.location.id} className="text-[10px] font-bold text-gray-500 leading-tight">
+                                                                                    {il.stock} pz · {il.location.name}
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </td>
@@ -2053,6 +2260,15 @@ function POSContent() {
                                         >
                                             <span className="bg-gray-100 dark:bg-gray-700 rounded-xl px-4 py-2 font-black text-xs mb-2">{formatVariantName(v)}</span>
                                             <span className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${v.stock > 0 ? 'text-gray-400' : 'text-orange-500'}`}>{v.stock} pz</span>
+                                            {v.inventoryLevels && v.inventoryLevels.length > 1 && (
+                                                <div className="mt-1.5 flex flex-col gap-0.5 w-full">
+                                                    {v.inventoryLevels.map((il: any) => (
+                                                        <span key={il.location.id} className="text-[10px] font-bold text-gray-500 leading-tight truncate">
+                                                            {il.stock} · {il.location.name}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </button>
                                     ))}
                                 </div>
@@ -2481,45 +2697,112 @@ function POSContent() {
                             >×</button>
                         </div>
                         <div className="p-6 space-y-4 overflow-y-auto flex-1">
-                            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-border space-y-2">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-500">Fondo Inicial:</span>
-                                    <span className="font-bold text-foreground">${currentSession.openingBalance.toFixed(2)}</span>
-                                </div>
+                            {/* ── RESUMEN DE VENTAS ── */}
+                            {(() => {
+                                const allSales = currentSession.sales || [];
+                                const completed = allSales.filter((s: any) => s.status === 'COMPLETED');
+                                const returns   = allSales.filter((s: any) => s.status === 'RETURN' || s.status === 'REFUNDED');
+                                const totalSales   = completed.reduce((a: number, s: any) => a + s.total, 0);
+                                const totalReturns = returns.reduce((a: number, s: any) => a + s.total, 0);
+                                const totalDiscount = completed.reduce((a: number, s: any) => a + (s.discount || 0), 0);
 
-                                {/* Movimientos Detallados */}
-                                {(currentSession.movements || []).length > 0 && (
-                                    <div className="border-t border-border pt-2 mt-2 space-y-1">
-                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Movimientos Manuales</p>
-                                        {(currentSession.movements || []).map((m: any) => (
-                                            <div key={m.id} className="flex justify-between text-xs">
-                                                <span className="text-gray-500 line-clamp-1">{m.reason}</span>
-                                                <span className={`font-bold ${m.type === 'IN' ? 'text-green-500' : 'text-red-500'}`}>
-                                                    {m.type === 'IN' ? '+' : '-'}${m.amount.toFixed(2)}
-                                                </span>
+                                // Agrupar por método de pago
+                                const byMethod: Record<string, number> = {};
+                                completed.forEach((s: any) => {
+                                    const name = s.paymentMethod?.name || 'Efectivo';
+                                    byMethod[name] = (byMethod[name] || 0) + s.total;
+                                });
+                                const cashSales = byMethod['Efectivo'] || 0;
+
+                                const movIn  = (currentSession.movements || []).filter((m: any) => m.type === 'IN').reduce((a: number, b: any) => a + b.amount, 0);
+                                const movOut = (currentSession.movements || []).filter((m: any) => m.type === 'OUT').reduce((a: number, b: any) => a + b.amount, 0);
+                                const expectedCash = currentSession.openingBalance + cashSales + movIn - movOut;
+                                const counted = parseFloat(cashAmount) || 0;
+                                const diff = counted - expectedCash;
+
+                                return (
+                                    <>
+                                    {/* Resumen ventas */}
+                                    <div className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-border overflow-hidden">
+                                        <p className="px-4 pt-3 pb-1 text-[10px] font-black uppercase tracking-widest text-gray-400">Resumen de Ventas</p>
+                                        <div className="divide-y divide-border">
+                                            <div className="flex justify-between px-4 py-2 text-sm">
+                                                <span className="text-gray-500">Tickets cobrados</span>
+                                                <span className="font-black text-foreground">{completed.length}</span>
                                             </div>
-                                        ))}
+                                            <div className="flex justify-between px-4 py-2 text-sm">
+                                                <span className="text-gray-500">Total ventas</span>
+                                                <span className="font-black text-green-600">+${totalSales.toFixed(2)}</span>
+                                            </div>
+                                            {totalDiscount > 0 && (
+                                                <div className="flex justify-between px-4 py-2 text-sm">
+                                                    <span className="text-gray-500">Descuentos aplicados</span>
+                                                    <span className="font-bold text-orange-500">-${totalDiscount.toFixed(2)}</span>
+                                                </div>
+                                            )}
+                                            {returns.length > 0 && (
+                                                <div className="flex justify-between px-4 py-2 text-sm">
+                                                    <span className="text-gray-500">Devoluciones ({returns.length})</span>
+                                                    <span className="font-bold text-red-500">-${totalReturns.toFixed(2)}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                )}
 
-                                <div className="border-t border-border pt-2 mt-2 flex justify-between text-sm">
-                                    <span className="text-gray-500">Ventas en Efectivo:</span>
-                                    <span className="font-bold text-green-500">
-                                        +${(currentSession.sales || []).filter((s:any) => !s.paymentMethodId || s.paymentMethod?.name === 'Efectivo' || s.paymentMethod?.type === 'CASH').reduce((a: number, b: any) => a + (b.status === 'COMPLETED' ? b.total : -b.total), 0).toFixed(2) || '0.00' }
-                                    </span>
-                                </div>
-                                <div className="border-t border-border pt-2 mt-2 flex justify-between font-black text-lg">
-                                    <span>Sistema Espera:</span>
-                                    <span className="text-blue-600">
-                                        ${(
-                                            currentSession.openingBalance 
-                                            + (currentSession.movements || []).filter((m: any) => m.type === 'IN').reduce((a: number, b: any) => a + b.amount, 0)
-                                            - (currentSession.movements || []).filter((m: any) => m.type === 'OUT').reduce((a: number, b: any) => a + b.amount, 0)
-                                            + (currentSession.sales || []).filter((s:any) => !s.paymentMethodId || s.paymentMethod?.name === 'Efectivo' || s.paymentMethod?.type === 'CASH').reduce((a: number, b: any) => a + (b.status === 'COMPLETED' ? b.total : -b.total), 0)
-                                        ).toFixed(2)}
-                                    </span>
-                                </div>
-                            </div>
+                                    {/* Desglose por método de pago */}
+                                    {Object.keys(byMethod).length > 0 && (
+                                        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-border overflow-hidden">
+                                            <p className="px-4 pt-3 pb-1 text-[10px] font-black uppercase tracking-widest text-gray-400">Por Método de Pago</p>
+                                            <div className="divide-y divide-border">
+                                                {Object.entries(byMethod).map(([method, amount]) => (
+                                                    <div key={method} className="flex justify-between px-4 py-2 text-sm">
+                                                        <span className="text-gray-600 dark:text-gray-400 font-medium">{method}</span>
+                                                        <span className="font-black text-foreground">${(amount as number).toFixed(2)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Movimientos manuales */}
+                                    <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-border space-y-2">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-gray-500">Fondo Inicial</span>
+                                            <span className="font-bold text-foreground">${currentSession.openingBalance.toFixed(2)}</span>
+                                        </div>
+                                        {(currentSession.movements || []).length > 0 && (
+                                            <div className="border-t border-border pt-2 space-y-1">
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Movimientos Manuales</p>
+                                                {(currentSession.movements || []).map((m: any) => (
+                                                    <div key={m.id} className="flex justify-between text-xs">
+                                                        <span className="text-gray-500 line-clamp-1">{m.reason}</span>
+                                                        <span className={`font-bold ${m.type === 'IN' ? 'text-green-500' : 'text-red-500'}`}>
+                                                            {m.type === 'IN' ? '+' : '-'}${m.amount.toFixed(2)}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="border-t border-border pt-2 flex justify-between text-sm">
+                                            <span className="text-gray-500">Ventas en Efectivo</span>
+                                            <span className="font-bold text-green-500">+${cashSales.toFixed(2)}</span>
+                                        </div>
+                                        <div className="border-t border-border pt-2 flex justify-between font-black text-base">
+                                            <span className="text-gray-600">Sistema Espera en Caja</span>
+                                            <span className="text-blue-600">${expectedCash.toFixed(2)}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Diferencia — se calcula mientras se cuenta */}
+                                    {cashAmount && (
+                                        <div className={`flex justify-between items-center px-4 py-3 rounded-xl font-black text-sm border-2 ${diff === 0 ? 'bg-green-50 border-green-300 text-green-700' : diff > 0 ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-red-50 border-red-300 text-red-700'}`}>
+                                            <span>{diff === 0 ? '✓ Caja cuadrada' : diff > 0 ? '↑ Sobrante' : '↓ Faltante'}</span>
+                                            <span>${Math.abs(diff).toFixed(2)}</span>
+                                        </div>
+                                    )}
+                                    </>
+                                );
+                            })()}
                             
                             <div className="space-y-3">
                                 <label className="text-xs font-black uppercase tracking-widest text-gray-400">Arqueo — Conteo Físico de Caja</label>
@@ -2597,6 +2880,127 @@ function POSContent() {
                     </div>
                 </div>
             )}
+            {/* Modal - Historial de Cliente */}
+            {showClientHistory && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-card w-full max-w-lg rounded-3xl shadow-2xl border border-border flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh]">
+                        {/* Header */}
+                        <div className="flex justify-between items-center p-6 border-b border-border bg-gray-50/50 dark:bg-gray-900/50 shrink-0">
+                            <div>
+                                <h3 className="text-xl font-black text-foreground">Historial del Cliente</h3>
+                                {clientHistoryData && (
+                                    <p className="text-sm font-medium text-gray-500 mt-0.5">{clientHistoryData.name}</p>
+                                )}
+                            </div>
+                            <button
+                                onClick={() => { setShowClientHistory(false); setClientHistoryData(null); }}
+                                className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 transition-colors flex items-center justify-center font-bold text-gray-500"
+                            >×</button>
+                        </div>
+
+                        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                            {loadingHistory ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                                    <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
+                                    <p className="text-sm font-medium">Cargando historial...</p>
+                                </div>
+                            ) : !clientHistoryData ? (
+                                <div className="text-center py-12 text-gray-400">
+                                    <p className="text-sm font-medium">No se pudo cargar el historial.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Info del cliente */}
+                                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800 flex items-start gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-black text-sm shrink-0">
+                                            {clientHistoryData.name.substring(0, 2).toUpperCase()}
+                                        </div>
+                                        <div className="flex-1 min-w-0 space-y-0.5">
+                                            <p className="font-black text-foreground truncate">{clientHistoryData.name}</p>
+                                            {clientHistoryData.phone && <p className="text-xs text-gray-500 font-medium">{clientHistoryData.phone}</p>}
+                                            {clientHistoryData.email && <p className="text-xs text-gray-500 font-medium">{clientHistoryData.email}</p>}
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Crédito</p>
+                                            <p className="text-sm font-black text-green-600">${(clientHistoryData.storeCredit || 0).toFixed(2)}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* KPIs */}
+                                    {(() => {
+                                        const completedSales = (clientHistoryData.sales || []).filter((s: any) => s.status === 'COMPLETED');
+                                        const totalSpent = completedSales.reduce((a: number, s: any) => a + s.total, 0);
+                                        const avgTicket = completedSales.length > 0 ? totalSpent / completedSales.length : 0;
+                                        return (
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 text-center border border-border">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Visitas</p>
+                                                    <p className="text-2xl font-black text-foreground">{completedSales.length}</p>
+                                                </div>
+                                                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 text-center border border-border">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Total Gastado</p>
+                                                    <p className="text-lg font-black text-green-600">${totalSpent.toFixed(0)}</p>
+                                                </div>
+                                                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 text-center border border-border">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Ticket Prom.</p>
+                                                    <p className="text-lg font-black text-blue-600">${avgTicket.toFixed(0)}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Lista de compras */}
+                                    {(clientHistoryData.sales || []).length === 0 ? (
+                                        <div className="text-center py-8 text-gray-400">
+                                            <p className="text-sm font-medium">Sin compras registradas.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Compras Recientes</p>
+                                            {(clientHistoryData.sales || []).map((sale: any) => (
+                                                <div key={sale.id} className={`rounded-xl border overflow-hidden ${sale.status === 'COMPLETED' ? 'border-border' : 'border-red-200 dark:border-red-800 opacity-70'}`}>
+                                                    <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-gray-800/60">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${sale.status === 'COMPLETED' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+                                                                {sale.status === 'COMPLETED' ? 'Pagado' : 'Devuelto'}
+                                                            </span>
+                                                            <span className="text-[10px] text-gray-400 font-medium">
+                                                                {new Date(sale.createdAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className="font-black text-sm text-foreground">${sale.total.toFixed(2)}</span>
+                                                            {sale.paymentMethod && (
+                                                                <span className="ml-2 text-[10px] text-gray-400 font-medium">{sale.paymentMethod.name}</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {sale.items && sale.items.length > 0 && (
+                                                        <div className="divide-y divide-border/50">
+                                                            {sale.items.map((item: any) => (
+                                                                <div key={item.id} className="flex items-center justify-between px-4 py-1.5 text-xs">
+                                                                    <span className="text-gray-600 dark:text-gray-400 truncate flex-1 mr-2 font-medium">
+                                                                        {item.variant?.product?.name || 'Producto'}
+                                                                        {item.variant?.attributes && typeof item.variant.attributes === 'object' && Object.keys(item.variant.attributes).length > 0
+                                                                            ? ` — ${Object.values(item.variant.attributes as Record<string, string>).join('/')}`
+                                                                            : ''}
+                                                                    </span>
+                                                                    <span className="text-gray-400 font-bold whitespace-nowrap">×{item.quantity} · ${item.price.toFixed(2)}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Receipt Modal (80mm Thermal Printer format) */}
             {showReceiptModal && lastSaleData && (
                 <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
@@ -2608,23 +3012,40 @@ function POSContent() {
                         
                         <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900 flex justify-center">
                             {/* Visual representation of the 80mm thermal receipt */}
-                            <div id="thermal-receipt" className="bg-white text-black w-[80mm] min-h-[100mm] shadow-md p-4 flex flex-col font-mono text-sm leading-tight relative shrink-0">
-                                <div className="text-center mb-4 flex flex-col items-center">
-                                    {globalConfig?.logoUrl ? (
-                                        <img src={globalConfig.logoUrl} alt="Store Logo" className="h-16 object-contain mb-2 grayscale" />
-                                    ) : (
-                                        <h1 className="font-black text-xl mb-1 uppercase">{globalConfig?.storeName || 'MODA ZAPOTLANEJO'}</h1>
-                                    )}
+                            <div id="thermal-receipt" className="bg-white text-black w-[80mm] shadow-md p-3 flex flex-col font-mono text-[11px] leading-snug relative shrink-0">
+                                <div className="text-center mb-2 flex flex-col items-center">
                                     {(() => {
                                         // Buscar la locación activa: de la sesión o de las permitidas
                                         const activeLoc = currentSession?.location ||
-                                            allowedLocations.find((l: any) => l.id === selectedLocationId) ||
-                                            locations.find((l: any) => l.id === selectedLocationId);
-                                        return activeLoc?.ticketHeader ? (
-                                            <p className="text-xs font-bold mt-1">{activeLoc.ticketHeader}</p>
-                                        ) : null;
+                                            allowedLocations.find((l: any) => l.id === (selectedLocationId || currentSession?.locationId)) ||
+                                            locations.find((l: any) => l.id === (selectedLocationId || currentSession?.locationId)) ||
+                                            (allowedLocations.length === 1 ? allowedLocations[0] : null);
+                                        
+                                        return (
+                                            <>
+                                                {globalConfig?.logoUrl ? (
+                                                    <img src={globalConfig.logoUrl} alt="Store Logo" className="h-16 object-contain mb-2 grayscale" />
+                                                ) : (
+                                                    <h1 className="font-black text-xl mb-1 uppercase">
+                                                        {activeLoc?.name ? activeLoc.name : (globalConfig?.storeName || 'MODA ZAPOTLANEJO')}
+                                                    </h1>
+                                                )}
+
+                                                {/* Si hay logo, el nombre de la sucursal va debajo. Si no hay logo, el h1 ya es el nombre de la sucursal. */}
+                                                {globalConfig?.logoUrl && activeLoc?.name && (
+                                                    <h2 className="font-bold text-sm uppercase mb-1">{activeLoc.name}</h2>
+                                                )}
+
+                                                {activeLoc?.ticketHeader && (
+                                                    <p className="text-xs font-bold mt-1">{activeLoc.ticketHeader}</p>
+                                                )}
+                                                
+                                                <p className="text-xs">
+                                                    {activeLoc?.address || globalConfig?.address || 'Zapotlanejo, Jalisco'}
+                                                </p>
+                                            </>
+                                        );
                                     })()}
-                                    <p className="text-xs">{globalConfig?.address || currentSession?.location?.address || 'Zapotlanejo, Jalisco'}</p>
                                     {globalConfig?.phone && <p className="text-xs">Tel: {globalConfig.phone}</p>}
                                     {globalConfig?.taxId && <p className="text-xs">RFC: {globalConfig.taxId}</p>}
                                 </div>
@@ -2633,6 +3054,7 @@ function POSContent() {
                                     <p>Ticket: #PDV{lastSaleData.receiptNumber || lastSaleData.id?.slice(-6).toUpperCase()}</p>
                                     <p>Fecha: {lastSaleData.date.toLocaleString()}</p>
                                     <p>Cajero: {currentUser?.name || 'Cajero'}</p>
+                                    {lastSaleData.salespersonName && <p>Vendedor: {lastSaleData.salespersonName}</p>}
                                     <p>Cliente: {lastSaleData.clientName}</p>
                                     {lastSaleData.isLayaway && <p className="font-bold">* APARTADO *</p>}
                                     {lastSaleData.isReturn && <p className="font-bold">* DEVOLUCIÓN *</p>}
@@ -2651,9 +3073,12 @@ function POSContent() {
                                             const total = item.price * item.quantity;
                                             return (
                                                 <tr key={idx} className="align-top">
-                                                    <td className="py-1">{item.quantity}</td>
-                                                    <td className="py-1 break-words pr-1">{item.name} <br/><span className="text-[10px]">${item.price.toFixed(2)}</span></td>
-                                                    <td className="py-1 text-right">${total.toFixed(2)}</td>
+                                                    <td className="py-0.5 pr-1 leading-tight w-6">{item.quantity}</td>
+                                                    <td className="py-0.5 break-words pr-1 leading-tight">
+                                                        {item.name}
+                                                        {(item.variant?.color || item.variant?.size) && <span className="block text-[9px] opacity-60">{[item.variant?.color, item.variant?.size].filter(Boolean).join(' / ')}</span>}
+                                                    </td>
+                                                    <td className="py-0.5 text-right leading-tight whitespace-nowrap">${total.toFixed(2)}</td>
                                                 </tr>
                                             );
                                         })}
@@ -2708,12 +3133,13 @@ function POSContent() {
                                     </>
                                 )}
 
-                                <div className="text-xs mb-4 mt-2">
-                                    <p>Pago inicial vía: {lastSaleData.paymentMethodName}</p>
-                                    <p>Artículos: {lastSaleData.cart.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0)}</p>
+                                <div className="text-xs mb-1 mt-0.5">
+                                    <span>Pago: {lastSaleData.paymentMethodName}</span>
+                                    {' · '}
+                                    <span>{lastSaleData.cart.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0)} artículo(s)</span>
                                 </div>
 
-                                <div className="text-center text-[10px] mt-auto border-t border-dashed border-black pt-4">
+                                <div className="text-center text-[10px] border-t border-dashed border-black pt-2 mt-2">
                                     {(() => {
                                         const activeLoc = currentSession?.location ||
                                             allowedLocations.find((l: any) => l.id === selectedLocationId) ||
@@ -2743,33 +3169,23 @@ function POSContent() {
                             </button>
                             <button
                                 onClick={() => {
-                                    const receiptHtml = document.getElementById('thermal-receipt')?.outerHTML;
-                                    if (receiptHtml) {
-                                        const printWindow = window.open('', '', 'width=300,height=600');
-                                        if (printWindow) {
-                                            printWindow.document.write(`
-                                                <html>
-                                                    <head>
-                                                        <title>Imprimir Ticket</title>
-                                                        <style>
-                                                            body { margin: 0; padding: 0; display: flex; justify-content: center; background: white; }
-                                                            @page { margin: 0; size: 80mm auto; }
-                                                            * { font-family: monospace; }
-                                                        </style>
-                                                        <script src="https://cdn.tailwindcss.com"></script>
-                                                    </head>
-                                                    <body class="bg-white">
-                                                        ${receiptHtml}
-                                                    </body>
-                                                </html>
-                                            `);
-                                            printWindow.document.close();
-                                            setTimeout(() => {
-                                                printWindow.print();
-                                                setTimeout(() => printWindow.close(), 500);
-                                                setShowReceiptModal(false);
-                                            }, 500);
-                                        }
+                                    const receiptEl = document.getElementById('thermal-receipt');
+                                    if (!receiptEl) return;
+                                    // Copy the actual compiled CSS from the page so it renders identically
+                                    const styleLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(l => l.outerHTML).join('');
+                                    const inlineStyles = Array.from(document.querySelectorAll('style')).map(s => s.outerHTML).join('');
+                                    const printWindow = window.open('', '', 'width=400,height=800');
+                                    if (printWindow) {
+                                        printWindow.document.write(
+                                            '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket</title>' +
+                                            styleLinks + inlineStyles +
+                                            '<style>@page{margin:0;size:80mm auto}body{margin:0;padding:4px;background:white;display:flex;justify-content:center}.shadow-md,.shadow-2xl,.shadow-sm{box-shadow:none!important}</style>' +
+                                            '</head><body>' + receiptEl.outerHTML +
+                                            '<script>window.onload=function(){setTimeout(function(){window.print();setTimeout(function(){window.close()},500)},400)}<\/script>' +
+                                            '</body></html>'
+                                        );
+                                        printWindow.document.close();
+                                        setShowReceiptModal(false);
                                     }
                                 }}
                                 className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all flex justify-center items-center gap-2"
@@ -2778,6 +3194,153 @@ function POSContent() {
                                 Imprimir Ticket
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal - Tickets del Día */}
+            {showTodayTicketsModal && (
+                <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+                    <div className="bg-card w-full max-w-lg rounded-3xl shadow-2xl flex flex-col max-h-[90dvh] overflow-hidden">
+                        <div className="p-5 border-b border-border flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 rounded-t-3xl shrink-0">
+                            <div>
+                                <h3 className="text-lg font-black text-foreground">🖨️ Tickets del Día</h3>
+                                <p className="text-xs text-gray-500 mt-0.5">{todayTickets.length} venta{todayTickets.length !== 1 ? 's' : ''} en esta sesión</p>
+                            </div>
+                            <button onClick={() => { setShowTodayTicketsModal(false); setReprintSale(null); }} className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 hover:text-red-500 flex items-center justify-center font-bold transition-colors">✕</button>
+                        </div>
+                        {reprintSale ? (
+                            <div className="flex flex-col flex-1 overflow-hidden">
+                                <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900 flex justify-center">
+                                    <div id="reprint-receipt" className="bg-white text-black w-[80mm] min-h-[100mm] shadow-md p-4 flex flex-col font-mono text-sm leading-tight shrink-0">
+                                        <div className="text-center mb-4 flex flex-col items-center">
+                                            {globalConfig?.logoUrl ? (
+                                                <img src={globalConfig.logoUrl} alt="Logo" className="h-16 object-contain mb-2 grayscale" />
+                                            ) : (
+                                                <h1 className="font-black text-xl mb-1 uppercase">
+                                                    {reprintSale.location?.name || globalConfig?.storeName || 'PUNTO DE VENTA'}
+                                                </h1>
+                                            )}
+                                            {globalConfig?.logoUrl && reprintSale.location?.name && (
+                                                <h2 className="font-bold text-sm uppercase mb-1">{reprintSale.location.name}</h2>
+                                            )}
+                                            {reprintSale.location?.ticketHeader && <p className="text-xs font-bold mt-1">{reprintSale.location.ticketHeader}</p>}
+                                            <p className="text-xs">{reprintSale.location?.address || globalConfig?.address || 'Zapotlanejo, Jalisco'}</p>
+                                        </div>
+                                        <hr className="border-dashed border-gray-400 my-2" />
+                                        <div className="flex justify-between text-xs">
+                                            <span>REIMPRESIÓN</span>
+                                            <span className="font-bold">Ticket: #PDV{reprintSale.receiptNumber || reprintSale.id?.slice(-6).toUpperCase()}</span>
+                                        </div>
+                                        <div className="text-xs mb-1">{new Date(reprintSale.createdAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</div>
+                                        {reprintSale.client?.name && <div className="text-xs mb-1">Cliente: {reprintSale.client.name}</div>}
+                                        <hr className="border-dashed border-gray-400 my-2" />
+                                        <table className="w-full text-xs mb-2">
+                                            <thead><tr className="border-b border-gray-300"><th className="text-left pb-1">Artículo</th><th className="text-center pb-1">Cant</th><th className="text-right pb-1">Importe</th></tr></thead>
+                                            <tbody>
+                                                {reprintSale.items?.map((item: any, idx: number) => (
+                                                    <tr key={idx} className="border-b border-dashed border-gray-200">
+                                                        <td className="py-1 pr-1">
+                                                            <span>{item.variant?.product?.name || 'Producto'}</span>
+                                                            {(item.variant?.size || item.variant?.color) && (
+                                                                <div className="text-[9px] text-gray-500">{[item.variant.color, item.variant.size].filter(Boolean).join(' / ')}</div>
+                                                            )}
+                                                        </td>
+                                                        <td className="text-center py-1">{item.quantity}</td>
+                                                        <td className="text-right py-1">${(item.price * item.quantity).toFixed(2)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        <hr className="border-dashed border-gray-400 my-1" />
+                                        {reprintSale.discount > 0 && (
+                                            <div className="flex justify-between text-xs"><span>Descuento</span><span>-${reprintSale.discount.toFixed(2)}</span></div>
+                                        )}
+                                        <div className="flex justify-between font-black text-base mt-1"><span>TOTAL</span><span>${reprintSale.total.toFixed(2)}</span></div>
+                                        {reprintSale.paymentMethod?.name && (
+                                            <div className="text-xs mt-1">Pago: {reprintSale.paymentMethod.name} — ${reprintSale.amountPaid?.toFixed(2)}</div>
+                                        )}
+                                        {(reprintSale.amountPaid || 0) > reprintSale.total && (
+                                            <div className="text-xs">Cambio: ${((reprintSale.amountPaid || 0) - reprintSale.total).toFixed(2)}</div>
+                                        )}
+                                        {reprintSale.location?.ticketFooter && (
+                                            <><hr className="border-dashed border-gray-400 my-2" /><p className="text-xs text-center">{reprintSale.location.ticketFooter}</p></>
+                                        )}
+                                        <p className="text-[9px] text-center text-gray-400 mt-3">*** REIMPRESIÓN ***</p>
+                                    </div>
+                                </div>
+                                <div className="p-4 border-t border-border bg-card flex gap-3 shrink-0">
+                                    <button
+                                        onClick={() => setReprintSale(null)}
+                                        className="flex-1 py-3 rounded-xl border border-border text-sm font-bold text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                    >← Volver</button>
+                                    <button
+                                        onClick={() => {
+                                            const receiptEl = document.getElementById('reprint-receipt');
+                                            if (!receiptEl) return;
+                                            const styleLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(l => l.outerHTML).join('');
+                                            const inlineStyles = Array.from(document.querySelectorAll('style')).map(s => s.outerHTML).join('');
+                                            const win = window.open('', '', 'width=400,height=800');
+                                            if (win) {
+                                                win.document.write(
+                                                    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket</title>' +
+                                                    styleLinks + inlineStyles +
+                                                    '<style>@page{margin:0;size:80mm auto}body{margin:0;padding:4px;background:white;display:flex;justify-content:center}.shadow-md,.shadow-2xl,.shadow-sm{box-shadow:none!important}</style>' +
+                                                    '</head><body>' + receiptEl.outerHTML +
+                                                    '<script>window.onload=function(){setTimeout(function(){window.print();setTimeout(function(){window.close()},500)},400)}<\/script>' +
+                                                    '</body></html>'
+                                                );
+                                                win.document.close();
+                                            }
+                                        }}
+                                        className="flex-1 py-3 rounded-xl bg-purple-600 text-white text-sm font-bold hover:bg-purple-700 transition-colors"
+                                    >🖨️ Imprimir</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex-1 overflow-y-auto">
+                                {loadingTickets ? (
+                                    <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
+                                        <svg className="animate-spin h-8 w-8 text-purple-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                        <span className="text-sm font-bold">Cargando tickets...</span>
+                                    </div>
+                                ) : todayTickets.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
+                                        <span className="text-4xl">🧾</span>
+                                        <span className="text-sm font-bold">No hay ventas en esta sesión</span>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-border">
+                                        {todayTickets.map((sale: any) => (
+                                            <div key={sale.id} className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                                <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 flex items-center justify-center font-black text-sm shrink-0">
+                                                    #{sale.receiptNumber || '—'}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="font-bold text-sm text-foreground">${sale.total.toFixed(2)}</span>
+                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${sale.status === 'COMPLETED' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'}`}>
+                                                            {sale.status === 'COMPLETED' ? 'Completada' : sale.status}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 mt-0.5">
+                                                        {sale.client?.name || 'Cliente General'} · {sale.items?.length || 0} artículo{sale.items?.length !== 1 ? 's' : ''} · {sale.paymentMethod?.name || 'Sin método'}
+                                                    </div>
+                                                    <div className="text-[10px] text-gray-400">
+                                                        {new Date(sale.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setReprintSale(sale)}
+                                                    className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 hover:bg-purple-200 dark:hover:bg-purple-900/60 transition-colors shrink-0"
+                                                    title="Reimprimir ticket"
+                                                >🖨️</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

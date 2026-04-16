@@ -135,17 +135,25 @@ export async function quoteShipping(
         });
         if (!destAddress) return { success: false, rates: [], error: "Dirección no encontrada." };
 
-        // Obtener dirección de origen del vendedor (primera sucursal con dirección)
-        const sellerLocation = await prisma.storeLocation.findFirst({
-            where: { sellerId, address: { not: null } },
-        });
+        // Obtener CP de envío del vendedor: primero de StoreSettings, luego de sucursal, luego default
+        const [sellerSettings, sellerLocation] = await Promise.all([
+            (prisma.storeSettings as any).findUnique({
+                where: { sellerId },
+                select: { shippingZip: true, storeName: true, phone: true },
+            }),
+            prisma.storeLocation.findFirst({
+                where: { sellerId, address: { not: null } },
+            }),
+        ]);
 
-        // Si el vendedor no tiene sucursal con dirección, usar CP de Zapotlanejo como default
-        const originZip = sellerLocation?.address?.match(/\d{5}/)?.[0] || "45430";
+        const originZip =
+            sellerSettings?.shippingZip?.trim() ||
+            sellerLocation?.address?.match(/\d{5}/)?.[0] ||
+            "45430";
 
         const origin = {
-            name: "Vendedor",
-            phone: "",
+            name: sellerSettings?.storeName || "Vendedor",
+            phone: sellerSettings?.phone || "",
             street: sellerLocation?.address || "Centro",
             colonia: "Centro",
             city: "Zapotlanejo",
@@ -292,9 +300,10 @@ export async function getShipmentStatus(orderId: string) {
 
         if (!shipment) return null;
 
-        // Si tenemos ID de Skydropx, consultar estado actualizado
-        if (shipment.skydropxId && !shipment.skydropxId.startsWith("mock_")) {
-            const tracking = await getTrackingInfo(shipment.skydropxId);
+        // Si tenemos tracking number, consultar estado actualizado (nueva API: tracking + carrier)
+        const trackingRef = shipment.trackingNumber || shipment.skydropxId;
+        if (trackingRef && !trackingRef.startsWith("mock_")) {
+            const tracking = await getTrackingInfo(trackingRef, shipment.carrier || undefined);
             if (tracking.success && tracking.status) {
                 // Actualizar en BD si el status cambió
                 if (tracking.status !== shipment.status) {

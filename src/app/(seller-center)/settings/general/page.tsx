@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { getStoreSettings, updateStoreSettings, updateSellerLogo } from '../actions';
+import { getStoreSettings, updateStoreSettings, updateSellerLogo, getRequireCashSession, updateRequireCashSession, createStripeConnectLink, getStripeConnectStatus } from '../actions';
+import { useSearchParams } from 'next/navigation';
 import { validateImageFile } from '@/lib/uploadImage';
 import { processImage } from '@/lib/imageUtils';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -21,6 +22,26 @@ export default function GeneralSettingsPage() {
     const [taxId, setTaxId] = useState('');
     const [address, setAddress] = useState('');
     const [phone, setPhone] = useState('');
+    const [shippingZip, setShippingZip] = useState('');
+    const [requireCashSession, setRequireCashSession] = useState(false);
+    const [aiProvider, setAiProvider] = useState('');
+    const [aiApiKey, setAiApiKey] = useState('');
+    const [savingAi, setSavingAi] = useState(false);
+    const [showApiKey, setShowApiKey] = useState(false);
+
+    // Transferencia / Depósito
+    const [acceptsTransfer, setAcceptsTransfer] = useState(false);
+    const [transferBank, setTransferBank] = useState('');
+    const [transferAccountHolder, setTransferAccountHolder] = useState('');
+    const [transferCLABE, setTransferCLABE] = useState('');
+    const [transferAccountNumber, setTransferAccountNumber] = useState('');
+    const [transferInstructions, setTransferInstructions] = useState('');
+    const [savingTransfer, setSavingTransfer] = useState(false);
+
+    // Stripe Connect
+    const [stripeStatus, setStripeStatus] = useState<string | null>(null);
+    const [connectingStripe, setConnectingStripe] = useState(false);
+    const searchParams = useSearchParams();
 
     useEffect(() => { loadSettings(); }, []);
 
@@ -35,8 +56,33 @@ export default function GeneralSettingsPage() {
             setTaxId(res.data.taxId || '');
             setAddress(res.data.address || '');
             setPhone(res.data.phone || '');
+            setShippingZip(res.data.shippingZip || '');
+            setAiProvider(res.data.aiProvider || '');
+            setAiApiKey(res.data.aiApiKey || '');
+            setAcceptsTransfer(res.data.acceptsTransfer || false);
+            setTransferBank(res.data.transferBank || '');
+            setTransferAccountHolder(res.data.transferAccountHolder || '');
+            setTransferCLABE(res.data.transferCLABE || '');
+            setTransferAccountNumber(res.data.transferAccountNumber || '');
+            setTransferInstructions(res.data.transferInstructions || '');
         }
+        const cashRes = await getRequireCashSession();
+        setRequireCashSession(cashRes.requireCashSession);
+        // Cargar estado de Stripe Connect
+        const stripeRes = await getStripeConnectStatus();
+        setStripeStatus(stripeRes.status);
         setLoading(false);
+    };
+
+    const handleConnectStripe = async () => {
+        setConnectingStripe(true);
+        const res = await createStripeConnectLink();
+        if (res.success && res.url) {
+            window.location.href = res.url;
+        } else {
+            toast.error(res.error || 'Error al conectar con Stripe');
+            setConnectingStripe(false);
+        }
     };
 
     const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,7 +112,7 @@ export default function GeneralSettingsPage() {
 
     const handleSave = async () => {
         setSaving(true);
-        const res = await updateStoreSettings({ storeName, legalName, taxId, address, phone });
+        const res = await updateStoreSettings({ storeName, legalName, taxId, address, phone, shippingZip });
         if (res.success) {
             toast.success('Configuración actualizada');
             setSettings(res.data);
@@ -152,10 +198,232 @@ export default function GeneralSettingsPage() {
                             <input type="tel" className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition font-bold"
                                 value={phone} onChange={e => setPhone(e.target.value)} />
                         </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Código Postal de Envío 📦</label>
+                            <input type="text" maxLength={5} placeholder="Ej: 45430"
+                                className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition font-bold"
+                                value={shippingZip} onChange={e => setShippingZip(e.target.value.replace(/\D/g, ''))} />
+                            <p className="text-[10px] text-gray-400 font-medium">Skydropx usará este CP como punto de origen para cotizar envíos a tus compradores.</p>
+                        </div>
                     </div>
                 </section>
 
-                <div className="pt-6 border-t border-border flex justify-end">
+                {/* Toggle Control de Caja */}
+                <div className="pt-6 border-t border-border">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-border">
+                        <div>
+                            <p className="font-black text-sm text-foreground">Control de Caja al iniciar turno</p>
+                            <p className="text-xs text-gray-500 mt-0.5">Si está activo, el cajero deberá registrar el fondo inicial antes de operar el POS.</p>
+                        </div>
+                        <button
+                            onClick={async () => {
+                                const newVal = !requireCashSession;
+                                setRequireCashSession(newVal);
+                                const res = await updateRequireCashSession(newVal);
+                                if (res.success) toast.success(newVal ? 'Control de caja activado' : 'Control de caja desactivado');
+                                else toast.error('Error al guardar');
+                            }}
+                            className={`relative w-14 h-7 rounded-full transition-colors duration-300 focus:outline-none ${requireCashSession ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                        >
+                            <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300 ${requireCashSession ? 'translate-x-7' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Sección IA */}
+                <div className="pt-6 border-t border-border space-y-4">
+                    <div>
+                        <p className="font-black text-sm text-foreground">✨ Generación de Descripciones con IA</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Configura tu proveedor de IA para generar descripciones de productos automáticamente con tus fotos.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-black uppercase tracking-widest text-gray-400">Proveedor de IA</label>
+                            <select
+                                value={aiProvider}
+                                onChange={e => setAiProvider(e.target.value)}
+                                className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-purple-500/50 outline-none transition font-bold"
+                            >
+                                <option value="">-- Seleccionar --</option>
+                                <option value="openai">OpenAI (ChatGPT)</option>
+                                <option value="anthropic">Anthropic (Claude)</option>
+                                <option value="gemini">Google Gemini</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black uppercase tracking-widest text-gray-400">API Key</label>
+                            <div className="relative">
+                                <input
+                                    type={showApiKey ? 'text' : 'password'}
+                                    placeholder="Pega tu API Key aquí..."
+                                    value={aiApiKey}
+                                    onChange={e => setAiApiKey(e.target.value)}
+                                    className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-purple-500/50 outline-none transition font-bold pr-12"
+                                />
+                                <button type="button" onClick={() => setShowApiKey(!showApiKey)}
+                                    className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 text-sm">
+                                    {showApiKey ? '🙈' : '👁️'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex justify-end">
+                        <button
+                            onClick={async () => {
+                                setSavingAi(true);
+                                const res = await updateStoreSettings({ aiProvider, aiApiKey });
+                                if (res.success) toast.success('Configuración de IA guardada');
+                                else toast.error('Error: ' + res.error);
+                                setSavingAi(false);
+                            }}
+                            disabled={savingAi || !aiProvider || !aiApiKey}
+                            className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-purple-700 transition disabled:opacity-50"
+                        >
+                            {savingAi ? 'Guardando...' : '✨ Guardar Config. IA'}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Stripe Connect */}
+                <div className="pt-6 border-t border-border space-y-4">
+                    <div>
+                        <p className="font-black text-sm text-foreground">💳 Recibir Pagos con Tarjeta (Stripe)</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                            Conecta tu cuenta bancaria para recibir los pagos directamente. El marketplace retiene automáticamente la comisión acordada.
+                        </p>
+                    </div>
+
+                    {searchParams.get('stripe') === 'success' && stripeStatus !== 'active' && (
+                        <div className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-400 font-medium">
+                            ✅ Registro recibido. Stripe está verificando tu información (puede tardar unos minutos). Regresa aquí para ver el estado.
+                        </div>
+                    )}
+
+                    {stripeStatus === 'active' ? (
+                        <div className="flex items-center gap-4 p-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+                            <span className="text-2xl">✅</span>
+                            <div>
+                                <p className="font-black text-sm text-emerald-700 dark:text-emerald-400">Cuenta conectada y activa</p>
+                                <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-0.5">Los pagos se depositan directamente a tu cuenta bancaria, menos la comisión del marketplace.</p>
+                            </div>
+                        </div>
+                    ) : stripeStatus === 'pending_verification' ? (
+                        <div className="flex items-center gap-4 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl">
+                            <span className="text-2xl">⏳</span>
+                            <div>
+                                <p className="font-black text-sm text-amber-700 dark:text-amber-400">Verificación en proceso</p>
+                                <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">Stripe está revisando tu información. Normalmente tarda menos de 24 horas.</p>
+                            </div>
+                            <button onClick={handleConnectStripe} disabled={connectingStripe}
+                                className="ml-auto shrink-0 px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-black hover:bg-amber-700 transition disabled:opacity-50">
+                                {connectingStripe ? 'Cargando...' : 'Completar datos'}
+                            </button>
+                        </div>
+                    ) : stripeStatus === 'pending' ? (
+                        <div className="flex items-center gap-4 p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl">
+                            <span className="text-2xl">📋</span>
+                            <div>
+                                <p className="font-black text-sm text-blue-700 dark:text-blue-400">Registro incompleto</p>
+                                <p className="text-xs text-blue-600 dark:text-blue-500 mt-0.5">Falta completar el formulario de Stripe para activar los pagos.</p>
+                            </div>
+                            <button onClick={handleConnectStripe} disabled={connectingStripe}
+                                className="ml-auto shrink-0 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition disabled:opacity-50">
+                                {connectingStripe ? 'Cargando...' : 'Completar registro'}
+                            </button>
+                        </div>
+                    ) : (
+                        <button onClick={handleConnectStripe} disabled={connectingStripe}
+                            className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg shadow-indigo-500/20 disabled:opacity-50 flex items-center gap-2">
+                            {connectingStripe ? (
+                                <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Redirigiendo a Stripe...</>
+                            ) : (
+                                <>🔗 Conectar mi cuenta de Stripe</>
+                            )}
+                        </button>
+                    )}
+                    <p className="text-[10px] text-gray-400">Proceso seguro gestionado por Stripe. Tus datos bancarios nunca pasan por nuestros servidores.</p>
+                </div>
+
+                {/* Depósito / Transferencia */}
+                <div className="pt-6 border-t border-border space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="font-black text-sm text-foreground">🏦 Aceptar Depósito / Transferencia</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                                Muestra tus datos bancarios al comprador para que pague por transferencia SPEI o depósito.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => setAcceptsTransfer(v => !v)}
+                            className={`relative w-14 h-7 rounded-full transition-colors duration-300 focus:outline-none ${acceptsTransfer ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                        >
+                            <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300 ${acceptsTransfer ? 'translate-x-7' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+
+                    {acceptsTransfer && (
+                        <div className="space-y-4 p-5 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 rounded-2xl">
+                            <p className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">Datos de tu cuenta</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Banco</label>
+                                    <input type="text" placeholder="Ej: BBVA, Banorte, HSBC..."
+                                        className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-border rounded-xl focus:ring-2 focus:ring-emerald-500/50 outline-none transition font-bold text-sm"
+                                        value={transferBank} onChange={e => setTransferBank(e.target.value)} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Titular de la cuenta</label>
+                                    <input type="text" placeholder="Nombre como aparece en la cuenta"
+                                        className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-border rounded-xl focus:ring-2 focus:ring-emerald-500/50 outline-none transition font-bold text-sm"
+                                        value={transferAccountHolder} onChange={e => setTransferAccountHolder(e.target.value)} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">CLABE Interbancaria (18 dígitos)</label>
+                                    <input type="text" placeholder="000000000000000000" maxLength={18}
+                                        className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-border rounded-xl focus:ring-2 focus:ring-emerald-500/50 outline-none transition font-bold text-sm tracking-widest"
+                                        value={transferCLABE} onChange={e => setTransferCLABE(e.target.value.replace(/\D/g, ''))} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Número de Cuenta (opcional)</label>
+                                    <input type="text" placeholder="Ej: 1234567890"
+                                        className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-border rounded-xl focus:ring-2 focus:ring-emerald-500/50 outline-none transition font-bold text-sm"
+                                        value={transferAccountNumber} onChange={e => setTransferAccountNumber(e.target.value.replace(/\D/g, ''))} />
+                                </div>
+                                <div className="space-y-1.5 md:col-span-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Instrucciones adicionales (opcional)</label>
+                                    <textarea rows={2} placeholder="Ej: Enviar comprobante por WhatsApp al 33-1234-5678"
+                                        className="w-full px-4 py-3 bg-white dark:bg-gray-900 border border-border rounded-xl focus:ring-2 focus:ring-emerald-500/50 outline-none transition font-medium text-sm resize-none"
+                                        value={transferInstructions} onChange={e => setTransferInstructions(e.target.value)} />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex justify-end">
+                        <button
+                            onClick={async () => {
+                                setSavingTransfer(true);
+                                const res = await updateStoreSettings({
+                                    acceptsTransfer,
+                                    transferBank,
+                                    transferAccountHolder,
+                                    transferCLABE,
+                                    transferAccountNumber,
+                                    transferInstructions,
+                                });
+                                if (res.success) toast.success(acceptsTransfer ? 'Datos de transferencia guardados' : 'Opción de transferencia desactivada');
+                                else toast.error('Error: ' + res.error);
+                                setSavingTransfer(false);
+                            }}
+                            disabled={savingTransfer || (acceptsTransfer && (!transferBank || !transferAccountHolder || !transferCLABE))}
+                            className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition disabled:opacity-50"
+                        >
+                            {savingTransfer ? 'Guardando...' : '🏦 Guardar Datos de Transferencia'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="pt-4 flex justify-end">
                     <button onClick={handleSave} disabled={saving}
                         className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black uppercase tracking-widest text-xs hover:bg-blue-700 transition shadow-lg shadow-blue-500/20 disabled:opacity-50">
                         {saving ? 'Guardando...' : 'Guardar Configuración'}

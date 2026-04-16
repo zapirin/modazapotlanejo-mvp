@@ -82,7 +82,7 @@ export async function getAllowedLocations() {
             const allowedIds: string[] = cashier?.allowedLocationIds || [];
             if (allowedIds.length === 0) return [];
             return await prisma.storeLocation.findMany({
-                where: { id: { in: allowedIds }, isActive: true }
+                where: { id: { in: allowedIds } }
             });
         }
 
@@ -141,7 +141,7 @@ export async function createTransfer(cart: any[], sourceId: string, destId: stri
         await prisma.$transaction(async (tx) => {
             for (const item of cart) {
                 const qty = item.quantity;
-                const variantId = item.variant.id;
+                const variantId = item.variantId || item.variant?.id;
                 
                 // 1. Origen: Descontar y Registrar Movimiento
                 const sourceLevel = await tx.inventoryLevel.findUnique({
@@ -149,7 +149,7 @@ export async function createTransfer(cart: any[], sourceId: string, destId: stri
                 });
                 
                 if (!sourceLevel || sourceLevel.stock < qty) {
-                    throw new Error(`Inventario insuficiente para ${item.variant.product?.name} en la sucursal de origen.`);
+                    throw new Error(`Inventario insuficiente para ${item.name || item.variant?.product?.name} en la sucursal de origen.`);
                 }
                 
                 await tx.inventoryLevel.update({
@@ -192,6 +192,73 @@ export async function createTransfer(cart: any[], sourceId: string, destId: stri
     } catch (error: any) {
         console.error("Error creating transfer:", error);
         return { success: false, error: error.message || 'Error desconocido al traspasar inventario' };
+    }
+}
+
+export async function getSalesBySession(sessionId: string) {
+    try {
+        const sales = await prisma.sale.findMany({
+            where: { cashSessionId: sessionId },
+            orderBy: { createdAt: 'desc' },
+            include: {
+                items: {
+                    include: {
+                        variant: {
+                            include: {
+                                product: { select: { id: true, name: true, images: true } }
+                            }
+                        }
+                    }
+                },
+                paymentMethod: { select: { id: true, name: true } },
+                client: { select: { id: true, name: true } },
+                location: { select: { id: true, name: true, address: true, ticketHeader: true, ticketFooter: true } },
+            }
+        });
+        return sales;
+    } catch (error) {
+        console.error('Error fetching session sales:', error);
+        return [];
+    }
+}
+
+// Obtener vendedores de piso del seller para asignar en una venta POS
+export async function getSalespersons(locationId?: string) {
+    try {
+        const user = await getSessionUser();
+        if (!user) return [];
+
+        // Resolver el sellerId efectivo
+        let sellerId = user.id;
+        if (user.role === 'CASHIER') {
+            const cashier = await (prisma.user as any).findUnique({
+                where: { id: user.id },
+                select: { managedBySellerId: true }
+            });
+            if (!cashier?.managedBySellerId) return [];
+            sellerId = cashier.managedBySellerId;
+        } else if (user.role === 'ADMIN') {
+            return [];
+        }
+
+        // Filtrar vendedores de piso activos de este seller
+        const allSalespeople = await (prisma as any).salesperson.findMany({
+            where: { sellerId, isActive: true },
+            select: { id: true, name: true, locationIds: true, commissionType: true, commissionValue: true },
+            orderBy: { name: 'asc' }
+        });
+
+        // Si hay locationId, devolver solo los que tienen esa sucursal asignada (o los que no tienen restricción)
+        if (locationId) {
+            return allSalespeople.filter((sp: any) =>
+                !sp.locationIds || sp.locationIds.length === 0 || sp.locationIds.includes(locationId)
+            );
+        }
+
+        return allSalespeople;
+    } catch (error) {
+        console.error('Error fetching salespersons:', error);
+        return [];
     }
 }
 

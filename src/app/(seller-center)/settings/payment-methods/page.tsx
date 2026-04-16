@@ -126,7 +126,7 @@ export default function PaymentMethodsPage() {
                 <Link href="/pos" className="text-sm font-bold text-gray-400 hover:text-foreground transition-colors flex items-center gap-2">
                     ← Volver a la Caja
                 </Link>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-300">Sincronizado con Supabase</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-300">Sincronizado</p>
             </div>
         </div>
     );

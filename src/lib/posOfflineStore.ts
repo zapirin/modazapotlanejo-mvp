@@ -125,3 +125,77 @@ export async function countPendingSales(): Promise<number> {
         req.onerror = () => reject(req.error);
     });
 }
+
+// ─── Caché de productos para modo offline (IndexedDB) ───────────────────────
+const PRODUCTS_STORE_NAME = 'cached_products';
+const PRODUCTS_RECORD_KEY = 'all_products';
+
+export interface CachedProduct {
+    id: string;
+    name: string;
+    price: number;
+    images: string[];
+    sku: string | null;
+    variants: { id: string; attributes: any; stock: number; sku: string | null }[];
+    category?: { name: string } | null;
+    brand?: { name: string } | null;
+}
+
+async function openProductsDB(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('modazapo_products', 1);
+        request.onupgradeneeded = (event) => {
+            const db = (event.target as IDBOpenDBRequest).result;
+            if (!db.objectStoreNames.contains(PRODUCTS_STORE_NAME)) {
+                db.createObjectStore(PRODUCTS_STORE_NAME, { keyPath: 'key' });
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+export async function saveProductsCache(products: CachedProduct[]): Promise<void> {
+    try {
+        const db = await openProductsDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(PRODUCTS_STORE_NAME, 'readwrite');
+            const store = tx.objectStore(PRODUCTS_STORE_NAME);
+            const req = store.put({ key: PRODUCTS_RECORD_KEY, products, updatedAt: Date.now() });
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+        });
+    } catch (e) {
+        console.error('Error saving products cache:', e);
+    }
+}
+
+export async function getProductsCache(): Promise<{ products: CachedProduct[]; updatedAt: number } | null> {
+    try {
+        const db = await openProductsDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(PRODUCTS_STORE_NAME, 'readonly');
+            const store = tx.objectStore(PRODUCTS_STORE_NAME);
+            const req = store.get(PRODUCTS_RECORD_KEY);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => reject(req.error);
+        });
+    } catch {
+        return null;
+    }
+}
+
+export function searchProductsOffline(query: string, cache: CachedProduct[]): CachedProduct[] {
+    if (!query) return cache.slice(0, 30);
+    const q = query.toLowerCase();
+    return cache.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        (p.sku && p.sku.toLowerCase().includes(q)) ||
+        p.variants.some(v => v.sku && v.sku.toLowerCase().includes(q))
+    ).slice(0, 20);
+}
+
+export function filterProductsByCategory(categoryName: string, cache: CachedProduct[]): CachedProduct[] {
+    if (!categoryName) return cache.slice(0, 50);
+    return cache.filter(p => p.category?.name === categoryName).slice(0, 50);
+}

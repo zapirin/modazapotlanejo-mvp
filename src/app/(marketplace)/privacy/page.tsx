@@ -1,6 +1,12 @@
 import React from 'react';
+import { headers } from 'next/headers';
+import { getBrandConfig } from '@/lib/brand';
 
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
+    const headersList = await headers();
+    const host = headersList.get('host');
+    const brand = getBrandConfig(host);
+
     return (
         <div className="max-w-4xl mx-auto px-6 py-24 space-y-12">
             <div className="space-y-4 text-center">
@@ -12,7 +18,7 @@ export default function PrivacyPage() {
                 <section className="space-y-4">
                     <h2 className="text-2xl font-black text-foreground uppercase tracking-tight">1. Recolección de Datos</h2>
                     <p>
-                        En Moda Zapotlanejo y Zona del Vestir, nos comprometemos a proteger tu información personal. Recopilamos datos como nombre, correo electrónico y detalles de facturación únicamente para procesar tus pedidos y mejorar tu experiencia.
+                        En {brand.name}, nos comprometemos a proteger tu información personal. Recopilamos datos como nombre, correo electrónico y detalles de facturación únicamente para procesar tus pedidos y mejorar tu experiencia.
                     </p>
                 </section>
 
@@ -32,7 +38,7 @@ export default function PrivacyPage() {
                 
                 <section className="bg-gray-50 dark:bg-gray-900/50 p-8 rounded-[32px] border border-border italic">
                     <p className="text-sm">
-                        Última actualización: 11 de Marzo de 2026. Para cualquier duda sobre tus datos, contacta a privacidad@modazapotlanejo.com
+                        Última actualización: 30 de Marzo de 2026. Para cualquier duda sobre tus datos, contacta a privacidad@{brand.domain}
                     </p>
                 </section>
             </div>

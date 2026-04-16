@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from '@/lib/prisma';
+import { getBrandConfig, mergeBrandWithDB } from '@/lib/brand';
 
 export async function getProducts(filters: { 
     category?: string;
@@ -15,9 +16,15 @@ export async function getProducts(filters: {
     offset?: number;
     onlyWithStock?: boolean;
     priceType?: 'all' | 'wholesale' | 'retail';
+    sellerId?: string;
 }) {
     try {
         const where: any = { isOnline: true, isActive: true };
+
+        // Filter by seller for single-vendor stores
+        if (filters.sellerId) {
+            where.sellerId = filters.sellerId;
+        }
 
         if (filters.category) {
             where.category = { slug: filters.category };
@@ -94,7 +101,7 @@ export async function getProducts(filters: {
                     tags: true,
                     variants: { select: { id: true, stock: true } },
                     // @ts-ignore
-                    seller: { select: { id: true, name: true, businessName: true, logoUrl: true } },
+                    seller: { select: { id: true, name: true, businessName: true, logoUrl: true, sellerSlug: true } },
                 }
             }),
             prisma.product.count({ where }),
@@ -107,12 +114,24 @@ export async function getProducts(filters: {
     }
 }
 
-export async function getBrandsWithCounts() {
+export async function getBrands(sellerId?: string) {
     try {
+        const where: any = {
+            products: {
+                some: sellerId
+                    ? { sellerId, isOnline: true, isActive: true }
+                    : { isOnline: true, isActive: true }
+            }
+        };
         return await prisma.brand.findMany({
+            where,
             include: {
                 _count: {
-                    select: { products: true }
+                    select: { 
+                        products: { 
+                            where: sellerId ? { sellerId, isOnline: true, isActive: true } : { isOnline: true, isActive: true } 
+                        } 
+                    }
                 }
             },
             orderBy: { name: 'asc' }
@@ -122,31 +141,22 @@ export async function getBrandsWithCounts() {
     }
 }
 
-export async function getBrands() {
-    try {
-        return await prisma.brand.findMany({
-            orderBy: { name: 'asc' }
-        });
-    } catch (error) {
-        return [];
-    }
-}
-
-export async function getLatestProducts(limit = 8) {
-    const result = await getProducts({ limit });
+export async function getLatestProducts(limit = 8, sellerId?: string) {
+    const result = await getProducts({ limit, sellerId });
     return result.products;
 }
 
-export async function getNewArrivals(limit = 4) {
-    const result = await getProducts({ limit, sort: 'createdAt_desc' });
+export async function getNewArrivals(limit = 4, sellerId?: string) {
+    const result = await getProducts({ limit, sort: 'createdAt_desc', sellerId });
     return result.products;
 }
 
-export async function getBestSellers(limit = 4) {
+export async function getBestSellers(limit = 4, sellerId?: string) {
     try {
-        // Simple popularity based on wishlist count or just latest for now if order data is low
+        const where: any = { isOnline: true, isActive: true };
+        if (sellerId) where.sellerId = sellerId;
         const products = await prisma.product.findMany({
-            where: { isOnline: true, isActive: true },
+            where,
             orderBy: {
                 // @ts-ignore
                 wishlists: { _count: 'desc' }
@@ -157,7 +167,7 @@ export async function getBestSellers(limit = 4) {
                 category: true,
                 subcategory: true,
                 // @ts-ignore
-                seller: { select: { id: true, name: true, businessName: true, logoUrl: true } },
+                seller: { select: { id: true, name: true, businessName: true, logoUrl: true, sellerSlug: true } },
             }
         });
         return products;
@@ -170,13 +180,23 @@ export async function getFeaturedCategories() {
     return getCategories();
 }
 
-export async function getCategories() {
+export async function getCategories(sellerId?: string) {
     try {
         const CATEGORY_ORDER = ['DAMAS', 'CABALLEROS', 'NIÑOS', 'ACCESORIOS', 'CALZADO'];
+        const productFilter = sellerId
+            ? { sellerId, isOnline: true, isActive: true }
+            : { isOnline: true, isActive: true };
+
         const cats = await prisma.category.findMany({
+            where: { products: { some: productFilter } },
             include: {
-                subcategories: { orderBy: { name: 'asc' } },
-                _count: { select: { products: true } }
+                subcategories: {
+                    where: { products: { some: productFilter } },
+                    orderBy: { name: 'asc' }
+                },
+                _count: {
+                    select: { products: { where: productFilter } }
+                }
             },
         });
         // Ordenar según el orden definido
@@ -193,19 +213,21 @@ export async function getCategories() {
     }
 }
 
-export async function getProductDetail(id: string) {
+export async function getProductDetail(slugOrId: string) {
     try {
-        const product = await prisma.product.findUnique({
-            where: { id },
-            include: {
-                brand: true,
-                category: true,
-                subcategory: true,
-                variants: { orderBy: { createdAt: 'asc' } },
-                // @ts-ignore
-                seller: { select: { id: true, name: true, businessName: true, logoUrl: true } },
-            }
-        });
+        const include = {
+            brand: true,
+            category: true,
+            subcategory: true,
+            variants: { orderBy: { createdAt: 'asc' } },
+            // @ts-ignore
+            seller: { select: { id: true, name: true, businessName: true, logoUrl: true, sellerSlug: true } },
+        };
+        // Try slug first, then fall back to ID for backwards compatibility
+        let product = await (prisma.product as any).findUnique({ where: { slug: slugOrId }, include });
+        if (!product) {
+            product = await (prisma.product as any).findUnique({ where: { id: slugOrId }, include });
+        }
         return product;
     } catch (error) {
         console.error("Error fetching product detail:", error);
@@ -281,10 +303,9 @@ export async function getMarketplacePriceTiers(sellerId: string) {
 
 export async function getAdjacentProducts(productId: string) {
     try {
-        const current = await prisma.product.findUnique({
-            where: { id: productId },
-            select: { id: true, createdAt: true, categoryId: true }
-        });
+        // Accept slug or id
+        let current = await (prisma.product as any).findUnique({ where: { slug: productId }, select: { id: true, createdAt: true, categoryId: true } });
+        if (!current) current = await prisma.product.findUnique({ where: { id: productId }, select: { id: true, createdAt: true, categoryId: true } });
         if (!current) return { prev: null, next: null };
 
         const baseWhere: any = { isOnline: true, isActive: true };
@@ -300,7 +321,7 @@ export async function getAdjacentProducts(productId: string) {
                     createdAt: { lt: current.createdAt },
                 },
                 orderBy: { createdAt: 'desc' },
-                select: { id: true, name: true, images: true }
+                select: { id: true, slug: true, name: true, images: true } as any
             }),
             prisma.product.findFirst({
                 where: {
@@ -308,13 +329,13 @@ export async function getAdjacentProducts(productId: string) {
                     createdAt: { gt: current.createdAt },
                 },
                 orderBy: { createdAt: 'asc' },
-                select: { id: true, name: true, images: true }
+                select: { id: true, slug: true, name: true, images: true } as any
             })
         ]);
 
         return {
-            prev: prevProduct ? { id: prevProduct.id, name: prevProduct.name, image: (prevProduct.images as string[])?.[0] || null } : null,
-            next: nextProduct ? { id: nextProduct.id, name: nextProduct.name, image: (nextProduct.images as string[])?.[0] || null } : null,
+            prev: prevProduct ? { id: (prevProduct as any).slug || (prevProduct as any).id, name: (prevProduct as any).name, image: ((prevProduct as any).images as string[])?.[0] || null } : null,
+            next: nextProduct ? { id: (nextProduct as any).slug || (nextProduct as any).id, name: (nextProduct as any).name, image: ((nextProduct as any).images as string[])?.[0] || null } : null,
         };
     } catch (error) {
         console.error("Error fetching adjacent products:", error);
@@ -322,17 +343,21 @@ export async function getAdjacentProducts(productId: string) {
     }
 }
 
-export async function getLandingStats() {
+export async function getLandingStats(sellerId?: string) {
     try {
+        const productWhere: any = { isOnline: true, isActive: true };
+        const newProductWhere: any = {
+            isOnline: true, isActive: true,
+            createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+        };
+        if (sellerId) {
+            productWhere.sellerId = sellerId;
+            newProductWhere.sellerId = sellerId;
+        }
         const [totalSellers, totalProducts, newThisWeek, totalOrders] = await Promise.all([
-            prisma.user.count({ where: { role: 'SELLER', isActive: true } }),
-            prisma.product.count({ where: { isOnline: true, isActive: true } }),
-            prisma.product.count({
-                where: {
-                    isOnline: true, isActive: true,
-                    createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
-                }
-            }),
+            sellerId ? 1 : prisma.user.count({ where: { role: 'SELLER', isActive: true } }),
+            prisma.product.count({ where: productWhere }),
+            prisma.product.count({ where: newProductWhere }),
             prisma.order.count({ where: { status: { in: ['COMPLETED', 'SHIPPED', 'ACCEPTED'] } } }),
         ]);
         return { totalSellers, totalProducts, newThisWeek, totalOrders };
@@ -359,4 +384,69 @@ export async function getProductImages(productIds: string[]): Promise<Record<str
         }
         return map;
     } catch { return {}; }
+}
+
+export async function getActiveBrandConfig(host: string | null) {
+    const baseConfig = getBrandConfig(host);
+    
+    try {
+        if (!host) return baseConfig;
+        
+        const cleanHost = host.split(':')[0].toLowerCase().replace(/^www\./, '');
+        // Si es el subdominio de preview de Kalexa, buscar por kalexafashion.com en la BD
+        const lookupHost = cleanHost.includes('kalexa.modazapotlanejo') ? 'kalexafashion.com' : cleanHost;
+        
+        const dbBrand = await prisma.brandConfig.findFirst({
+            where: { 
+                domain: { contains: lookupHost, mode: 'insensitive' },
+                isActive: true
+            }
+        });
+        
+        if (dbBrand) {
+            return mergeBrandWithDB(baseConfig, dbBrand);
+        }
+        
+        return baseConfig;
+    } catch (error) {
+        console.error('Error fetching brand config from DB:', error);
+        return baseConfig;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// DATOS DE TRANSFERENCIA DEL VENDEDOR (para el carrito)
+// ---------------------------------------------------------------------------
+
+export async function getSellerTransferSettings(sellerId: string): Promise<{
+    acceptsTransfer: boolean;
+    transferBank?: string;
+    transferAccountHolder?: string;
+    transferCLABE?: string;
+    transferAccountNumber?: string;
+    transferInstructions?: string;
+}> {
+    try {
+        const settings = await (prisma.storeSettings as any).findUnique({
+            where: { sellerId },
+            select: {
+                acceptsTransfer:       true,
+                transferBank:          true,
+                transferAccountHolder: true,
+                transferCLABE:         true,
+                transferAccountNumber: true,
+                transferInstructions:  true,
+            },
+        });
+        return {
+            acceptsTransfer:       settings?.acceptsTransfer       ?? false,
+            transferBank:          settings?.transferBank          ?? undefined,
+            transferAccountHolder: settings?.transferAccountHolder ?? undefined,
+            transferCLABE:         settings?.transferCLABE         ?? undefined,
+            transferAccountNumber: settings?.transferAccountNumber ?? undefined,
+            transferInstructions:  settings?.transferInstructions  ?? undefined,
+        };
+    } catch {
+        return { acceptsTransfer: false };
+    }
 }

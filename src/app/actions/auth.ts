@@ -4,8 +4,8 @@ import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { randomBytes, createHash } from 'crypto';
 import { Role } from '@/generated/client';
-import { sendEmail } from '@/lib/email/resend';
-import { sendWelcomeToBuyer } from '@/lib/email/templates';
+import { sendWelcomeToBuyer, sendPasswordResetEmail } from '@/lib/email/templates';
+import { getBrandConfig } from '@/lib/brand';
 
 function hashPassword(password: string) {
     return createHash('sha256').update(password).digest('hex');
@@ -18,14 +18,13 @@ function hashToken(token: string) {
 export async function requestPasswordReset(email: string) {
     try {
         const normalizedEmail = email.toLowerCase().trim();
-        const user = await prisma.user.findUnique({
-            where: { email: normalizedEmail }
+        const user = await prisma.user.findFirst({
+            where: { email: normalizedEmail },
+            select: { id: true, registeredDomain: true }
         });
 
         if (!user) {
-            // We don't want to leak if a user exists or not, but for MVP it's often okay.
-            // However, a better UX/Security practice is "If an account exists, you will receive an email".
-            return { success: true }; 
+            return { success: true };
         }
 
         const token = randomBytes(32).toString('hex');
@@ -40,26 +39,27 @@ export async function requestPasswordReset(email: string) {
             }
         });
 
-        const resetLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+        // Resolve brand from the domain where the user registered
+        const domain = (user as any).registeredDomain || 'modazapotlanejo.com';
+        const brand = getBrandConfig(domain);
+        const BRAND_COLORS: Record<string, string> = {
+            blue: '#2563eb', violet: '#7c3aed', kalexa: '#8124E3',
+        };
+        const brandColor = BRAND_COLORS[brand.primaryColor] || '#2563eb';
 
-        await sendEmail({
-            to: normalizedEmail,
-            subject: 'Restablecer contraseña - Moda Zapotlanejo',
-            html: `
-                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #2563eb;">Moda Zapotlanejo</h2>
-                    <p>Has solicitado restablecer tu contraseña. Haz clic en el siguiente enlace para continuar:</p>
-                    <a href="${resetLink}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Restablecer Contraseña</a>
-                    <p style="margin-top: 20px; font-size: 14px; color: #666;">Este enlace expirará en 1 hora.</p>
-                    <p style="font-size: 14px; color: #666;">Si no solicitaste este cambio, puedes ignorar este correo.</p>
-                </div>
-            `
+        const resetLink = `https://${domain}/reset-password?token=${token}`;
+
+        await sendPasswordResetEmail({
+            email: normalizedEmail,
+            resetLink,
+            brandName: brand.name,
+            brandColor,
+            domain,
         });
 
         return { success: true };
     } catch (error: any) {
         console.error("Request Password Reset Error:", error);
-        // Include partial error message to help debug if it's a DB issue
         const errorMessage = error instanceof Error ? error.message : String(error);
         return { success: false, error: `Error: ${errorMessage.substring(0, 500)}` };
     }
@@ -98,17 +98,37 @@ export async function resetPassword(token: string, newPassword: string) {
     }
 }
 
-export async function login(email: string, password?: string) {
+export async function login(email: string, password?: string, registeredDomain?: string) {
     try {
         const normalizedEmail = email.toLowerCase().trim();
         
-        const user = await prisma.user.findUnique({
-            where: { email: normalizedEmail },
-            include: { location: true }
-        });
+        // Domain-aware user lookup:
+        // If registeredDomain is provided (e.g. from kalexafashion.com), look for users on that domain
+        // Otherwise, look for users with null domain (marketplace/seller-center users)
+        let user;
+        if (registeredDomain) {
+            user = await prisma.user.findFirst({
+                where: { email: normalizedEmail, registeredDomain },
+                include: { location: true }
+            });
+        }
+
+        // Fallback or Admin check:
+        if (!user) {
+            user = await prisma.user.findFirst({
+                where: { email: normalizedEmail },
+                include: { location: true }
+            });
+        }
 
         if (!user) {
             return { success: false, error: 'Usuario no encontrado' };
+        }
+
+        // Domain restriction bypass for ADMINs
+        if (user.role !== 'ADMIN' && registeredDomain && user.registeredDomain !== registeredDomain) {
+            // If it's a buyer/seller, they MUST match the domain they are logging into
+            return { success: false, error: 'Este usuario no pertenece a esta tienda' };
         }
 
         // If user has a password set, we MUST check it
@@ -191,6 +211,7 @@ export async function registerBuyer(data: {
     isWholesale: boolean;
     businessName?: string;
     taxId?: string;
+    registeredDomain?: string;
     shippingAddress?: {
         name: string;
         phone: string;
@@ -203,9 +224,11 @@ export async function registerBuyer(data: {
 }) {
     try {
         const normalizedEmail = data.email.toLowerCase().trim();
+        const domain = data.registeredDomain || null;
         
-        const existing = await prisma.user.findUnique({
-            where: { email: normalizedEmail }
+        // Check for existing user on this specific domain
+        const existing = await prisma.user.findFirst({
+            where: { email: normalizedEmail, registeredDomain: domain }
         });
 
         if (existing) {
@@ -220,7 +243,8 @@ export async function registerBuyer(data: {
                 role: Role.BUYER,
                 isWholesale: data.isWholesale,
                 businessName: data.businessName,
-                taxId: data.taxId
+                taxId: data.taxId,
+                registeredDomain: domain,
             }
         });
 

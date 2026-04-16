@@ -1,6 +1,8 @@
 import { getSessionUser } from '@/app/actions/auth';
 import { prisma } from '@/lib/prisma';
 import DashboardClient from './DashboardClient';
+
+export const dynamic = 'force-dynamic';
 export default async function SellerDashboardPage({ searchParams = {} }: { searchParams?: any }) {
     const user = await getSessionUser();
     
@@ -16,25 +18,28 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
     }
 
     // Fetch metrics
-    const now = new Date();
-    
     const isSeller = (user?.role as string) === 'SELLER';
     const isAdmin = (user?.role as string) === 'ADMIN';
     const posDisabled = (searchParams as any)?.error === 'pos_disabled';
 
-    // Today's range
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
-    
-    // 7 days ago range
-    const sevenDaysAgo = new Date(now);
-    sevenDaysAgo.setDate(now.getDate() - 6);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
+    // Timezone helpers — all date ranges use America/Mexico_City midnight
+    // toLocaleString trick: parse UTC timestamp as MX wall-clock time
+    const toMXTime = (d: Date) =>
+        new Date(d.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+    // Returns a UTC Date representing midnight of (today - daysAgo) in Mexico City
+    const startOfDayInMX = (daysAgo = 0): Date => {
+        const nowMX = toMXTime(new Date());
+        nowMX.setHours(0, 0, 0, 0);
+        nowMX.setDate(nowMX.getDate() - daysAgo);
+        const offset = new Date().getTime() - toMXTime(new Date()).getTime();
+        return new Date(nowMX.getTime() + offset);
+    };
+    // "Today" in Mexico City for label/trend generation
+    const nowMX = toMXTime(new Date());
 
-    // 30 days ago range
-    const thirtyDaysAgo = new Date(now);
-    thirtyDaysAgo.setDate(now.getDate() - 29);
-    thirtyDaysAgo.setHours(0, 0, 0, 0);
+    const startOfToday  = startOfDayInMX(0);
+    const sevenDaysAgo  = startOfDayInMX(6);
+    const thirtyDaysAgo = startOfDayInMX(29);
 
     // Dynamic filters based on role
     const _locationFilter = (isAdmin || isSeller) ? {} : (user?.locationId ? { locationId: user.locationId } : {});
@@ -84,10 +89,11 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
         prisma.sale.findMany({
             where: {
                ..._locationFilter,
-               ..._sellerFilter
+               ..._sellerFilter,
+               createdAt: { gte: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) }
             },
             orderBy: { createdAt: 'desc' },
-            take: 10,
+            take: 300,
             include: {
                 paymentMethod: true,
                 items: {
@@ -95,6 +101,7 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
                 },
                 location: true,
                 seller: true,
+                salesperson: { select: { id: true, name: true } },
                 cashSession: {
                     include: {
                         openedBy: { select: { id: true, name: true } }
@@ -186,10 +193,10 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
     // Calculate Category Distribution and 30-day Trend
     const categoryMap: Record<string, number> = {};
     const thirtyDayTrend = Array.from({length: 30}, (_, i) => {
-        const d = new Date(now);
-        d.setDate(now.getDate() - (29 - i));
+        const d = new Date(nowMX);
+        d.setDate(nowMX.getDate() - (29 - i));
         return {
-            dateStr: d.toISOString().split('T')[0],
+            dateStr: d.toLocaleDateString('en-CA'), // YYYY-MM-DD in MX local
             dayName: d.toLocaleDateString('es-MX', { weekday: 'short' }),
             day: d.getDate(),
             total: 0
@@ -197,8 +204,8 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
     });
 
     (thirtyDaySalesRaw as any[]).forEach(sale => {
-        // Trend
-        const dStr = sale.createdAt.toISOString().split('T')[0];
+        // Trend — bucket by Mexico City date, not UTC
+        const dStr = sale.createdAt.toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
         const bucket = thirtyDayTrend.find(b => b.dateStr === dStr);
         if (bucket) bucket.total += sale.total;
 
@@ -297,6 +304,7 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
         sellerName: sale.seller?.name || 'Sistema',
         locationName: sale.location?.name || 'General',
         cashierName: (sale as any).cashSession?.openedBy?.name || null,
+        salespersonName: (sale as any).salesperson?.name || null,
         cart: sale.items.map((i: any) => ({
             name: `${i.variant.product.name} (${i.variant.color ?? ''} ${i.variant.size ?? ''})`.replace('()', '').trim(),
             quantity: i.quantity,

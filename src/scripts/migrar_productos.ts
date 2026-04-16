@@ -17,7 +17,7 @@ async function main() {
     console.log("Iniciando fusión inteligente de items_export.xlsx (Catálogo) y inventory_list.xlsx (Stock)...");
     
     // 1. Obtener al vendedor Kalexa
-    const seller = await prisma.user.findUnique({
+    const seller = await prisma.user.findFirst({
         where: { email: 'kalexa.fashion@gmail.com' }
     });
     if (!seller) throw new Error("No se encontró al vendedor 'kalexa.fashion@gmail.com'.");
@@ -27,7 +27,7 @@ async function main() {
     for (const cat of categoriesList) categoriesMap.set(cat.name, cat.id);
     
     // 2. Cargar Excel #1: Catálogo (Descripciones, Precios)
-    const itemsWb = xlsx.readFile('/Users/juandelatorredelreal/Downloads/items_export.xlsx');
+    const itemsWb = xlsx.readFile('./items_export.xlsx');
     const itemsData: any[] = xlsx.utils.sheet_to_json(itemsWb.Sheets[itemsWb.SheetNames[0]]);
     
     const itemsMap = new Map<string, any>();
@@ -42,7 +42,7 @@ async function main() {
     console.log(` -> Excel #1 (Catálogo) procesado en memoria: ${itemsMap.size} identificadores leídos.`);
 
     // 3. Cargar Excel #2: Inventario (Cantidades Reales)
-    const invWb = xlsx.readFile('/Users/juandelatorredelreal/Downloads/inventory_list.xlsx');
+    const invWb = xlsx.readFile('./inventory_list.xlsx');
     const invData: any[] = xlsx.utils.sheet_to_json(invWb.Sheets[invWb.SheetNames[0]]);
     
     let inventariosAsignados = 0;
@@ -175,7 +175,27 @@ async function main() {
         return;
     }
 
-    console.log("Desalojando posibles iteraciones viejas de la base de datos...");
+    console.log("Desalojando datos transaccionales para evitar errores de integridad (Limpieza Total de Migración)...");
+    
+    // El orden importa para evitar errores de FK
+    await prisma.orderItem.deleteMany({});
+    await prisma.sellerReview.deleteMany({});
+    await prisma.shipment.deleteMany({});
+    await prisma.order.deleteMany({});
+    
+    await prisma.layawayPayment.deleteMany({});
+    await prisma.saleItem.deleteMany({});
+    await prisma.sale.deleteMany({});
+    
+    await prisma.cashMovement.deleteMany({});
+    await prisma.storeAccountPayment.deleteMany({});
+    await prisma.cashRegisterSession.deleteMany({});
+    
+    await prisma.inventoryMovement.deleteMany({});
+    await prisma.inventoryLevel.deleteMany({});
+    await prisma.wishlist.deleteMany({});
+
+    console.log("Borrando modelos de productos y variantes viejos...");
     await prisma.variant.deleteMany({ where: { id: { startsWith: 'mig-var-' } } });
     await prisma.product.deleteMany({ where: { id: { startsWith: 'mig-prod-' } } });
 

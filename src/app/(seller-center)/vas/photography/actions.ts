@@ -32,3 +32,15 @@ export async function createPhotographyRequest(data: {
         return { success: false, error: error.message || "Error al procesar la solicitud" };
     }
 }
+
+export async function getPhotographySettings() {
+    try {
+        const settings = await prisma.marketplaceSettings.findFirst();
+        return {
+            enabled: (settings as any)?.photographyEnabled !== false,
+            prices: (settings as any)?.photographyPrices || []
+        };
+    } catch {
+        return { enabled: true, prices: [] };
+    }
+}

@@ -5,21 +5,39 @@ import Link from 'next/link';
 import ProductCardButtons from './ProductCardButtons';
 import GenerateSKUsButton from './GenerateSKUsButton';
 import BulkActionsModal from './BulkActionsModal';
+import dynamic from 'next/dynamic';
+const BarcodePrintModal = dynamic(() => import('./BarcodePrintModal'), { ssr: false });
 
-export default function ProductsGridClient({ products, limitNum, limitError }: any) {
+export default function ProductsGridClient({ products, categories, brands, suppliers, limitNum, limitError }: any) {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+    const [showBarcodeModal, setShowBarcodeModal] = useState(false);
     const [activeTab, setActiveTab] = useState('all'); // all, published, draft
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('list'); // Default to list for Kalexa
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState('');
+    const [selectedBrand, setSelectedBrand] = useState('');
+    const [selectedSupplier, setSelectedSupplier] = useState('');
+    const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+
+    const safeCategories = categories || [];
+    const safeBrands = brands || [];
+    const safeSuppliers = suppliers || [];
 
     const publishedCount = products.filter((p: any) => p.isOnline || p.isPOS).length;
     const draftCount = products.filter((p: any) => !p.isOnline && !p.isPOS).length;
     const missingSkuCount = products.filter((p: any) => !p.sku).length;
 
     const filteredProducts = products.filter((p: any) => {
-        if (activeTab === 'published') return p.isOnline || p.isPOS;
-        if (activeTab === 'draft') return !p.isOnline && !p.isPOS;
-        return true;
+        const matchTab = activeTab === 'published' ? (p.isOnline || p.isPOS) :
+                         activeTab === 'draft' ? (!p.isOnline && !p.isPOS) : true;
+        const matchSearch = searchQuery === '' ||
+            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchCategory = selectedCategory === '' || p.categoryId === selectedCategory;
+        const matchBrand = selectedBrand === '' || p.brandId === selectedBrand;
+        const matchSupplier = selectedSupplier === '' || p.supplierId === selectedSupplier;
+        return matchTab && matchSearch && matchCategory && matchBrand && matchSupplier;
     });
 
     const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,6 +82,86 @@ export default function ProductsGridClient({ products, limitNum, limitError }: a
                 </div>
             </div>
 
+            {/* Buscador y Filtros */}
+            <div className="mb-4 bg-white border border-gray-200 rounded-2xl shadow-sm p-4 flex flex-col gap-3">
+                <div className="flex gap-3">
+                    <div className="flex-1 relative">
+                        <span className="absolute left-4 top-3.5 text-gray-400">🔍</span>
+                        <input
+                            type="text"
+                            placeholder="Buscar por nombre o modelo..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition font-medium"
+                        />
+                        {searchQuery && (
+                            <button onClick={() => setSearchQuery('')} className="absolute right-4 top-3 text-gray-400 hover:text-gray-600 font-bold text-lg">×</button>
+                        )}
+                    </div>
+                    <button
+                        onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+                        className={`px-5 py-3 rounded-xl border font-bold text-sm transition-all flex items-center gap-2 ${isFiltersOpen ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}
+                    >
+                        <span>{isFiltersOpen ? '▲' : '🔬'}</span> Filtros Adicionales
+                    </button>
+                    {(selectedCategory || selectedBrand || selectedSupplier) && (
+                        <button onClick={() => { setSelectedCategory(''); setSelectedBrand(''); setSelectedSupplier(''); }} className="px-4 py-3 text-red-500 font-bold hover:bg-red-50 rounded-xl transition border border-red-200">
+                            Limpiar
+                        </button>
+                    )}
+                </div>
+                {isFiltersOpen && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-3 border-t border-gray-100">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest pl-1">Categoría</label>
+                            <select
+                                value={selectedCategory}
+                                onChange={(e) => setSelectedCategory(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500/50 transition font-bold text-sm text-gray-700"
+                            >
+                                <option value="">Todas las categorías</option>
+                                {safeCategories.map((c: any) => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest pl-1">Marca</label>
+                            <select
+                                value={selectedBrand}
+                                onChange={(e) => setSelectedBrand(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500/50 transition font-bold text-sm text-gray-700"
+                            >
+                                <option value="">Todas las Marcas</option>
+                                {safeBrands.map((b: any) => (
+                                    <option key={b.id} value={b.id}>{b.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest pl-1">Proveedor</label>
+                            <select
+                                value={selectedSupplier}
+                                onChange={(e) => setSelectedSupplier(e.target.value)}
+                                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500/50 transition font-bold text-sm text-gray-700"
+                            >
+                                <option value="">Todos los Proveedores</option>
+                                {safeSuppliers.map((s: any) => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Contador de resultados */}
+            {(searchQuery || selectedCategory || selectedBrand || selectedSupplier) && (
+                <div className="mb-3 text-sm text-gray-500 font-medium px-1">
+                    Mostrando <span className="font-black text-foreground">{filteredProducts.length}</span> de <span className="font-black text-foreground">{products.length}</span> productos
+                </div>
+            )}
+
             {/* Pestañas (Tabs) y Bulk Actions Bar */}
             <div className="border-b border-gray-200 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex gap-6 overflow-x-auto whitespace-nowrap">
@@ -86,11 +184,17 @@ export default function ProductsGridClient({ products, limitNum, limitError }: a
                     {selectedIds.length > 0 && (
                         <div className="flex items-center gap-3 bg-blue-50 py-1.5 px-4 rounded-xl border border-blue-100 shadow-sm animate-fade-in">
                             <span className="text-blue-800 font-bold text-sm hidden sm:inline">{selectedIds.length} seleccionados</span>
-                            <button 
+                            <button
                                 onClick={() => setIsBulkModalOpen(true)}
                                 className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-md hover:bg-blue-700 transition"
                             >
                                 ⚡ Editar Masivamente
+                            </button>
+                            <button
+                                onClick={() => setShowBarcodeModal(true)}
+                                className="bg-gray-800 text-white px-4 py-1.5 rounded-lg text-sm font-bold shadow-md hover:bg-gray-900 transition flex items-center gap-1.5"
+                            >
+                                🏷️ Etiquetas
                             </button>
                             <button onClick={() => setSelectedIds([])} className="text-sm font-bold text-gray-500 hover:text-red-600 px-2 py-1.5 rounded bg-gray-100">
                                 ✖ Deshacer
@@ -125,13 +229,15 @@ export default function ProductsGridClient({ products, limitNum, limitError }: a
                                             onChange={handleSelectAll}
                                         />
                                     </th>
-                                    <th className="px-4 py-3 min-w-[140px]">Comportamiento</th>
-                                    <th className="px-4 py-3">Nombre / Modelo</th>
-                                    <th className="px-4 py-3 whitespace-nowrap">ID / SKU</th>
-                                    <th className="px-4 py-3 text-right">Precio Venta</th>
-                                    <th className="px-4 py-3 text-center">Cantidad</th>
-                                    <th className="px-4 py-3">Visibilidad</th>
-                                    <th className="px-4 py-3 text-center">Foto</th>
+                                    <th className="px-3 py-3 whitespace-nowrap w-auto">Comportamiento</th>
+                                    <th className="px-3 py-3">Nombre / Modelo</th>
+                                    <th className="px-3 py-3 whitespace-nowrap max-w-[100px]">ID / SKU</th>
+                                    <th className="px-3 py-3 whitespace-nowrap">Mayoreo</th>
+                                    <th className="px-3 py-3 whitespace-nowrap">Cat / Marca / Prov</th>
+                                    <th className="px-3 py-3 text-right whitespace-nowrap">Precio Venta</th>
+                                    <th className="px-3 py-3 text-center whitespace-nowrap">Cantidad</th>
+                                    <th className="px-3 py-3 whitespace-nowrap">Visibilidad</th>
+                                    <th className="px-3 py-3 text-center whitespace-nowrap">Foto</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -168,8 +274,28 @@ export default function ProductsGridClient({ products, limitNum, limitError }: a
                                                     <span className="ml-2 bg-purple-100 text-purple-700 text-[9px] uppercase px-1.5 py-0.5 rounded font-black tracking-wider">Oferta</span>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-3 text-gray-500 font-mono text-xs">
-                                                {product.sku || product.id.slice(-6)}
+                                            <td className="px-3 py-3 text-gray-500 font-mono text-xs max-w-[100px]">
+                                                <span className="block truncate" title={product.sku || product.id.slice(-6)}>{product.sku || product.id.slice(-6)}</span>
+                                            </td>
+                                            <td className="px-2 py-3 max-w-[160px]">
+                                                <div className="flex flex-wrap gap-0.5">
+                                                    {product.sellByPackage && Array.isArray(product.wholesaleComposition) && product.wholesaleComposition.length > 0 ? (
+                                                        product.wholesaleComposition.map((m: any) => {
+                                                            const pieces = Object.values(m.composition || {}).reduce((a: number, b: any) => a + (parseInt(b) || 0), 0);
+                                                            return <span key={m.id} className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded whitespace-nowrap">{m.name} {pieces}pz ${m.price}</span>;
+                                                        })
+                                                    ) : (
+                                                        <span className="text-[10px] text-gray-300 italic">—</span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex flex-col gap-0.5">
+                                                    {product.category && <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded w-fit">{product.category.name}{product.subcategory ? ` / ${product.subcategory.name}` : ''}</span>}
+                                                    {product.brand && <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded w-fit">{product.brand.name}</span>}
+                                                    {product.supplier && <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded w-fit">{product.supplier.name}</span>}
+                                                    {!product.category && !product.brand && !product.supplier && <span className="text-[10px] text-gray-300 italic">—</span>}
+                                                </div>
                                             </td>
                                             <td className="px-4 py-3 text-right">
                                                 {product.promotionalPrice && (
@@ -316,13 +442,20 @@ export default function ProductsGridClient({ products, limitNum, limitError }: a
             )}
 
             {isBulkModalOpen && (
-                <BulkActionsModal 
-                    selectedIds={selectedIds} 
+                <BulkActionsModal
+                    selectedIds={selectedIds}
                     onClose={() => setIsBulkModalOpen(false)}
                     onSuccess={() => {
                         setIsBulkModalOpen(false);
                         setSelectedIds([]);
                     }}
+                />
+            )}
+
+            {showBarcodeModal && (
+                <BarcodePrintModal
+                    products={products.filter((p: any) => selectedIds.includes(p.id))}
+                    onClose={() => setShowBarcodeModal(false)}
                 />
             )}
         </div>

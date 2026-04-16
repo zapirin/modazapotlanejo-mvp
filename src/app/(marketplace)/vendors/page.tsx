@@ -1,5 +1,19 @@
 import { getVendors } from '../vendor/actions';
 import Link from 'next/link';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+    title: 'Vendedores y Fabricantes — Zapotlanejo',
+    description: 'Conoce todos los vendedores y fabricantes de ropa mayoreo registrados. Boutiques, distribuidoras y fabricantes de Zapotlanejo, Jalisco y todo México.',
+    keywords: ['vendedores ropa mayoreo', 'fabricantes Zapotlanejo', 'distribuidoras ropa', 'boutiques México', 'mayoristas moda'],
+    openGraph: {
+        title: 'Vendedores y Fabricantes — Marketplace',
+        description: 'Conoce todos los vendedores y fabricantes de ropa mayoreo registrados en el marketplace.',
+        type: 'website',
+        locale: 'es_MX',
+    },
+    twitter: { card: 'summary', title: 'Vendedores — Marketplace Mayoreo Zapotlanejo' },
+};
 
 export default async function VendorsPage() {
     const vendors = await getVendors();
@@ -16,7 +30,7 @@ export default async function VendorsPage() {
                     {vendors.map((vendor: any) => (
                         <Link 
                             key={vendor.id}
-                            href={`/vendor/${vendor.id}`}
+                            href={`/vendor/${vendor.sellerSlug || vendor.id}`}
                             className="group p-8 bg-white dark:bg-gray-900 rounded-3xl border border-border hover:border-blue-200 dark:hover:border-blue-900/50 shadow-sm hover:shadow-xl transition-all hover:-translate-y-1"
                         >
                             <div className="flex items-start gap-5">

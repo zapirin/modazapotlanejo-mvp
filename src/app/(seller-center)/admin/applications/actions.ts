@@ -60,22 +60,49 @@ export async function updateApplicationStatus(id: string, status: 'APPROVED' | '
                         role: Role.SELLER,
                         businessName: application.storeName,
                         sellerSlug: slug,
+                        phone: application.phone || null,
+                        whatsapp: application.phone || null,
                     }
                 });
 
-                // 2. Update application status (no se auto-crea proveedor)
+                // 2. Create StoreSettings pre-filled from application
+                await (tx.storeSettings as any).create({
+                    data: {
+                        sellerId: user.id,
+                        storeName: application.storeName,
+                        phone: application.phone || null,
+                        address: application.storeAddress || null,
+                        shippingZip: (application as any).shippingZip || null,
+                    }
+                });
+
+                // 3. Update application status
                 await tx.sellerApplication.update({
                     where: { id },
                     data: { status }
                 });
             });
 
-            // 4. Enviar email de bienvenida con la nueva plantilla profesional
+            // 4. Enviar email de bienvenida con branding del dominio donde se registró el vendedor
+            const sellerDomain = (application as any).registeredDomain || 'modazapotlanejo.com';
+            const BRAND_COLORS: Record<string, string> = {
+                'modazapotlanejo.com': '#2563eb',
+                'zonadelvestir.com':   '#7c3aed',
+                'kalexafashion.com':   '#8124E3',
+            };
+            const BRAND_NAMES: Record<string, string> = {
+                'modazapotlanejo.com': 'Moda Zapotlanejo',
+                'zonadelvestir.com':   'Zona del Vestir',
+                'kalexafashion.com':   'Kalexa Fashion',
+            };
             await sendWelcomeToSeller({
                 email: application.email,
                 name: application.contactName,
                 storeName: application.storeName,
                 tempPassword,
+                brandName:  BRAND_NAMES[sellerDomain]  || 'Moda Zapotlanejo',
+                brandColor: BRAND_COLORS[sellerDomain] || '#2563eb',
+                domain: sellerDomain,
             });
 
         } else {

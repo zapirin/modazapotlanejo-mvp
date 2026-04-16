@@ -1,24 +1,20 @@
 import { headers } from 'next/headers';
-import { getBrandConfig } from '@/lib/brand';
-import { getMarketplaceSettings } from '@/app/actions/marketplace';
+import { getActiveBrandConfig } from '@/app/(marketplace)/actions';
 import LoginClient from './LoginClient';
 
 export const dynamic = 'force-dynamic';
 
+export async function generateMetadata() {
+    const headersList = await headers();
+    const host = (headersList.get('host') || '').split(',')[0].trim().replace(/^https?:\/\//, '');
+    const brand = await getActiveBrandConfig(host);
+    return { title: `${brand.name} — Iniciar Sesión` };
+}
+
 export default async function LoginPage() {
     const headersList = await headers();
-    const host = headersList.get('x-forwarded-host') || headersList.get('host');
-    const brand = getBrandConfig(host);
-    
-    // Leer color de marca guardado por el admin (si existe)
-    try {
-        const settingsRes = await getMarketplaceSettings();
-        if (settingsRes.success && settingsRes.data) {
-            const brandColors = (settingsRes.data as any).brandColors;
-            const savedColor = brandColors?.[brand.domain];
-            if (savedColor) brand.primaryColor = savedColor;
-        }
-    } catch {}
+    const host = (headersList.get('host') || '').split(',')[0].trim().replace(/^https?:\/\//, '');
+    const brand = await getActiveBrandConfig(host);
 
     return <LoginClient brand={brand} />;
 }

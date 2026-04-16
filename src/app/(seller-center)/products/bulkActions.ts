@@ -149,3 +149,34 @@ export async function bulkUpdateClassification(
         return { success: false, error: e.message };
     }
 }
+
+export async function bulkUpdateWholesalePrices(
+    productIds: string[],
+    methodName: string,
+    newPrice: number
+) {
+    try {
+        const sellerId = await getSellerId();
+        const products = await prisma.product.findMany({
+            where: { id: { in: productIds }, sellerId, sellByPackage: true },
+            select: { id: true, wholesaleComposition: true }
+        });
+
+        for (const product of products) {
+            if (!Array.isArray(product.wholesaleComposition)) continue;
+            const updated = (product.wholesaleComposition as any[]).map((m: any) => {
+                if (m.name === methodName) return { ...m, price: newPrice.toString() };
+                return m;
+            });
+            await prisma.product.update({
+                where: { id: product.id },
+                data: { wholesaleComposition: updated }
+            });
+        }
+
+        revalidatePath('/products');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}

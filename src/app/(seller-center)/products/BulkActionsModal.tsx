@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { bulkUpdateVisibility, bulkUpdatePrices, bulkUpdatePromotionalPrice, bulkUpdateClassification } from './bulkActions';
+import { bulkUpdateVisibility, bulkUpdatePrices, bulkUpdatePromotionalPrice, bulkUpdateClassification, bulkUpdateWholesalePrices } from './bulkActions';
 import { getCategories, getBrands, getSuppliers, createBrand, createSupplier } from './new/actions';
 
 interface BulkActionsModalProps {
@@ -18,6 +18,7 @@ export default function BulkActionsModal({ selectedIds, onClose, onSuccess }: Bu
     const [endDate, setEndDate] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [wholesalePrices, setWholesalePrices] = useState<Record<string, string>>({'Corrida': '', 'Paquete': '', 'Caja': ''});
 
     // --- Classification State ---
     const [categories, setCategories] = useState<any[]>([]);
@@ -111,6 +112,14 @@ export default function BulkActionsModal({ selectedIds, onClose, onSuccess }: Bu
                 const res = await bulkUpdatePromotionalPrice(selectedIds, price, start, end);
                 if (!res.success) throw new Error(res.error);
             }
+            else if (actionType === 'wholesale') {
+                const entries = Object.entries(wholesalePrices).filter(([, v]) => v !== '' && parseFloat(v) > 0);
+                if (entries.length === 0) throw new Error('Ingresa al menos un precio de mayoreo.');
+                for (const [methodName, priceStr] of entries) {
+                    const res = await bulkUpdateWholesalePrices(selectedIds, methodName, parseFloat(priceStr));
+                    if (!res.success) throw new Error(res.error);
+                }
+            }
             else if (actionType === 'classification') {
                 const updates: any = {};
                 if (selectedCategory !== undefined) updates.categoryId = selectedCategory;
@@ -158,6 +167,7 @@ export default function BulkActionsModal({ selectedIds, onClose, onSuccess }: Bu
                             <option value="price">💰 Modificar Precio Base Automáticamente</option>
                             <option value="promo">🎉 Configurar Promoción / Oferta Temporal</option>
                             <option value="classification">🏷️ Clasificar (Categoría, Marca, Proveedor)</option>
+                            <option value="wholesale">📦 Modificar Precio de Mayoreo</option>
                         </select>
                     </div>
 
@@ -265,6 +275,20 @@ export default function BulkActionsModal({ selectedIds, onClose, onSuccess }: Bu
                             <p className="text-[11px] text-purple-700 leading-tight">
                                 Si dejas las fechas en blanco, la oferta será permanente hasta que se limpie manualmente.
                             </p>
+                        </div>
+                    )}
+
+                    {actionType === 'wholesale' && (
+                        <div className="space-y-4">
+                            <p className="text-xs text-gray-500">Deja en blanco los métodos que no quieras modificar.</p>
+                            {['Corrida', 'Paquete', 'Caja'].map(method => (
+                                <div key={method} className="flex items-center gap-3">
+                                    <label className="text-sm font-bold text-gray-700 w-20">{method}</label>
+                                    <input type="number" min="0" step="0.01" placeholder="Sin cambio" value={wholesalePrices[method]} onChange={e => setWholesalePrices(prev => ({...prev, [method]: e.target.value}))} className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" />
+                                    <span className="text-xs text-gray-400">$/pz</span>
+                                </div>
+                            ))}
+                            <p className="text-xs text-gray-400">Solo se actualizarán los productos que tengan cada método configurado.</p>
                         </div>
                     )}
 
@@ -382,12 +406,13 @@ export default function BulkActionsModal({ selectedIds, onClose, onSuccess }: Bu
                     </button>
                     <button 
                         onClick={handleSubmit}
-                        disabled={isSubmitting || !actionType || (actionType === 'visibility' && !subAction) || (actionType === 'price' && subAction !== 'clear_promo' && !numValue) || (actionType === 'promo' && !numValue) || (actionType === 'classification' && selectedCategory === undefined && selectedSubcategory === undefined && selectedBrand === undefined && selectedSupplier === undefined)}
+                        disabled={isSubmitting || !actionType || (actionType === 'visibility' && !subAction) || (actionType === 'price' && subAction !== 'clear_promo' && !numValue) || (actionType === 'promo' && !numValue) || (actionType === 'classification' && selectedCategory === undefined && selectedSubcategory === undefined && selectedBrand === undefined && selectedSupplier === undefined) || (actionType === 'wholesale' && Object.values(wholesalePrices).every(v => v === ''))}
                         className={`px-6 py-2.5 font-bold text-white rounded-xl shadow-md flex items-center transition
                             ${actionType === 'visibility' ? 'bg-blue-600 hover:bg-blue-700' : ''}
                             ${actionType === 'price' ? 'bg-green-600 hover:bg-green-700' : ''}
                             ${actionType === 'promo' ? 'bg-purple-600 hover:bg-purple-700' : ''}
                             ${actionType === 'classification' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+                            ${actionType === 'wholesale' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
                             ${!actionType ? 'bg-gray-800' : ''}
                             disabled:opacity-50 disabled:cursor-not-allowed
                         `}

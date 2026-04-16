@@ -44,7 +44,7 @@ export default async function WishlistPage() {
                             return (
                                 <div key={item.id} className="group space-y-4 relative">
                                     <WishlistRemoveButton productId={item.productId} />
-                                    <Link href={`/catalog/${item.productId}`}>
+                                    <Link href={`/catalog/${(item.product as any)?.slug || item.productId}`}>
                                         <div className="aspect-[3/4] rounded-3xl overflow-hidden bg-gray-200 dark:bg-gray-800 relative shadow-sm group-hover:shadow-xl transition-all group-hover:-translate-y-2">
                                             {item.product.images?.[0] ? (
                                                 <Image src={item.product.images[0]} alt={item.product.name} fill className="object-cover" suppressHydrationWarning />
@@ -67,14 +67,16 @@ export default async function WishlistPage() {
                                                         Sin stock
                                                     </span>
                                                 )}
-                                                <span className="px-3 py-1 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm">
-                                                    {item.product.brand?.name || 'Genérico'}
-                                                </span>
+                                                {item.product.brand?.name && (
+                                                    <span className="px-3 py-1 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm rounded-full text-[8px] font-black uppercase tracking-widest shadow-sm">
+                                                        {item.product.brand.name}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </Link>
                                     <div className="space-y-1">
-                                        <Link href={`/catalog/${item.productId}`}>
+                                        <Link href={`/catalog/${(item.product as any)?.slug || item.productId}`}>
                                             <h4 className="font-bold text-sm tracking-tight group-hover:text-blue-600 transition-colors uppercase">{item.product.name}</h4>
                                         </Link>
                                         <div className="flex items-center gap-2">
@@ -86,7 +88,7 @@ export default async function WishlistPage() {
                                             )}
                                         </div>
                                         {item.product.seller && (
-                                            <Link href={`/vendor/${item.product.seller.id}`} className="text-[10px] font-bold text-blue-500 uppercase tracking-widest hover:text-blue-700 transition-colors">
+                                            <Link href={`/vendor/${item.product.seller.sellerSlug || item.product.seller.id}`} className="text-[10px] font-bold text-blue-500 uppercase tracking-widest hover:text-blue-700 transition-colors">
                                                 🏭 {item.product.seller.businessName || item.product.seller.name}
                                             </Link>
                                         )}

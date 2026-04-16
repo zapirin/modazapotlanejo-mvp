@@ -1,7 +1,37 @@
-import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getCategories } from '../actions';
+import { headers } from 'next/headers';
+import { getBrandConfig } from '@/lib/brand';
+import type { Metadata } from 'next';
+
+export async function generateMetadata(): Promise<Metadata> {
+    const headersList = await headers();
+    const host = (headersList.get('host') || '').split(',')[0].trim().replace(/^https?:\/\//, '');
+    const brand = getBrandConfig(host);
+    const isModa = host.includes('modazapotlanejo');
+    const isZona = host.includes('zonadelvestir');
+
+    const title = isModa
+        ? 'Categorías de Ropa Mayoreo — Zapotlanejo'
+        : isZona
+        ? 'Categorías de Moda Mayorista — Zona del Vestir'
+        : `Categorías — ${brand.name}`;
+
+    const description = isModa
+        ? 'Explora por categoría: Damas, Caballeros, Niños, Calzado y Accesorios. Ropa mayoreo directo de fabricantes de Zapotlanejo.'
+        : isZona
+        ? 'Navega por categorías: Damas, Caballeros, Niños y más. Moda mayorista con los mejores precios de México.'
+        : `Todas las categorías de ${brand.name}. Encuentra ropa de moda para damas, caballeros y niños.`;
+
+    return {
+        title,
+        description,
+        keywords: ['categorías ropa', 'ropa damas mayoreo', 'ropa caballeros', 'ropa niños mayoreo', 'Zapotlanejo', brand.name],
+        openGraph: { title: `${title} | ${brand.name}`, description, type: 'website', locale: 'es_MX' },
+        twitter: { card: 'summary', title: `${title} | ${brand.name}`, description },
+    };
+}
 
 export default async function CategoriesPage() {
     const categories = await getCategories();
@@ -44,7 +74,7 @@ export default async function CategoriesPage() {
                                     <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-20 group-hover:opacity-40 transition-opacity`}></div>
                                 )}
 
-                                <div className="absolute inset-x-0 bottom-0 p-10 z-10">
+                                <div className="absolute inset-x-0 bottom-0 p-6 md:p-10 z-10 flex flex-col items-center text-center">
                                     <h4 className="text-3xl font-black text-white drop-shadow-lg group-hover:-translate-y-2 transition-transform duration-500 leading-none mb-2 uppercase">{category.name}</h4>
                                     <div className="flex items-center gap-2">
                                         <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest">{category._count?.products || 0} Productos</span>

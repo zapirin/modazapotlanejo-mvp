@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { getLatestProducts, getFeaturedCategories, getBestSellers, getNewArrivals, getLandingStats } from './actions';
+import { getLatestProducts, getFeaturedCategories, getBestSellers, getNewArrivals, getLandingStats, getActiveBrandConfig } from './actions';
 import { getMarketplaceSettings, getFeaturedContent } from '@/app/actions/marketplace';
 import { headers } from 'next/headers';
 import { getBrandConfig } from '@/lib/brand';
@@ -9,6 +9,68 @@ import { unstable_noStore as noStore } from 'next/cache';
 import { getSessionUser } from '@/app/actions/auth';
 import RecentlyViewed from '@/components/RecentlyViewed';
 import ProductCard from './ProductCard';
+import HeroSlider from '@/components/HeroSlider';
+import type { Metadata } from 'next';
+
+export const dynamic = 'force-dynamic';
+
+export async function generateMetadata(): Promise<Metadata> {
+    const headersList = await headers();
+    const host = (headersList.get('host') || '').split(',')[0].trim().replace(/^https?:\/\//, '');
+    const brand = await getActiveBrandConfig(host);
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const baseUrl = `${protocol}://${host}`;
+    const isModa = host.includes('modazapotlanejo');
+    const isZona = host.includes('zonadelvestir');
+
+    const isKalexa = host.includes('kalexafashion');
+
+    const title = isModa
+        ? 'Moda Zapotlanejo — Marketplace Mayorista de Ropa Jalisco'
+        : isZona
+        ? 'Zona del Vestir — Moda Mayorista México'
+        : isKalexa
+        ? 'Kalexa Fashion | Jeans y Ropa de Mayoreo desde Zapotlanejo, Jalisco'
+        : brand.name;
+
+    const description = isModa
+        ? 'El marketplace mayorista líder de Zapotlanejo, Jalisco. Compra ropa al mayoreo directo de fabricantes: jeans, blusas, vestidos, pantalones y más. Envíos a todo México.'
+        : isZona
+        ? 'Zona del Vestir — La zona mayorista de moda más grande de México. Ropa al por mayor de fabricantes y distribuidoras con los mejores precios. Envíos a todo México.'
+        : isKalexa
+        ? 'Catálogo mayorista con más de 2,000 modelos. Pantalones, blusas, vestidos y jeans de moda. Directo de fábrica desde Zapotlanejo. Envío a todo México.'
+        : brand.description;
+
+    const keywords = isModa
+        ? ['ropa mayoreo Zapotlanejo', 'marketplace mayorista ropa', 'jeans mayoreo Jalisco', 'blusas mayoreo México', 'fabricantes ropa Zapotlanejo', 'moda mayorista Jalisco', 'comprar ropa mayoreo']
+        : isZona
+        ? ['zona del vestir', 'ropa mayoreo México', 'moda mayorista', 'fabricantes textiles México', 'ropa al por mayor', 'mayoristas moda México']
+        : isKalexa
+        ? ['Kalexa Fashion', 'jeans mayoreo Zapotlanejo', 'ropa mayoreo Jalisco', 'blusas mayoreo', 'pantalones dama mayoreo', 'tienda ropa en línea México', 'ropa mujer mayoreo']
+        : [brand.name, 'ropa moda', 'Zapotlanejo', 'jeans', 'blusas', 'tienda en línea México'];
+
+    return {
+        title,
+        description,
+        keywords,
+        openGraph: {
+            title,
+            description,
+            url: baseUrl,
+            type: 'website',
+            locale: 'es_MX',
+            siteName: brand.name,
+            images: [{ url: `${baseUrl}${brand.logo.url}`, width: 1200, height: 630, alt: brand.name }],
+        },
+        twitter: {
+            card: 'summary_large_image',
+            title,
+            description,
+            images: [`${baseUrl}${brand.logo.url}`],
+        },
+        alternates: { canonical: baseUrl },
+    };
+}
 
 
 const COLOR_MAP: Record<string, Record<string, string>> = {
@@ -18,25 +80,50 @@ const COLOR_MAP: Record<string, Record<string, string>> = {
     amber: { c50: '#fffbeb', c500: '#f59e0b', c600: '#d97706', c700: '#b45309' },
     rose: { c50: '#fff1f2', c500: '#eb3ff4ff', c600: '#eb3ff4ff', c700: '#eb3ff4ff' },
     slate: { c50: '#f8fafc', c500: '#64748b', c600: '#475569', c700: '#334155' },
+    kalexa: { c50: '#f5f0ff', c500: '#8124E3', c600: '#6b1dc0', c700: '#550fa0' },
 };
 
 export default async function LandingPage() {
     noStore();
     const headersList = await headers();
     const host = headersList.get('host');
-    const brand = getBrandConfig(host);
+    const brand = await getActiveBrandConfig(host);
 
+    const sellerId = brand.sellerId || undefined;
     const [products, categories, user, bestSellers, newArrivals, stats, siteSettings, featured] = await Promise.all([
-        getLatestProducts(),
+        getLatestProducts(8, sellerId),
         getFeaturedCategories(),
         getSessionUser(),
-        getBestSellers(4),
-        getNewArrivals(8),
-        getLandingStats(),
+        getBestSellers(4, sellerId),
+        getNewArrivals(8, sellerId),
+        getLandingStats(sellerId),
         getMarketplaceSettings(),
         getFeaturedContent(),
     ]);
-    const heroImageUrl = siteSettings?.data?.heroImage || null;
+    // Filtrar categorías excluidas para tiendas de un solo vendedor
+    const filteredCategories = brand.excludeCategories && brand.excludeCategories.length > 0
+        ? categories.filter((c: any) => !brand.excludeCategories!.map(e => e.toUpperCase()).includes(c.name.toUpperCase()))
+        : categories;
+
+    const heroImageUrl = brand.isSingleVendor ? (brand.heroImage || siteSettings?.data?.heroImage || null) : (siteSettings?.data?.heroImage || brand.heroImage || null);
+
+    // Build slider images: DB heroImages → brand config images → single heroImage → product images
+    const heroImages: string[] = (() => {
+        const dbImages = (siteSettings?.data as any)?.heroImages as string[] | undefined;
+        if (dbImages && dbImages.length > 0) return dbImages;
+        if (brand.heroImages && brand.heroImages.length > 0) return brand.heroImages;
+        const slides: string[] = [];
+        if (heroImageUrl) slides.push(heroImageUrl);
+        // Fill remaining slots with product images (for visual variety)
+        const productImgs = [...bestSellers, ...newArrivals]
+            .map((p: any) => Array.isArray(p.images) ? p.images[0] : null)
+            .filter((url: any): url is string => typeof url === 'string' && url.length > 0);
+        const seen = new Set(slides);
+        for (const url of productImgs) {
+            if (!seen.has(url) && slides.length < 5) { seen.add(url); slides.push(url); }
+        }
+        return slides;
+    })();
 
     // @ts-ignore
     const isWholesale = !!user?.isWholesale;
@@ -49,27 +136,36 @@ export default async function LandingPage() {
             : month >= 8 && month <= 10 ? { name: 'Otoño 2026', emoji: '🍂' }
                 : { name: 'Invierno 2026', emoji: '❄️' };
 
+    const protocol2 = (host || '').includes('localhost') ? 'http' : 'https';
+    const baseUrl2 = `${protocol2}://${(host || 'modazapotlanejo.com').split(',')[0].trim().replace(/^https?:\/\//, '')}`;
+
+    const orgJsonLd = {
+        '@context': 'https://schema.org',
+        '@type': brand.isSingleVendor ? 'Store' : 'Organization',
+        name: brand.name,
+        description: brand.description,
+        url: baseUrl2,
+        logo: `${baseUrl2}${brand.logo.url}`,
+        ...(brand.isSingleVendor && brand.storeInfo?.address ? { address: { '@type': 'PostalAddress', addressLocality: 'Zapotlanejo', addressRegion: 'Jalisco', addressCountry: 'MX' } } : {}),
+        ...(brand.whatsapp ? { telephone: `+${brand.whatsapp}` } : {}),
+        sameAs: [
+            brand.socialLinks?.instagram,
+            brand.socialLinks?.facebook,
+            brand.socialLinks?.tiktok,
+        ].filter(Boolean),
+    };
+
     return (
+        <>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }} />
         <div className="flex flex-col">
 
             {/* ── HERO ── */}
             <section className="relative min-h-[95vh] flex items-center overflow-hidden" suppressHydrationWarning>
-                <div className="absolute inset-0 z-0">
-                    {heroImageUrl ? (
-                        heroImageUrl.startsWith('data:') || heroImageUrl.startsWith('http') || heroImageUrl.startsWith('/') ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={heroImageUrl} alt={`${brand.name} Fashion`}
-                                className="w-full h-full object-cover brightness-[0.85] dark:brightness-[0.7]"
-                                style={{ position: 'absolute', inset: 0 }}
-                                suppressHydrationWarning />
-                        ) : null
-                    ) : (
-                        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-900">
-                            <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, #3b82f6 0%, transparent 50%), radial-gradient(circle at 80% 20%, #8b5cf6 0%, transparent 40%), radial-gradient(circle at 60% 80%, #ec4899 0%, transparent 35%)' }} />
-                        </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/40 to-transparent" />
-                </div>
+                <HeroSlider
+                    images={heroImages}
+                    gradient="linear-gradient(to bottom right, #0f172a, #1e3a8a, #312e81)"
+                >
 
                 <div className="max-w-7xl mx-auto px-6 relative z-10 w-full pt-20 pb-40">
                     <div className="max-w-2xl space-y-8">
@@ -85,14 +181,17 @@ export default async function LandingPage() {
                         </div>
 
                         <div className="space-y-4">
-                            <h2 className="font-black uppercase tracking-[0.2em] text-xs md:text-sm drop-shadow-sm" style={{ color: "var(--brand-500)" }}>{brand.name} Fashion Marketplace</h2>
-                            <h1 className="text-5xl md:text-8xl font-black tracking-tighter leading-[0.9] text-foreground drop-shadow-sm">
-                                LA MODA <br />QUE MUEVE A <br />
-                                <span className="text-transparent bg-clip-text" style={{ backgroundImage: "linear-gradient(to right, var(--brand-600), var(--brand-700))" }}>MÉXICO.</span>
+                            <h2 className="font-black uppercase tracking-[0.2em] text-xs md:text-sm drop-shadow-sm" style={{ color: "var(--brand-500)" }}>{brand.isSingleVendor ? brand.tagline : `${brand.name} Fashion Marketplace`}</h2>
+                            <h1 className="text-6xl md:text-9xl font-black tracking-tighter leading-[0.85] text-foreground drop-shadow-sm">
+                                {brand.isSingleVendor ? (
+                                    <>{brand.name.split(' ')[0].toUpperCase()} <br /><span className="text-transparent bg-clip-text" style={{ backgroundImage: "linear-gradient(to right, var(--brand-600), var(--brand-700))" }}>{brand.name.split(' ').slice(1).join(' ').toUpperCase() || 'FASHION'}.</span></>
+                                ) : (
+                                    <>LA MODA <br />QUE MUEVE A <br /><span className="text-transparent bg-clip-text" style={{ backgroundImage: "linear-gradient(to right, var(--brand-600), var(--brand-700))" }}>MÉXICO.</span></>
+                                )}
                             </h1>
                         </div>
                         <p className="text-lg md:text-xl text-foreground/80 dark:text-white/80 font-medium max-w-lg leading-relaxed drop-shadow-sm">
-                            {brand.description} Calidad premium, precios de fábrica y envíos a todo el país.
+                            {brand.isSingleVendor ? brand.description : `${brand.description} Calidad premium, precios de fábrica y envíos a todo el país.`}
                         </p>
                         <div className="flex flex-wrap gap-4 pt-4">
                             <Link href="/catalog" className="px-8 py-4 text-white rounded-full text-sm font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl" style={{ backgroundColor: "var(--brand-600)" }}>
@@ -107,11 +206,13 @@ export default async function LandingPage() {
                 <div className="absolute bottom-0 left-0 right-0 z-10 bg-background/80 backdrop-blur-md border-t border-border">
                     <div className="max-w-7xl mx-auto px-6 py-5">
                         <div className="flex flex-wrap gap-8 md:gap-16 items-center text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
-                            <div className="flex items-center gap-3">
-                                <span className="text-2xl font-black text-foreground">{stats.totalSellers}</span>
-                                <span>Vendedores<br />verificados</span>
-                            </div>
-                            <div className="flex items-center gap-3 md:border-l md:border-border md:pl-16">
+                            {!brand.isSingleVendor && stats.totalSellers >= 50 && (
+                                <div className="flex items-center gap-3">
+                                    <span className="text-2xl font-black text-foreground">{stats.totalSellers}</span>
+                                    <span>Vendedores<br />verificados</span>
+                                </div>
+                            )}
+                            <div className={`flex items-center gap-3 ${!brand.isSingleVendor ? 'md:border-l md:border-border md:pl-16' : ''}`}>
                                 <span className="text-2xl font-black text-foreground">{stats.totalProducts.toLocaleString()}</span>
                                 <span>Productos<br />en catálogo</span>
                             </div>
@@ -120,13 +221,23 @@ export default async function LandingPage() {
                                 <span className="text-2xl font-black text-emerald-500">{stats.newThisWeek}</span>
                                 <span>Nuevos<br />esta semana</span>
                             </div>
-                            <div className="flex items-center gap-3 md:border-l md:border-border md:pl-16">
-                                <span className="text-2xl font-black text-foreground">{stats.totalOrders.toLocaleString()}</span>
-                                <span>Pedidos<br />completados</span>
-                            </div>
+                            {brand.isSingleVendor && brand.whatsapp && (
+                                <div className="flex items-center gap-3 md:border-l md:border-border md:pl-16">
+                                    <a href={`https://wa.me/${brand.whatsapp}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 rounded-full text-white text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-transform" style={{backgroundColor: brand.isSingleVendor ? '#25D366' : 'var(--brand-600)'}}>
+                                        📱 WhatsApp
+                                    </a>
+                                </div>
+                            )}
+                            {!brand.isSingleVendor && stats.totalOrders >= 100 && (
+                                <div className="flex items-center gap-3 md:border-l md:border-border md:pl-16">
+                                    <span className="text-2xl font-black text-foreground">{stats.totalOrders.toLocaleString()}</span>
+                                    <span>Pedidos<br />completados</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
+                </HeroSlider>
             </section>
 
             {/* ── TICKER NOVEDADES ── */}
@@ -134,7 +245,7 @@ export default async function LandingPage() {
                 <div className="text-white py-3 overflow-hidden" style={{ backgroundColor: "var(--brand-600)" }}>
                     <div className="flex gap-12 animate-[marquee_30s_linear_infinite] whitespace-nowrap" suppressHydrationWarning>
                         {[...newArrivals, ...newArrivals].map((p: any, i: number) => (
-                            <Link key={i} href={`/catalog/${p.id}`}
+                            <Link key={i} href={`/catalog/${p.slug || p.id}`}
                                 className="flex items-center gap-3 hover:opacity-80 transition-opacity shrink-0">
                                 <span className="text-[9px] font-black uppercase tracking-widest opacity-60">NUEVO</span>
                                 <span className="text-xs font-bold uppercase tracking-wide">{p.name}</span>
@@ -160,7 +271,7 @@ export default async function LandingPage() {
                     </Link>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                    {[...categories].sort((a: any, b: any) => {
+                    {[...filteredCategories].sort((a: any, b: any) => {
                         const ORDER = ['DAMAS', 'CABALLEROS', 'NIÑOS', 'ACCESORIOS', 'CALZADO'];
                         const ai = ORDER.indexOf(a.name?.toUpperCase());
                         const bi = ORDER.indexOf(b.name?.toUpperCase());
@@ -178,8 +289,8 @@ export default async function LandingPage() {
                                 ) : (
                                     <div className={`absolute inset-0 bg-gradient-to-br ${gradients[idx % gradients.length]} opacity-20 group-hover:opacity-40 transition-opacity`} />
                                 )}
-                                <div className="absolute inset-x-0 bottom-0 p-10 z-10">
-                                    <h4 className="text-xl font-black text-white drop-shadow-lg group-hover:-translate-y-1 transition-transform duration-500 leading-none mb-1">{category.name}</h4>
+                                <div className="absolute inset-x-0 bottom-0 p-6 md:p-10 z-10 flex flex-col items-center text-center">
+                                    <h4 className="text-xl font-black text-white drop-shadow-lg group-hover:-translate-y-1 transition-transform duration-500 leading-none mb-1 uppercase">{category.name}</h4>
                                     <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest">{category._count.products} Productos</span>
                                 </div>
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
@@ -246,7 +357,7 @@ export default async function LandingPage() {
             {/* ── DESTACADOS — Vendedores y Productos ── */}
             {(featured.sellers.length > 0 || featured.products.length > 0) && (
                 <section className="py-16 max-w-7xl mx-auto px-6 w-full space-y-12">
-                    {featured.sellers.length > 0 && (
+                    {featured.sellers.length > 0 && !brand.isSingleVendor && (
                         <div className="space-y-6">
                             <div className="flex items-center justify-between">
                                 <div>
@@ -257,7 +368,7 @@ export default async function LandingPage() {
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                                 {(featured.sellers as any[]).map((seller: any) => (
-                                    <Link key={seller.id} href={`/vendor/${seller.id}`}
+                                    <Link key={seller.id} href={`/vendor/${seller.sellerSlug || seller.id}`}
                                         className="group p-6 bg-card rounded-3xl border border-border hover:border-amber-300 hover:shadow-xl transition-all hover:-translate-y-1 text-center space-y-3">
                                         <div className="w-16 h-16 mx-auto rounded-2xl overflow-hidden border border-border bg-gray-50 flex items-center justify-center">
                                             {seller.logoUrl ? (
@@ -328,7 +439,8 @@ export default async function LandingPage() {
 
             <RecentlyViewed />
 
-            {/* ── CTA ── */}
+            {/* ── CTA — oculto en tiendas de un solo vendedor ── */}
+            {!brand.isSingleVendor && (
             <section className="py-32 max-w-7xl mx-auto px-6 w-full text-center space-y-12">
                 <div className="max-w-3xl mx-auto space-y-6">
                     <h2 className="text-5xl font-black tracking-tight italic uppercase">
@@ -347,6 +459,8 @@ export default async function LandingPage() {
                     </Link>
                 </div>
             </section>
+            )}
         </div>
+        </>
     );
 }

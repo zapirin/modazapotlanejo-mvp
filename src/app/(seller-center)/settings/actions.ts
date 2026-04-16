@@ -3,6 +3,8 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { getSessionUser } from '@/app/actions/auth';
+import { stripe } from '@/lib/stripe';
+import { headers } from 'next/headers';
 
 // Helper to get the effective sellerId for isolation
 async function getSellerFilter() {
@@ -67,6 +69,15 @@ export async function updateStoreSettings(data: {
     legalName?: string;
     address?: string;
     phone?: string;
+    shippingZip?: string;
+    aiProvider?: string;
+    aiApiKey?: string;
+    acceptsTransfer?: boolean;
+    transferBank?: string;
+    transferAccountHolder?: string;
+    transferCLABE?: string;
+    transferAccountNumber?: string;
+    transferInstructions?: string;
 }) {
     try {
         const { sellerId } = await getSellerFilter();
@@ -286,6 +297,119 @@ export async function ensureSellerSlug() {
         return { success: true, slug };
     } catch (error: any) {
         console.error('ensureSellerSlug error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// ---------------------------------------------------------------------------
+// STRIPE CONNECT — Onboarding del vendedor
+// ---------------------------------------------------------------------------
+
+export async function createStripeConnectLink() {
+    try {
+        const user = await getSessionUser();
+        if (!user || (user.role !== 'SELLER' && user.role !== 'ADMIN')) {
+            return { success: false, error: 'No autorizado' };
+        }
+
+        const seller = await (prisma.user as any).findUnique({
+            where: { id: user.id },
+            select: { stripeAccountId: true, email: true }
+        });
+
+        let accountId: string = seller?.stripeAccountId || '';
+
+        if (!accountId) {
+            // Crear cuenta Express en Stripe
+            const account = await stripe.accounts.create({
+                type: 'express',
+                country: 'MX',
+                email: user.email,
+                capabilities: {
+                    card_payments: { requested: true },
+                    transfers: { requested: true },
+                },
+            });
+            accountId = account.id;
+            await (prisma.user as any).update({
+                where: { id: user.id },
+                data: { stripeAccountId: accountId, stripeConnectStatus: 'pending' }
+            });
+        }
+
+        // Construir la URL de origen desde el request
+        const headersList = await headers();
+        const host = headersList.get('host') || 'modazapotlanejo.com';
+        const protocol = host.includes('localhost') ? 'http' : 'https';
+        const origin = `${protocol}://${host}`;
+
+        const accountLink = await stripe.accountLinks.create({
+            account: accountId,
+            refresh_url: `${origin}/settings/general?stripe=refresh`,
+            return_url: `${origin}/settings/general?stripe=success`,
+            type: 'account_onboarding',
+        });
+
+        return { success: true, url: accountLink.url };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getStripeConnectStatus() {
+    try {
+        const user = await getSessionUser();
+        if (!user) return { success: false, status: null as string | null };
+
+        const seller = await (prisma.user as any).findUnique({
+            where: { id: user.id },
+            select: { stripeAccountId: true, stripeConnectStatus: true }
+        });
+
+        if (!seller?.stripeAccountId) return { success: true, status: null as string | null };
+
+        // Verificar estado actual con Stripe
+        const account = await stripe.accounts.retrieve(seller.stripeAccountId);
+        const status: string = account.charges_enabled ? 'active'
+            : (account as any).details_submitted ? 'pending_verification'
+            : 'pending';
+
+        // Actualizar en BD si cambió
+        if (status !== seller.stripeConnectStatus) {
+            await (prisma.user as any).update({
+                where: { id: user.id },
+                data: { stripeConnectStatus: status }
+            });
+        }
+
+        return { success: true, status, accountId: seller.stripeAccountId as string };
+    } catch (error: any) {
+        return { success: false, status: null as string | null, error: error.message };
+    }
+}
+
+export async function getRequireCashSession() {
+    try {
+        const user = await getSessionUser();
+        if (!user) return { success: false, requireCashSession: false };
+        return { success: true, requireCashSession: (user as any).requireCashSession ?? false };
+    } catch {
+        return { success: false, requireCashSession: false };
+    }
+}
+
+export async function updateRequireCashSession(value: boolean) {
+    try {
+        const user = await getSessionUser();
+        if (!user) return { success: false, error: 'No autorizado' };
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { requireCashSession: value }
+        });
+        revalidatePath('/settings/general');
+        revalidatePath('/pos');
+        return { success: true };
+    } catch (error: any) {
         return { success: false, error: error.message };
     }
 }

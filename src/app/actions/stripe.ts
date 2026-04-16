@@ -41,8 +41,8 @@ export async function createCheckoutSession(data: {
       // Si el productName ya tiene [algo] al final, agregar talla después
       const displayName = sizePart ? `${item.productName} — Talla ${sizePart}` : item.productName;
 
-      // Stripe no acepta imágenes base64 — solo URLs públicas
-      const imageUrl = item.image && !item.image.startsWith('data:') ? [item.image] : [];
+      // Stripe solo acepta URLs absolutas con https:// — no base64, no rutas relativas
+      const imageUrl = item.image && item.image.startsWith('https://') ? [item.image] : [];
 
       return {
         price_data: {
@@ -61,7 +61,7 @@ export async function createCheckoutSession(data: {
       payment_method_types: ["card"],
       line_items: lineItems,
       mode: "payment",
-      success_url: `${origin}/orders?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${origin}/mis-pedidos?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/cart`,
       customer_email: user.email,
       client_reference_id: user.id,

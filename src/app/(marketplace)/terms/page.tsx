@@ -1,6 +1,12 @@
 import React from 'react';
+import { headers } from 'next/headers';
+import { getBrandConfig } from '@/lib/brand';
 
-export default function TermsPage() {
+export default async function TermsPage() {
+    const headersList = await headers();
+    const host = headersList.get('host');
+    const brand = getBrandConfig(host);
+
     return (
         <div className="max-w-4xl mx-auto px-6 py-24 space-y-12">
             <div className="space-y-4 text-center">
@@ -12,14 +18,14 @@ export default function TermsPage() {
                 <section className="space-y-4">
                     <h2 className="text-2xl font-black text-foreground uppercase tracking-tight">1. Aceptación</h2>
                     <p>
-                        Al utilizar nuestros servicios, aceptas cumplir con los términos aquí establecidos. Este marketplace sirve como intermediario para facilitar la conexión entre fabricantes y compradores.
+                        Al utilizar los servicios de {brand.name}, aceptas cumplir con los términos aquí establecidos. {brand.isSingleVendor ? 'Esta tienda en línea' : 'Este marketplace'} facilita la conexión entre fabricantes y compradores para profesionalizar el comercio regional.
                     </p>
                 </section>
 
                 <section className="space-y-4">
                     <h2 className="text-2xl font-black text-foreground uppercase tracking-tight">2. Conducta del Usuario</h2>
                     <p>
-                        Queda prohibido el uso de la plataforma para fines ilícitos o que atenten contra la integridad de otros miembros. Los vendedores son responsables de la veracidad de la información de sus productos.
+                        Queda prohibido el uso de la plataforma para fines ilícitos o que atenten contra la integridad de otros miembros. {brand.isSingleVendor ? 'La administración' : 'Los vendedores'} son responsables de la veracidad de la información de sus productos.
                     </p>
                 </section>
 
@@ -32,7 +38,7 @@ export default function TermsPage() {
 
                 <section className="bg-blue-50 dark:bg-blue-900/10 p-8 rounded-[32px] border border-blue-100 dark:border-blue-900/30">
                     <p className="text-sm font-bold text-blue-600">
-                        Modazapo y Zona del Vestir actúan como habilitadores de negocio. Cualquier disputa comercial será tratada directamente con el fabricante siguiendo nuestras guías de resolución.
+                        {brand.name} actúa como habilitador de negocio. Cualquier disputa comercial será tratada directamente con la administración siguiendo nuestras guías de resolución.
                     </p>
                 </section>
             </div>

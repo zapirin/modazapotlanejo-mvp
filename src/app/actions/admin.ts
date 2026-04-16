@@ -15,7 +15,9 @@ export async function applyAsSeller(data: {
     phone: string;
     category: string[];
     storeAddress?: string;
+    shippingZip?: string;
     planName?: string;
+    registeredDomain?: string;
 }) {
     try {
                 const existing = await prisma.sellerApplication.findUnique({
@@ -34,7 +36,9 @@ export async function applyAsSeller(data: {
                 phone: data.phone,
                 category: data.category.join(', '),
                 storeAddress: data.storeAddress || '',
+                shippingZip: data.shippingZip || '',
                 planName: data.planName || '',
+                registeredDomain: data.registeredDomain || 'modazapotlanejo.com',
             }
         });
 
@@ -209,7 +213,7 @@ export async function syncApprovedSellers() {
         const results = { created: 0, existing: 0, errors: 0 };
 
         for (const app of approvedApps) {
-            const existingUser = await prisma.user.findUnique({
+            const existingUser = await prisma.user.findFirst({
                 where: { email: app.email }
             });
 

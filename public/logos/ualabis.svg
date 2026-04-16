@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Background -->
+  <rect width="64" height="64" rx="10" fill="#022A9A"/>
+
+  <!-- Letter U — two vertical bars + rounded bottom arc -->
+  <!-- Left arm -->
+  <rect x="12" y="13" width="9" height="26" rx="4.5" fill="white"/>
+  <!-- Right arm -->
+  <rect x="43" y="13" width="9" height="26" rx="4.5" fill="white"/>
+  <!-- Bottom curve -->
+  <path d="M12 35 Q12 51 32 51 Q52 51 52 35 L43 35 Q43 45 32 45 Q21 45 21 35 Z" fill="white"/>
+
+  <!-- "bis" label – small white text pill at bottom -->
+  <rect x="20" y="53" width="24" height="8" rx="4" fill="#0054EA"/>
+  <text x="32" y="60" font-family="Arial, Helvetica, sans-serif" font-size="6" font-weight="700"
+        fill="white" text-anchor="middle" letter-spacing="0.5">BIS</text>
+</svg>

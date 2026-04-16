@@ -131,6 +131,7 @@ export async function sendNewOrderToSeller({
   total,
   notes,
   brandName,
+  brandColor,
 }: {
   sellerEmail: string;
   sellerName: string;
@@ -141,6 +142,7 @@ export async function sendNewOrderToSeller({
   total: number;
   notes?: string | null;
   brandName?: string;
+  brandColor?: string;
 }) {
   const body = `
     <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">
@@ -182,7 +184,8 @@ export async function sendNewOrderToSeller({
   return sendEmail({
     to: sellerEmail,
     subject: `🛍️ Nuevo pedido #${orderNumber} de ${buyerName}`,
-    html: baseLayout({ brandName, title: `Nuevo pedido #${orderNumber}`, body }),
+    html: baseLayout({ brandName, brandColor, title: `Nuevo pedido #${orderNumber}`, body }),
+    domain: brandName?.toLowerCase().includes('kalexa') ? 'kalexa' : undefined,
   });
 }
 
@@ -190,6 +193,69 @@ export async function sendNewOrderToSeller({
 // 2. PEDIDO CONFIRMADO — Para el COMPRADOR
 // Se dispara cuando el vendedor acepta el pedido
 // ---------------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------------
+// NUEVO PEDIDO — Para el COMPRADOR
+// Se dispara cuando el comprador crea un pedido
+// ---------------------------------------------------------------------------
+export async function sendNewOrderToBuyer({
+  buyerEmail,
+  buyerName,
+  sellerName,
+  orderNumber,
+  items,
+  total,
+  notes,
+  brandName,
+  brandColor,
+  paymentMethod,
+}: {
+  buyerEmail: string;
+  buyerName: string;
+  sellerName: string;
+  orderNumber: number;
+  items: { productName: string; quantity: number; price: number; color?: string | null; size?: string | null }[];
+  total: number;
+  notes?: string | null;
+  brandName?: string;
+  brandColor?: string;
+  paymentMethod?: string;
+}) {
+  const body = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">
+      ¡Pedido recibido!
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#64748b;">
+      Hola <strong>${buyerName}</strong>, hemos recibido tu pedido y pronto te contactaremos para coordinar el pago y envío.
+    </p>
+
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#1d4ed8;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">
+        Pedido #${orderNumber} — ${sellerName}
+      </p>
+      ${paymentMethod ? `<p style="margin:8px 0 0;font-size:14px;color:#1e40af;">Forma de pago: <strong>${paymentMethod}</strong></p>` : ''}
+      ${notes ? `<p style="margin:8px 0 0;font-size:14px;color:#1e40af;">Notas: "${notes}"</p>` : ''}
+    </div>
+
+    ${orderItemsTable(items)}
+
+    <div style="text-align:right;margin-top:8px;">
+      <p style="font-size:18px;font-weight:800;color:#1e293b;margin:0;">
+        Total: <span style="color:#2563eb;">$${total.toFixed(2)}</span>
+      </p>
+    </div>
+
+    ${ctaButton('Ver mis pedidos', `${APP_URL}/orders`)}
+  `;
+
+  return sendEmail({
+    to: buyerEmail,
+    subject: `🛍️ Pedido #${orderNumber} recibido — ${sellerName}`,
+    html: baseLayout({ brandName, brandColor, title: `Pedido #${orderNumber} recibido`, body }),
+    domain: brandName?.toLowerCase().includes('kalexa') ? 'kalexa' : undefined,
+  });
+}
 
 export async function sendOrderConfirmedToBuyer({
   buyerEmail,
@@ -354,12 +420,16 @@ export async function sendWelcomeToSeller({
   storeName,
   tempPassword,
   brandName,
+  brandColor,
+  domain,
 }: {
   email: string;
   name: string;
   storeName: string;
   tempPassword: string;
   brandName?: string;
+  brandColor?: string;
+  domain?: string;
 }) {
   const body = `
     <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">
@@ -405,13 +475,14 @@ export async function sendWelcomeToSeller({
   return sendEmail({
     to: email,
     subject: `🎉 ¡Tu tienda ${storeName} fue aprobada en ${brandName || 'Moda Zapotlanejo'}!`,
-    html: baseLayout({ brandName, title: `Tienda aprobada: ${storeName}`, body }),
+    html: baseLayout({ brandName, brandColor, title: `Tienda aprobada: ${storeName}`, body }),
+    domain,
   });
 }
 
 // ---------------------------------------------------------------------------
 // 6. ALERTA DE INVENTARIO BAJO — Para el VENDEDOR
-// Se dispara cuando el stock de una variante cae a 5 o menos unidades
+// Se dispara cuando el stock de una variante cae a 1 o menos unidades
 // ---------------------------------------------------------------------------
 
 export async function sendLowInventoryAlert({
@@ -633,5 +704,111 @@ export async function sendShipmentNotification({
     to: buyerEmail,
     subject: `📦 Pedido #${orderNumber} enviado — Guía ${trackingNumber}`,
     html: baseLayout({ brandName, title: `Pedido #${orderNumber} enviado`, body }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 9. RESTABLECIMIENTO DE CONTRASEÑA
+// Se dispara cuando el usuario solicita recuperar su contraseña
+// ---------------------------------------------------------------------------
+
+const BRAND_COLORS: Record<string, string> = {
+  blue:   '#2563eb',
+  violet: '#7c3aed',
+  kalexa: '#8124E3',
+};
+
+export async function sendPasswordResetEmail({
+  email,
+  resetLink,
+  brandName,
+  brandColor,
+  domain,
+}: {
+  email: string;
+  resetLink: string;
+  brandName?: string;
+  brandColor?: string;
+  domain?: string;
+}) {
+  const name = brandName || 'Moda Zapotlanejo';
+  const color = brandColor || '#2563eb';
+
+  const body = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">
+      Restablecer tu contraseña
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#64748b;">
+      Recibimos una solicitud para restablecer la contraseña de tu cuenta. Haz clic en el siguiente botón para continuar:
+    </p>
+    ${ctaButton('Restablecer Contraseña', resetLink, color)}
+    ${divider}
+    <p style="font-size:13px;color:#94a3b8;margin:0;">
+      Este enlace expirará en <strong>1 hora</strong>.<br/>
+      Si no solicitaste este cambio, puedes ignorar este correo.
+    </p>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `Restablecer contraseña — ${name}`,
+    html: baseLayout({ brandName: name, brandColor: color, title: `Restablecer contraseña — ${name}`, body }),
+    domain,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// PEDIDO ACTUALIZADO — Para el COMPRADOR
+// Se dispara cuando el vendedor edita los artículos de un pedido
+// ---------------------------------------------------------------------------
+export async function sendOrderUpdatedToBuyer({
+  buyerEmail,
+  buyerName,
+  sellerName,
+  orderNumber,
+  items,
+  total,
+  sellerNotes,
+  brandName,
+}: {
+  buyerEmail: string;
+  buyerName: string;
+  sellerName: string;
+  orderNumber: number;
+  items: { productName: string; quantity: number; price: number; color?: string | null; size?: string | null }[];
+  total: number;
+  sellerNotes?: string | null;
+  brandName?: string;
+}) {
+  const body = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">
+      Tu pedido fue actualizado
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#64748b;">
+      Hola <strong>${buyerName}</strong>, <strong>${sellerName}</strong> ha actualizado los artículos de tu pedido según lo acordado.
+    </p>
+
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#1d4ed8;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">
+        ✏️ Pedido #${orderNumber} — Artículos actualizados
+      </p>
+      ${sellerNotes ? `<p style="margin:8px 0 0;font-size:14px;color:#1e40af;">Mensaje del vendedor: "${sellerNotes}"</p>` : ''}
+    </div>
+
+    ${orderItemsTable(items)}
+
+    <div style="text-align:right;margin-top:8px;">
+      <p style="font-size:18px;font-weight:800;color:#1e293b;margin:0;">
+        Nuevo total: <span style="color:#2563eb;">$${total.toFixed(2)}</span>
+      </p>
+    </div>
+
+    ${ctaButton('Ver mi pedido', `${APP_URL}/orders`)}
+  `;
+
+  return sendEmail({
+    to: buyerEmail,
+    subject: `✏️ Pedido #${orderNumber} actualizado por ${sellerName}`,
+    html: baseLayout({ brandName, title: `Pedido #${orderNumber} actualizado`, body }),
   });
 }

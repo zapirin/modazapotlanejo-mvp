@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { login } from '../actions/auth';
+// login via API route
 import Link from 'next/link';
 import type { BrandConfig } from '@/lib/brand';
 
 const COLOR_HEX: Record<string, string> = {
     blue: '#2563eb', violet: '#7c3aed', emerald: '#059669',
     amber: '#d97706', rose: '#e11d48', slate: '#475569',
+    kalexa: '#8124E3',
 };
 
 export default function LoginClient({ brand }: { brand: BrandConfig }) {
@@ -30,7 +31,13 @@ export default function LoginClient({ brand }: { brand: BrandConfig }) {
             setIsLoading(false);
             return;
         }
-        const result = await login(email, password);
+        const registeredDomain = brand.isSingleVendor ? brand.domain : undefined;
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, registeredDomain }),
+        });
+        const result = await res.json();
         if (result.success) {
             if (result.role === 'CASHIER') {
                 setError('Los cajeros deben ingresar por el enlace específico de su tienda.');
@@ -124,7 +131,7 @@ export default function LoginClient({ brand }: { brand: BrandConfig }) {
 
                     <div className="mt-8 text-center space-y-3">
                         <p className="text-sm text-gray-500">¿No tienes cuenta? <Link href="/register/buyer" className="font-bold transition-colors hover:underline" style={{color: brandColor}}>Regístrate aquí</Link></p>
-                        <Link href="/" className="inline-block text-sm font-bold text-gray-400 hover:underline transition-colors">← Volver al Marketplace</Link>
+                        <Link href="/" className="inline-block text-sm font-bold text-gray-400 hover:underline transition-colors">← Volver {brand.isSingleVendor ? 'a la Tienda' : 'al Marketplace'}</Link>
                     </div>
                 </div>
             </div>

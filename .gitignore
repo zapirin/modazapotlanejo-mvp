@@ -33,6 +33,12 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# Secretos y backups — nunca subir
+SECRETOS.md
+*.bak
+*.bak2
+*.bak3
+
 # vercel
 .vercel
 

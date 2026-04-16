@@ -10,6 +10,22 @@ import { sendLowInventoryAlert } from "@/lib/email/templates";
 // HELPER: Resolver el sellerId efectivo para cajeros
 // Un cajero usa los productos/configs de su vendedor (managedBySellerId)
 // ---------------------------------------------------------------------------
+function makeSlug(text: string): string {
+    return text.toLowerCase().trim()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s-]/g, '')
+        .trim().replace(/\s+/g, '-').replace(/-+/g, '-')
+        .substring(0, 60).replace(/-+$/, '') || 'producto';
+}
+
+async function uniqueProductSlug(base: string): Promise<string> {
+    let slug = base, counter = 1;
+    while (await (prisma.product as any).findUnique({ where: { slug } })) {
+        slug = `${base}-${counter++}`;
+    }
+    return slug;
+}
+
 async function getEffectiveSellerId(user: any): Promise<string | null> {
     if (!user) return null;
     if (user.role === 'ADMIN') return null; // ADMIN ve todo
@@ -59,13 +75,14 @@ export async function createProduct(data: {
 
         // Verificar límite de productos del plan
         if (user && user.role !== 'ADMIN') {
+            const effectiveSellerIdForLimit = await getEffectiveSellerId(user) || user.id;
             const sellerData = await (prisma.user as any).findUnique({
-                where: { id: user.id },
+                where: { id: effectiveSellerIdForLimit },
                 select: { maxProducts: true }
             });
             if (sellerData?.maxProducts !== null && sellerData?.maxProducts !== undefined) {
                 const currentCount = await prisma.product.count({
-                    where: { sellerId: user.id, isActive: true }
+                    where: { sellerId: effectiveSellerIdForLimit, isActive: true }
                 });
                 if (currentCount >= sellerData.maxProducts) {
                     return { success: false, error: `Has alcanzado el límite de ${sellerData.maxProducts} productos de tu plan. Contacta al administrador para aumentar tu límite.` };
@@ -120,11 +137,13 @@ export async function createProduct(data: {
         }
 
         const costPrice = data.cost ? parseFloat(data.cost) : null;
+        const productSlug = await uniqueProductSlug(makeSlug(data.name));
 
         // 1. Create the product
         const product = await (prisma.product as any).create({
             data: {
                 name: data.name,
+                slug: productSlug,
                 description: data.description || "",
                 price: price,
                 wholesalePrice: wPrice,
@@ -145,7 +164,7 @@ export async function createProduct(data: {
 
                 sku: (data as any).sku || null,
                 images: data.images || [],
-                sellerId: user?.id,
+                sellerId: await getEffectiveSellerId(user) || user?.id,
                 variants: {
                     create: variantsToCreate,
                 },
@@ -190,7 +209,7 @@ export async function duplicateProduct(productId: string) {
                 wholesaleComposition: original.wholesaleComposition,
                 brandId: original.brandId,
                 supplierId: original.supplierId,
-                sellerId: user?.id,
+                sellerId: await getEffectiveSellerId(user) || user?.id,
                 categoryId: original.categoryId,
                 subcategoryId: original.subcategoryId,
                 isOnline: original.isOnline,
@@ -305,6 +324,28 @@ export async function createStoreLocation(name: string) {
     }
 }
 
+export async function getAllPOSProducts() {
+    try {
+        const user = await getSessionUser();
+        const effectiveSellerId = await getEffectiveSellerId(user);
+        const sellerFilter = user?.role === 'ADMIN' ? {} : { sellerId: effectiveSellerId };
+
+        const products = await prisma.product.findMany({
+            where: { isActive: true, isPOS: true, ...sellerFilter },
+            include: {
+                variants: { orderBy: { createdAt: 'asc' } },
+                category: true,
+                brand: true,
+            },
+            orderBy: { name: 'asc' }
+        });
+        return products;
+    } catch (error) {
+        console.error("Error fetching POS products:", error);
+        return [];
+    }
+}
+
 export async function searchProducts(query: string) {
     try {
         const user = await getSessionUser();
@@ -326,7 +367,12 @@ export async function searchProducts(query: string) {
             },
             include: {
                 variants: {
-                    orderBy: { createdAt: 'asc' }
+                    orderBy: { createdAt: 'asc' },
+                    include: {
+                        inventoryLevels: {
+                            include: { location: { select: { id: true, name: true } } }
+                        }
+                    }
                 },
                 category: true,
             },
@@ -353,7 +399,12 @@ export async function getProductsByCategory(categoryId: string) {
             },
             include: {
                 variants: {
-                    orderBy: { createdAt: 'asc' }
+                    orderBy: { createdAt: 'asc' },
+                    include: {
+                        inventoryLevels: {
+                            include: { location: { select: { id: true, name: true } } }
+                        }
+                    }
                 },
                 category: true,
             },
@@ -437,7 +488,7 @@ export async function suspendSale(data: {
         }
 
         revalidatePath("/pos");
-        return { success: true, saleId: sale.id };
+        return { success: true, saleId: sale.id, receiptNumber: sale.receiptNumber };
     } catch (error: any) {
         console.error("Suspend Sale Error:", error);
         return { success: false, error: `Error al suspender: ${error?.message || error?.code || JSON.stringify(error)}` };
@@ -527,7 +578,7 @@ export async function createLayaway(data: {
 
         revalidatePath("/pos");
         revalidatePath("/inventory");
-        return { success: true, saleId: sale.id };
+        return { success: true, saleId: sale.id, receiptNumber: sale.receiptNumber };
     } catch (error: any) {
         console.error("Create Layaway Error:", error);
         return { success: false, error: 'Ocurrió un error al crear el apartado.' };
@@ -597,6 +648,8 @@ export async function processSale(data: {
     isReturn?: boolean;
     cashSessionId?: string | null;
     amountPaid?: number;
+    soldByUserId?: string | null;
+    soldBySalespersonId?: string | null;
 }) {
     try {
         const user = await getSessionUser();
@@ -660,6 +713,8 @@ export async function processSale(data: {
                     cashSessionId: data.cashSessionId || null,
                     locationId: locationId,
                     sellerId: ownerId,
+                    soldByUserId: data.soldByUserId || null,
+                    soldBySalespersonId: (data as any).soldBySalespersonId || null,
                     status: finalStatus,
                     items: {
                         create: data.cart.map(item => ({
@@ -668,10 +723,9 @@ export async function processSale(data: {
                             price: item.price
                         }))
                     }
-                }
+                } as any
             });
 
-            const lowStockItems: any[] = [];
             for (const item of data.cart) {
                 // Determine inventory movement type
                 let movementType = "SALE";
@@ -689,37 +743,13 @@ export async function processSale(data: {
                     }
                 });
 
-                const updatedVariant = await tx.variant.update({
+                await tx.variant.update({
                     where: { id: item.variantId },
-                    data: {
-                        stock: {
-                            decrement: item.quantity
-                        }
-                    },
-                    include: { product: true }
+                    data: { stock: { decrement: item.quantity } }
                 });
 
-                if (updatedVariant.stock <= 5 && !data.isReturn && item.quantity > 0) {
-                    lowStockItems.push({
-                        productName: updatedVariant.product.name,
-                        variantName: `${updatedVariant.color || ''} ${updatedVariant.size || ''}`.trim(),
-                        stock: updatedVariant.stock
-                    });
-                }
-            }
-
-            if (lowStockItems.length > 0) {
-                const seller = await tx.user.findUnique({
-                    where: { id: ownerId! },
-                    select: { email: true, name: true }
-                });
-                if (seller?.email) {
-                    await sendLowInventoryAlert({
-                        sellerEmail: seller.email,
-                        sellerName: seller.name || 'Vendedor',
-                        items: lowStockItems
-                    });
-                }
+                // Low-stock alerts are no longer sent per-sale.
+                // A daily digest is sent at 9 PM via /api/cron/low-stock-digest
             }
 
             if (data.paymentMethodName === 'Crédito de Tienda' && data.clientId) {
@@ -744,7 +774,7 @@ export async function processSale(data: {
 
         revalidatePath("/pos");
         revalidatePath("/inventory");
-        return { success: true, saleId: sale!.id };
+        return { success: true, saleId: sale!.id, receiptNumber: sale!.receiptNumber };
     } catch (error: any) {
         console.error("Sale Processing Error:", error);
         return { success: false, error: 'Ocurrió un error al procesar la venta.' };

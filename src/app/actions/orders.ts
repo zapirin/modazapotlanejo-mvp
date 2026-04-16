@@ -5,9 +5,11 @@ import { getSessionUser } from "@/app/actions/auth";
 import { revalidatePath } from "next/cache";
 import {
   sendNewOrderToSeller,
+  sendNewOrderToBuyer,
   sendOrderConfirmedToBuyer,
   sendOrderRejectedToBuyer,
   sendLowInventoryAlert,
+  sendOrderUpdatedToBuyer,
 } from "@/lib/email/templates";
 
 interface OrderItemInput {
@@ -31,6 +33,8 @@ export async function createOrder(data: {
     shippingCost?: number;
     skydropxRateId?: string;
     skydropxQuotationId?: string;
+    paymentMethod?: string;
+    domain?: string;
 }) {
     try {
         const user = await getSessionUser();
@@ -60,6 +64,7 @@ export async function createOrder(data: {
                 commissionAmount,
                 sellerEarnings,
                 notes: data.notes || null,
+                paymentMethod: data.paymentMethod || null,
                 priceTierId: data.priceTierId || null,
                 shippingAddressId: data.shippingAddressId || null,
                 shippingCost: data.shippingCost || 0,
@@ -79,6 +84,7 @@ export async function createOrder(data: {
         });
 
         // Notificar al vendedor por email (async, no bloquea la respuesta)
+        const isKalexaDomain = data.domain?.includes('kalexa');
         prisma.user.findUnique({
             where: { id: data.sellerId },
             select: { email: true, name: true },
@@ -93,9 +99,33 @@ export async function createOrder(data: {
                     items: data.items,
                     total,
                     notes: data.notes,
+                    brandName: isKalexaDomain ? 'Kalexa Fashion' : undefined,
+                    brandColor: isKalexaDomain ? '#8124E3' : undefined,
                 }).catch(console.error);
             }
         }).catch(console.error);
+
+        // Notificar al comprador por email
+        if (user.email) {
+            const isKalexa = data.domain?.includes('kalexa');
+            prisma.user.findUnique({
+                where: { id: data.sellerId },
+                select: { name: true, businessName: true },
+            }).then(seller => {
+                sendNewOrderToBuyer({
+                    buyerEmail: user.email!,
+                    buyerName: user.name,
+                    sellerName: seller?.businessName || seller?.name || 'Kalexa Fashion',
+                    orderNumber: order.orderNumber,
+                    items: data.items,
+                    total,
+                    notes: data.notes,
+                    brandName: isKalexa ? 'Kalexa Fashion' : undefined,
+                    brandColor: isKalexa ? '#8124E3' : undefined,
+                    paymentMethod: data.paymentMethod,
+                }).catch(console.error);
+            }).catch(console.error);
+        }
 
         revalidatePath("/orders");
         return { success: true, orderId: order.id, orderNumber: order.orderNumber };
@@ -211,7 +241,7 @@ export async function updateOrderStatus(orderId: string, status: string, sellerN
                             }
                         });
 
-                        if (variant.stock <= 5) {
+                        if (variant.stock <= 1) {
                             lowStockItems.push({
                                 productName: variant.product.name,
                                 variantName: `${variant.color || ''} ${variant.size || ''}`.trim(),
@@ -286,6 +316,114 @@ export async function deleteOrder(orderId: string) {
         revalidatePath("/orders");
         return { success: true };
     } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+// Busca variantes del vendedor para reemplazar artículos en un pedido
+export async function searchOrderVariants(sellerId: string, query: string) {
+    try {
+        const variants = await prisma.variant.findMany({
+            where: {
+                stock: { gt: 0 },
+                product: {
+                    sellerId,
+                    isActive: true,
+                    OR: query.trim()
+                        ? [
+                            { name: { contains: query, mode: 'insensitive' } },
+                            { sku: { contains: query, mode: 'insensitive' } },
+                          ]
+                        : undefined,
+                },
+            },
+            include: {
+                product: {
+                    select: { id: true, name: true, images: true, price: true, wholesalePrice: true }
+                }
+            },
+            orderBy: { product: { name: 'asc' } },
+            take: 30,
+        });
+
+        return { success: true, variants };
+    } catch (e: any) {
+        return { success: false, error: e.message, variants: [] };
+    }
+}
+
+// Actualiza los artículos de un pedido (reemplazos acordados con el comprador)
+export async function updateOrderItems(orderId: string, items: {
+    variantId: string;
+    quantity: number;
+    price: number;
+    productName: string;
+    color?: string;
+    size?: string;
+}[], options?: { notifyBuyer?: boolean; sellerNotes?: string }) {
+    try {
+        const user = await getSessionUser();
+        if (!user) return { success: false, error: "No autorizado" };
+
+        const order = await prisma.order.findUnique({
+            where: { id: orderId },
+            include: {
+                buyer:  { select: { email: true, name: true } },
+                seller: { select: { name: true, businessName: true } },
+            }
+        });
+        if (!order) return { success: false, error: "Pedido no encontrado" };
+
+        if (user.role !== 'ADMIN' && order.sellerId !== user.id)
+            return { success: false, error: "Sin permiso" };
+
+        if (["SHIPPED", "COMPLETED", "CANCELLED", "REJECTED", "REFUNDED"].includes(order.status))
+            return { success: false, error: "No se puede editar un pedido que ya fue enviado, completado o cancelado" };
+
+        if (items.length === 0)
+            return { success: false, error: "El pedido debe tener al menos un artículo" };
+
+        const newTotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+        const commissionAmount = (newTotal * order.commissionRate) / 100;
+        const sellerEarnings = newTotal - commissionAmount;
+
+        await prisma.$transaction(async (tx) => {
+            await tx.orderItem.deleteMany({ where: { orderId } });
+            await tx.orderItem.createMany({
+                data: items.map(i => ({
+                    orderId,
+                    variantId: i.variantId,
+                    quantity: i.quantity,
+                    price: i.price,
+                    productName: i.productName,
+                    color: i.color || null,
+                    size: i.size || null,
+                }))
+            });
+            await tx.order.update({
+                where: { id: orderId },
+                data: { total: newTotal, commissionAmount, sellerEarnings }
+            });
+        });
+
+        // Notificar al comprador si se solicitó
+        if (options?.notifyBuyer && order.buyer?.email) {
+            const sellerName = (order.seller as any)?.businessName || (order.seller as any)?.name || 'El vendedor';
+            sendOrderUpdatedToBuyer({
+                buyerEmail: order.buyer.email,
+                buyerName:  order.buyer.name || 'Cliente',
+                sellerName,
+                orderNumber: order.orderNumber,
+                items,
+                total: newTotal,
+                sellerNotes: options.sellerNotes,
+            }).catch(console.error);
+        }
+
+        revalidatePath("/orders");
+        return { success: true, newTotal };
+    } catch (e: any) {
+        console.error("Error updating order items:", e);
         return { success: false, error: e.message };
     }
 }

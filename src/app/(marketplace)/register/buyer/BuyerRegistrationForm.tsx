@@ -13,7 +13,7 @@ const ESTADOS_MX = [
     'Sinaloa','Sonora','Tabasco','Tamaulipas','Tlaxcala','Veracruz','Yucatán','Zacatecas',
 ];
 
-export default function BuyerRegistrationForm({ brandName }: { brandName: string }) {
+export default function BuyerRegistrationForm({ brandName, registeredDomain }: { brandName: string, registeredDomain?: string }) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -39,6 +39,7 @@ export default function BuyerRegistrationForm({ brandName }: { brandName: string
             businessName: type === 'wholesale' ? formData.businessName : undefined,
             taxId: type === 'wholesale' ? formData.taxId : undefined,
             shippingAddress: address.street ? address : undefined,
+            registeredDomain,
         });
 
         if (result.success) {

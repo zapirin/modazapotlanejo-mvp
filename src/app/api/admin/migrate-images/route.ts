@@ -1,37 +1,45 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSessionUser } from '@/app/actions/auth';
+import { writeFile, mkdir } from 'fs/promises';
+import path from 'path';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const BUCKET = 'product-images';
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'public', 'uploads');
+const PUBLIC_BASE = process.env.NEXT_PUBLIC_UPLOAD_URL || '/uploads';
 
-async function uploadToStorage(base64: string, filename: string): Promise<string | null> {
+async function downloadAndSaveImage(imageUrl: string, filename: string): Promise<string | null> {
+    try {
+        const response = await fetch(imageUrl);
+        if (!response.ok) return null;
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+        const dir = path.join(UPLOAD_DIR, 'product-images');
+        await mkdir(dir, { recursive: true });
+
+        const filePath = path.join(dir, filename);
+        await writeFile(filePath, buffer);
+
+        return `${PUBLIC_BASE}/product-images/${filename}`;
+    } catch (e) {
+        console.error('Download error:', e);
+        return null;
+    }
+}
+
+async function saveBase64Image(base64: string, filename: string): Promise<string | null> {
     try {
         const base64Data = base64.replace(/^data:image\/\w+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
-        const mimeMatch = base64.match(/^data:(image\/\w+);base64,/);
-        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
-        const uploadUrl = `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${filename}`;
-        const response = await fetch(uploadUrl, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${SUPABASE_KEY}`,
-                'Content-Type': mimeType,
-                'x-upsert': 'true',
-            },
-            body: buffer,
-        });
+        const dir = path.join(UPLOAD_DIR, 'product-images');
+        await mkdir(dir, { recursive: true });
 
-        if (!response.ok) {
-            console.error(`Upload error for ${filename}:`, await response.text());
-            return null;
-        }
+        const filePath = path.join(dir, filename);
+        await writeFile(filePath, buffer);
 
-        return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${filename}`;
+        return `${PUBLIC_BASE}/product-images/${filename}`;
     } catch (e) {
-        console.error('Upload exception:', e);
+        console.error('Save error:', e);
         return null;
     }
 }
@@ -57,13 +65,26 @@ export async function POST(request: Request) {
 
             for (let i = 0; i < product.images.length; i++) {
                 const img = product.images[i];
-                if (!img.startsWith('data:')) { newImages.push(img); continue; }
 
-                const filename = `${product.id}-${i}-${Date.now()}.jpg`;
-                const url = await uploadToStorage(img, filename);
+                if (img.startsWith('data:')) {
+                    // Base64 → guardar a disco
+                    const filename = `${product.id}-${i}-${Date.now()}.jpg`;
+                    const url = await saveBase64Image(img, filename);
+                    if (url) { newImages.push(url); changed = true; }
+                    else { newImages.push(img); results.errors++; }
 
-                if (url) { newImages.push(url); changed = true; }
-                else { newImages.push(img); results.errors++; }
+                } else if (img.includes('supabase.co')) {
+                    // URL de Supabase → descargar y guardar localmente
+                    const ext = img.split('.').pop()?.split('?')[0] || 'jpg';
+                    const filename = `${product.id}-${i}-${Date.now()}.${ext}`;
+                    const url = await downloadAndSaveImage(img, filename);
+                    if (url) { newImages.push(url); changed = true; }
+                    else { newImages.push(img); results.errors++; }
+
+                } else {
+                    // Ya es URL local u otra — conservar
+                    newImages.push(img);
+                }
             }
 
             if (changed) {

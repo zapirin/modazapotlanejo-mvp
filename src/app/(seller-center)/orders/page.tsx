@@ -18,13 +18,17 @@ export default async function OrdersPage() {
     }
 
     const isBuyer = (user.role as string) === 'BUYER';
-    const isSeller = (user.role as string) === 'SELLER' || (user.role as string) === 'ADMIN';
+    const isAdmin = (user.role as string) === 'ADMIN';
+    const isSeller = (user.role as string) === 'SELLER' || isAdmin;
+
+    // Kalexa Fashion recibe info extra: origen del pedido y datos de contacto del comprador
+    const isKalexa = !isBuyer && !isAdmin && (user as any).email === 'kalexa.fashion@gmail.com';
 
     const orders = await prisma.order.findMany({
         where: isBuyer ? { buyerId: user.id } : (user.role === 'ADMIN' ? {} : { sellerId: user.id }),
         include: {
             items: true,
-            buyer: { select: { name: true, email: true, businessName: true } },
+            buyer: { select: { name: true, email: true, businessName: true, phone: true, registeredDomain: true } },
             seller: { select: { name: true, businessName: true } },
             shippingAddress: true,
             shipment: true,
@@ -52,7 +56,7 @@ export default async function OrdersPage() {
                 )}
             </div>
 
-            <OrdersClient orders={orders as any} isBuyer={isBuyer} isSeller={isSeller} />
+            <OrdersClient orders={orders as any} isBuyer={isBuyer} isSeller={isSeller} isAdmin={isAdmin} isKalexa={isKalexa} />
         </div>
     );
 }

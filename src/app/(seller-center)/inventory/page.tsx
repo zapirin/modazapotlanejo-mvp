@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getInventory, bulkCreateProducts, deleteProduct, getCategories, duplicateProduct, getStoreLocations, createStoreLocation, getBrands, getSuppliers } from '../products/new/actions';
+import { bulkCreateProducts, deleteProduct, getCategories, duplicateProduct, getStoreLocations, createStoreLocation, getBrands, getSuppliers } from '../products/new/actions';
 import { adjustProductStock, adjustProductStockGrid } from './actions';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
 import BulkActionsModal from '../products/BulkActionsModal';
@@ -21,9 +21,28 @@ const formatVariantName = (variant: any) => {
     return 'Única';
 };
 
+async function getInventory(params?: {
+    page?: number; search?: string; categoryId?: string; brandId?: string; supplierId?: string;
+}) {
+    const p = params || {};
+    const qs = new URLSearchParams();
+    qs.set('page', String(p.page || 1));
+    qs.set('limit', '50');
+    if (p.search) qs.set('search', p.search);
+    if (p.categoryId) qs.set('categoryId', p.categoryId);
+    if (p.brandId) qs.set('brandId', p.brandId);
+    if (p.supplierId) qs.set('supplierId', p.supplierId);
+    const res = await fetch('/api/inventory?' + qs.toString(), { cache: 'no-store' });
+    if (!res.ok) return { products: [], total: 0, page: 1, totalPages: 1 };
+    return res.json();
+}
+
 export default function InventoryPage() {
     const router = useRouter();
     const [products, setProducts] = useState<any[]>([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalProducts, setTotalProducts] = useState(0);
     const [categories, setCategories] = useState<any[]>([]);
     const [brands, setBrands] = useState<any[]>([]);
     const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -84,6 +103,13 @@ export default function InventoryPage() {
         loadInventory();
     }, []);
 
+    useEffect(() => {
+        const delay = setTimeout(() => {
+            loadInventory(1);
+        }, 400);
+        return () => clearTimeout(delay);
+    }, [searchQuery, selectedCategory, selectedBrand, selectedSupplier]);
+
     // Handler para cambios en tiempo real — actualiza el stock en pantalla sin recargar
     const handleInventoryChange = useCallback((change: { variantId: string; locationId: string; stock: number }) => {
         setProducts(prev => prev.map(product => ({
@@ -97,17 +123,20 @@ export default function InventoryPage() {
         })));
     }, []);
 
-    const loadInventory = async () => {
+    const loadInventory = async (page = 1) => {
         setLoading(true);
         try {
             const [data, cats, locs, brs, sups] = await Promise.all([
-                getInventory(),
+                getInventory({ page, search: searchQuery, categoryId: selectedCategory.split('|')[0] || '', brandId: selectedBrand, supplierId: selectedSupplier }),
                 getCategories(),
                 getStoreLocations(),
                 getBrands(),
                 getSuppliers()
             ]);
-            setProducts(data);
+            setProducts(data.products || []);
+            setTotalPages(data.totalPages || 1);
+            setTotalProducts(data.total || 0);
+            setCurrentPage(data.page || 1);
             setCategories(cats);
             setLocations(locs);
             setBrands(brs);
@@ -369,6 +398,34 @@ export default function InventoryPage() {
                 </div>
             )}
 
+
+            {totalPages > 1 && (
+                <div className="mb-4 flex items-center justify-between bg-card border border-border rounded-2xl px-6 py-4">
+                    <p className="text-sm text-gray-500 font-medium">
+                        Mostrando <span className="font-black text-foreground">{products.length}</span> de <span className="font-black text-foreground">{totalProducts}</span> productos
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => loadInventory(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="px-4 py-2 rounded-xl border border-border font-bold text-sm disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                        >
+                            ← Anterior
+                        </button>
+                        <span className="px-4 py-2 font-black text-sm">
+                            {currentPage} / {totalPages}
+                        </span>
+                        <button
+                            onClick={() => loadInventory(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="px-4 py-2 rounded-xl border border-border font-bold text-sm disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                        >
+                            Siguiente →
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Panel de Búsqueda y Filtros */}
             <div className="bg-card p-5 rounded-t-3xl border border-border gap-4 shadow-sm flex flex-col">
                 <div className="flex flex-col md:flex-row gap-4 w-full">
@@ -604,6 +661,33 @@ export default function InventoryPage() {
                     </div>
                 )}
             </div>
+
+            {totalPages > 1 && (
+                <div className="mt-6 flex items-center justify-between bg-card border border-border rounded-2xl px-6 py-4">
+                    <p className="text-sm text-gray-500 font-medium">
+                        Mostrando <span className="font-black text-foreground">{products.length}</span> de <span className="font-black text-foreground">{totalProducts}</span> productos
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => loadInventory(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="px-4 py-2 rounded-xl border border-border font-bold text-sm disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                        >
+                            ← Anterior
+                        </button>
+                        <span className="px-4 py-2 font-black text-sm">
+                            {currentPage} / {totalPages}
+                        </span>
+                        <button
+                            onClick={() => loadInventory(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="px-4 py-2 rounded-xl border border-border font-bold text-sm disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                        >
+                            Siguiente →
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <div className="mt-8 flex justify-center">
                 <InventoryRealtimeSync 
