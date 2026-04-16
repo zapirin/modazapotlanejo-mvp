@@ -1,4 +1,5 @@
-import { getVendorBySlug, getVendorProducts } from '../actions';
+import { getVendorBySlug, getVendorProducts, getVendorBrands } from '../actions';
+import PrintButton from './PrintButton';
 import { getCategories } from '@/app/(marketplace)/actions';
 import { getSessionUser } from '@/app/actions/auth';
 import Link from 'next/link';
@@ -61,14 +62,15 @@ export default async function VendorPage({
     const vendor = await getVendorBySlug(resolvedParams.slug);
     if (!vendor) notFound();
 
-    const [products, categories, user] = await Promise.all([
+    const [products, categories, user, vendorBrands] = await Promise.all([
         getVendorProducts(vendor.id, {
             category: resolvedSearch.category,
             subcategory: resolvedSearch.subcategory,
             sort: resolvedSearch.sort,
         }),
-        getCategories(),
+        getCategories(vendor.id),
         getSessionUser(),
+        getVendorBrands(vendor.id),
     ]);
     const isLoggedIn = !!user;
 
@@ -127,17 +129,22 @@ export default async function VendorPage({
                             <h1 className="text-4xl md:text-5xl font-black tracking-tight">
                                 {vendorName}
                             </h1>
-                            <div className="flex flex-wrap gap-4 pt-2">
+                            <div className="flex flex-wrap gap-3 pt-2">
                                 <span className="px-4 py-1.5 bg-white/10 backdrop-blur-sm rounded-full text-xs font-black uppercase tracking-widest">
                                     📦 {(vendor as any)._count.ownedProducts} Productos
                                 </span>
+                                {vendorBrands.length > 0 && (
+                                    <span className="px-4 py-1.5 bg-white/10 backdrop-blur-sm rounded-full text-xs font-black uppercase tracking-widest">
+                                        🏷️ {vendorBrands.length} {vendorBrands.length === 1 ? 'Marca' : 'Marcas'}
+                                    </span>
+                                )}
                                 <span className="px-4 py-1.5 bg-white/10 backdrop-blur-sm rounded-full text-xs font-black uppercase tracking-widest">
                                     📅 Miembro desde {memberSince}
                                 </span>
                                 <span className="px-4 py-1.5 bg-emerald-500/20 backdrop-blur-sm rounded-full text-xs font-black uppercase tracking-widest text-emerald-300">
                                     ✓ Vendedor Verificado
                                 </span>
-
+                                <PrintButton />
                             </div>
                         </div>
                     </div>
@@ -169,6 +176,19 @@ export default async function VendorPage({
                                 ))}
                             </div>
                         </div>
+
+                        {vendorBrands.length > 0 && (
+                            <div className="space-y-3">
+                                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Marcas</h3>
+                                <div className="flex flex-wrap gap-2">
+                                    {vendorBrands.map((brand: any) => (
+                                        <span key={brand.id} className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-full text-xs font-bold border border-border">
+                                            {brand.name}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="space-y-4">
                             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Ordenar por</h3>

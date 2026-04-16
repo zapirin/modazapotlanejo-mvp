@@ -259,6 +259,34 @@ export default async function LandingPage() {
                 </div>
             )}
 
+            {/* ── BANNER PROMOCIONAL ── */}
+            {(() => {
+                const banner = (siteSettings?.data as any)?.banner;
+                if (!banner?.enabled || !banner?.text) return null;
+                const expires = banner.expires ? new Date(banner.expires) : null;
+                if (expires && expires < new Date()) return null;
+                return (
+                    <div className="w-full" style={{ backgroundColor: banner.bgColor || 'var(--brand-600)' }}>
+                        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 text-white text-center sm:text-left">
+                                {banner.emoji && <span className="text-2xl">{banner.emoji}</span>}
+                                <div>
+                                    <p className="text-sm font-black uppercase tracking-widest">{banner.text}</p>
+                                    {banner.subtext && <p className="text-xs font-medium opacity-80">{banner.subtext}</p>}
+                                </div>
+                            </div>
+                            {banner.ctaUrl && banner.ctaText && (
+                                <Link href={banner.ctaUrl}
+                                    className="shrink-0 px-5 py-2 bg-white rounded-full text-xs font-black uppercase tracking-widest hover:scale-105 transition-transform shadow-lg"
+                                    style={{ color: banner.bgColor || 'var(--brand-600)' }}>
+                                    {banner.ctaText} →
+                                </Link>
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
+
             {/* ── CATEGORÍAS ── */}
             <section className="py-24 max-w-7xl mx-auto px-6 w-full">
                 <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">

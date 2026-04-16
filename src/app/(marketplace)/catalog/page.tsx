@@ -1,5 +1,5 @@
 import React from 'react';
-import { getProducts, getCategories, getBrands } from '../actions';
+import { getProducts, getCategories, getBrands, getAvailableVariantOptions } from '../actions';
 import CatalogClient from './CatalogClient';
 import { getSessionUser } from '@/app/actions/auth';
 import { headers } from 'next/headers';
@@ -84,27 +84,33 @@ export default async function CatalogPage({
     const maxPrice = typeof params.maxPrice === 'string' ? parseFloat(params.maxPrice) : undefined;
     const onlyWithStock = params.onlyWithStock === 'true';
     const priceType = (params.priceType as 'all' | 'wholesale' | 'retail') || 'all';
+    const color = typeof params.color === 'string' ? params.color : undefined;
+    const size  = typeof params.size  === 'string' ? params.size  : undefined;
     const page = typeof params.page === 'string' ? parseInt(params.page) : 1;
     const pageSize = 24;
     const offset = (page - 1) * pageSize;
 
     const sellerId = brandConfig.sellerId || undefined;
 
-    const [result, categories, brands, user] = await Promise.all([
-        getProducts({ category, subcategory, brand, search, sort, minPrice, maxPrice, onlyWithStock, priceType, offset, limit: pageSize, sellerId }),
+    const [result, categories, brands, user, variantOptions] = await Promise.all([
+        getProducts({ category, subcategory, brand, search, sort, minPrice, maxPrice, onlyWithStock, priceType, color, size, offset, limit: pageSize, sellerId }),
         getCategories(sellerId),
         getBrands(sellerId),
-        getSessionUser()
+        getSessionUser(),
+        getAvailableVariantOptions(sellerId),
     ]);
 
     return (
-        <CatalogClient 
+        <CatalogClient
             initialProducts={result.products}
             totalProducts={result.total}
             currentPage={page}
             pageSize={pageSize}
             categories={categories}
             brands={brands}
+            availableColors={variantOptions.colors}
+            availableSizes={variantOptions.sizes}
+            sellerId={sellerId}
             // @ts-ignore
             isWholesale={!!user?.isWholesale}
             isLoggedIn={!!user}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { notFound } from 'next/navigation';
-import { getProductDetail, getAdjacentProducts } from '../../actions';
+import { getProductDetail, getAdjacentProducts, getRelatedProducts } from '../../actions';
 import ProductDetailClient from './ProductDetailClient';
 import { getSessionUser } from '@/app/actions/auth';
 import { headers } from 'next/headers';
@@ -75,6 +75,11 @@ export default async function ProductPage({
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const baseUrl = `${protocol}://${host}`;
 
+    const sellerId = brand.sellerId || undefined;
+    const relatedProducts = (product as any).categoryId
+        ? await getRelatedProducts((product as any).categoryId, product.id, 4, sellerId)
+        : [];
+
     const hasStock = (product.variants as any[])?.some((v: any) => v.stock > 0);
 
     const jsonLd = {
@@ -120,6 +125,7 @@ export default async function ProductPage({
                 whatsapp={brand.whatsapp}
                 prevProduct={adjacentProducts.prev}
                 nextProduct={adjacentProducts.next}
+                relatedProducts={relatedProducts}
             />
         </>
     );

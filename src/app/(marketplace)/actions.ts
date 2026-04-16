@@ -3,7 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { getBrandConfig, mergeBrandWithDB } from '@/lib/brand';
 
-export async function getProducts(filters: { 
+export async function getProducts(filters: {
     category?: string;
     subcategory?: string;
     brand?: string;
@@ -17,6 +17,8 @@ export async function getProducts(filters: {
     onlyWithStock?: boolean;
     priceType?: 'all' | 'wholesale' | 'retail';
     sellerId?: string;
+    color?: string;
+    size?: string;
 }) {
     try {
         const where: any = { isOnline: true, isActive: true };
@@ -42,16 +44,19 @@ export async function getProducts(filters: {
             where.sellerId = filters.seller;
         }
 
-        // Búsqueda mejorada: busca en nombre, descripción, marca y categoría
+        // Búsqueda mejorada: nombre, descripción, marca, categoría, SKU y variantes
         if (filters.search) {
             const term = filters.search.trim();
             where.OR = [
                 { name: { contains: term, mode: 'insensitive' } },
                 { description: { contains: term, mode: 'insensitive' } },
+                { sku: { contains: term, mode: 'insensitive' } },
                 { brand: { name: { contains: term, mode: 'insensitive' } } },
                 { category: { name: { contains: term, mode: 'insensitive' } } },
                 { subcategory: { name: { contains: term, mode: 'insensitive' } } },
                 { tags: { some: { name: { contains: term, mode: 'insensitive' } } } },
+                { variants: { some: { color: { contains: term, mode: 'insensitive' } } } },
+                { variants: { some: { size: { contains: term, mode: 'insensitive' } } } },
             ];
         }
 
@@ -69,11 +74,13 @@ export async function getProducts(filters: {
             where.sellByPackage = false;
         }
 
-        // Filtro: solo productos con stock disponible
-        if (filters.onlyWithStock) {
-            where.variants = {
-                some: { stock: { gt: 0 } }
-            };
+        // Filtro por variante: stock, color, talla (unificados para no conflicto)
+        const variantFilter: any = {};
+        if (filters.onlyWithStock) variantFilter.stock = { gt: 0 };
+        if (filters.color) variantFilter.color = { contains: filters.color, mode: 'insensitive' };
+        if (filters.size)  variantFilter.size  = { contains: filters.size,  mode: 'insensitive' };
+        if (Object.keys(variantFilter).length > 0) {
+            where.variants = { some: variantFilter };
         }
 
         let orderBy: any = { createdAt: 'desc' };
@@ -417,6 +424,50 @@ export async function getActiveBrandConfig(host: string | null) {
 // ---------------------------------------------------------------------------
 // DATOS DE TRANSFERENCIA DEL VENDEDOR (para el carrito)
 // ---------------------------------------------------------------------------
+
+export async function getRelatedProducts(categoryId: string, excludeId: string, limit = 4, sellerId?: string) {
+    try {
+        const where: any = { isOnline: true, isActive: true, categoryId, id: { not: excludeId } };
+        if (sellerId) where.sellerId = sellerId;
+        return await prisma.product.findMany({
+            where,
+            take: limit,
+            orderBy: { createdAt: 'desc' },
+            include: {
+                brand: true,
+                category: true,
+                variants: { select: { id: true, stock: true } },
+                // @ts-ignore
+                seller: { select: { id: true, name: true, businessName: true, sellerSlug: true } },
+            },
+        });
+    } catch { return []; }
+}
+
+export async function getAvailableVariantOptions(sellerId?: string) {
+    try {
+        const productWhere: any = { isOnline: true, isActive: true };
+        if (sellerId) productWhere.sellerId = sellerId;
+        const [colors, sizes] = await Promise.all([
+            prisma.variant.findMany({
+                where: { color: { not: null }, product: productWhere },
+                select: { color: true },
+                distinct: ['color'],
+                orderBy: { color: 'asc' },
+            }),
+            prisma.variant.findMany({
+                where: { size: { not: null }, product: productWhere },
+                select: { size: true },
+                distinct: ['size'],
+                orderBy: { size: 'asc' },
+            }),
+        ]);
+        return {
+            colors: colors.map((v: any) => v.color!).filter(Boolean),
+            sizes:  sizes.map((v: any) => v.size!).filter(Boolean),
+        };
+    } catch { return { colors: [], sizes: [] }; }
+}
 
 export async function getSellerTransferSettings(sellerId: string): Promise<{
     acceptsTransfer: boolean;

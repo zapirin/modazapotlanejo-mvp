@@ -90,6 +90,16 @@ export async function getVendorProducts(vendorId: string, filters?: {
     }
 }
 
+export async function getVendorBrands(vendorId: string) {
+    try {
+        return await prisma.brand.findMany({
+            where: { products: { some: { sellerId: vendorId, isOnline: true, isActive: true } } },
+            select: { id: true, name: true },
+            orderBy: { name: 'asc' },
+        });
+    } catch { return []; }
+}
+
 export async function getVendors() {
     try {
         return await prisma.user.findMany({
