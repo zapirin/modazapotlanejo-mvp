@@ -50,12 +50,9 @@ export default function CatalogClient({
     const selectedSubcategory = searchParams.get('subcategory') || '';
     const selectedBrand       = searchParams.get('brand')       || '';
     const selectedSort        = searchParams.get('sort')        || '';
-    const selectedColor       = searchParams.get('color')       || '';
-    const selectedSize        = searchParams.get('size')        || '';
     const onlyWithStock       = searchParams.get('onlyWithStock') === 'true';
     const priceType           = searchParams.get('priceType')   || 'all';
 
-    // Reset products when server-rendered initialProducts change (new page load / filter change)
     useEffect(() => {
         if (isFirstRender.current) { isFirstRender.current = false; return; }
         setProducts(initialProducts);
@@ -66,7 +63,7 @@ export default function CatalogClient({
     const handleFilterChange = (key: string, value: string) => {
         const params = new URLSearchParams(searchParams.toString());
         if (value) { params.set(key, value); } else { params.delete(key); }
-        if (key === 'category') { params.delete('subcategory'); params.delete('color'); params.delete('size'); }
+        if (key === 'category') { params.delete('subcategory'); }
         params.delete('page');
         router.push(`/catalog?${params.toString()}`);
     };
@@ -75,8 +72,7 @@ export default function CatalogClient({
 
     const hasActiveFilters = selectedCategory || selectedBrand || selectedSubcategory ||
         searchParams.get('search') || searchParams.get('minPrice') ||
-        searchParams.get('maxPrice') || onlyWithStock || priceType !== 'all' ||
-        selectedColor || selectedSize;
+        searchParams.get('maxPrice') || onlyWithStock || priceType !== 'all';
 
     const currentCategory = categories.find((c: any) => c.slug === selectedCategory);
 
@@ -93,8 +89,6 @@ export default function CatalogClient({
                 maxPrice:     searchParams.get('maxPrice') ? parseFloat(searchParams.get('maxPrice')!) : undefined,
                 onlyWithStock,
                 priceType:    (priceType as any),
-                color:        selectedColor       || undefined,
-                size:         selectedSize        || undefined,
                 offset:       loadedCount,
                 limit:        pageSize,
                 sellerId,
@@ -117,186 +111,6 @@ export default function CatalogClient({
         { value: 'name_desc',   label: 'Nombre Z-A' },
     ];
 
-    // ── Sidebar ───────────────────────────────────────────────────────────────
-    const Sidebar = () => (
-        <aside className={`w-full md:w-64 space-y-8 shrink-0 ${showMobileFilters ? 'block' : 'hidden md:block'}`}>
-
-            {hasActiveFilters && (
-                <button onClick={clearAllFilters}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-100 dark:hover:bg-red-900/40 transition-all">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                    Limpiar filtros
-                </button>
-            )}
-
-            {/* Buscar */}
-            <div className="space-y-3">
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Buscar</h3>
-                <div className="relative">
-                    <input type="text"
-                        placeholder="Nombre, SKU, color, talla..."
-                        className="w-full pl-4 pr-10 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-sm font-bold"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleFilterChange('search', search)}
-                    />
-                    <button onClick={() => handleFilterChange('search', search)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                    </button>
-                </div>
-                {searchParams.get('search') && (
-                    <p className="text-[10px] text-blue-600 font-bold">Buscando: "{searchParams.get('search')}"</p>
-                )}
-            </div>
-
-            {/* Disponibilidad */}
-            <div className="space-y-3">
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Disponibilidad</h3>
-                <label className="flex items-center gap-3 cursor-pointer group">
-                    <div className="relative">
-                        <input type="checkbox" checked={onlyWithStock}
-                            onChange={(e) => handleFilterChange('onlyWithStock', e.target.checked ? 'true' : '')}
-                            className="sr-only"/>
-                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${onlyWithStock ? 'bg-blue-600 border-blue-600' : 'border-gray-300 dark:border-gray-600 group-hover:border-blue-400'}`}>
-                            {onlyWithStock && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>}
-                        </div>
-                    </div>
-                    <span className="text-sm font-bold text-foreground">Solo con stock disponible</span>
-                </label>
-            </div>
-
-            {/* Tipo de precio */}
-            {isWholesale && (
-                <div className="space-y-3">
-                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Tipo de precio</h3>
-                    <div className="flex flex-col gap-1.5">
-                        {[{ value: 'all', label: 'Todos' }, { value: 'wholesale', label: 'Solo mayoreo' }, { value: 'retail', label: 'Solo menudeo' }].map(opt => (
-                            <button key={opt.value}
-                                onClick={() => handleFilterChange('priceType', opt.value === 'all' ? '' : opt.value)}
-                                className={`text-left text-sm font-bold py-2 px-4 rounded-xl transition-all ${priceType === opt.value || (opt.value === 'all' && !priceType) ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
-                                {opt.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Categorías */}
-            <div className="space-y-2">
-                <button onClick={() => setIsCategoriesOpen(!isCategoriesOpen)}
-                    className="w-full flex items-center justify-between group">
-                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">Categorías</h3>
-                    <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isCategoriesOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
-                </button>
-                <div className={`flex flex-col gap-0.5 overflow-hidden transition-all duration-300 ${isCategoriesOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                    <button onClick={() => handleFilterChange('category', '')}
-                        className={`text-left text-sm font-bold py-2.5 px-4 rounded-xl transition-all ${!selectedCategory ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500'}`}>
-                        Todas las categorías
-                    </button>
-                    {categories.map((cat: any) => (
-                        <div key={cat.id}>
-                            <button onClick={() => handleFilterChange('category', cat.slug)}
-                                className={`w-full text-left text-sm font-bold py-2.5 px-4 rounded-xl transition-all flex justify-between items-center ${selectedCategory === cat.slug ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500'}`}>
-                                <span>{cat.name}</span>
-                                <span className="flex items-center gap-1.5">
-                                    <span className={`text-[9px] px-1.5 py-0.5 rounded-md ${selectedCategory === cat.slug ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
-                                        {cat._count?.products || 0}
-                                    </span>
-                                    {cat.subcategories?.length > 0 && (
-                                        <div onClick={(e) => { e.stopPropagation(); setExpandedCategories(prev => ({ ...prev, [cat.slug]: !prev[cat.slug] })); }}
-                                            className="p-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-md transition-colors">
-                                            <svg className={`w-3 h-3 transition-transform ${expandedCategories[cat.slug] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
-                                        </div>
-                                    )}
-                                </span>
-                            </button>
-                            {expandedCategories[cat.slug] && cat.subcategories?.length > 0 && (
-                                <div className="ml-4 mt-1 mb-2 flex flex-col gap-0.5 border-l-2 border-blue-100 dark:border-blue-900/30 pl-3">
-                                    {cat.subcategories.map((sub: any) => (
-                                        <button key={sub.id}
-                                            onClick={() => handleFilterChange('subcategory', selectedSubcategory === sub.slug ? '' : sub.slug)}
-                                            className={`text-left text-xs font-bold py-1.5 px-3 rounded-lg transition-all ${selectedSubcategory === sub.slug ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}>
-                                            {sub.name}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Color */}
-            {availableColors.length > 0 && (
-                <div className="space-y-3">
-                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Color</h3>
-                    <div className="flex flex-wrap gap-1.5">
-                        {availableColors.map((color) => (
-                            <button key={color}
-                                onClick={() => handleFilterChange('color', selectedColor === color ? '' : color)}
-                                className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${selectedColor === color ? 'bg-foreground text-background border-foreground' : 'border-border text-gray-400 hover:border-gray-400'}`}>
-                                {color}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Talla */}
-            {availableSizes.length > 0 && (
-                <div className="space-y-3">
-                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Talla</h3>
-                    <div className="flex flex-wrap gap-1.5">
-                        {availableSizes.map((size) => (
-                            <button key={size}
-                                onClick={() => handleFilterChange('size', selectedSize === size ? '' : size)}
-                                className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${selectedSize === size ? 'bg-foreground text-background border-foreground' : 'border-border text-gray-400 hover:border-gray-400'}`}>
-                                {size}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Marcas */}
-            {brands.length > 0 && (
-                <div className="space-y-3">
-                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Marcas</h3>
-                    <div className="flex flex-wrap gap-2">
-                        {brands.map((brand: any) => (
-                            <button key={brand.id}
-                                onClick={() => handleFilterChange('brand', selectedBrand === brand.id ? '' : brand.id)}
-                                className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${selectedBrand === brand.id ? 'bg-foreground text-background border-foreground' : 'bg-transparent border-border text-gray-400 hover:border-gray-400'}`}>
-                                {brand.name}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Rango de precio */}
-            {isLoggedIn && (
-                <div className="space-y-3">
-                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Rango de Precio</h3>
-                    <div className="flex gap-2 items-center">
-                        <input type="number" placeholder="Min"
-                            className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm font-bold text-center"
-                            defaultValue={searchParams.get('minPrice') || ''}
-                            onBlur={(e) => handleFilterChange('minPrice', e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleFilterChange('minPrice', (e.target as HTMLInputElement).value)}/>
-                        <span className="text-gray-400 font-bold text-xs">—</span>
-                        <input type="number" placeholder="Max"
-                            className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm font-bold text-center"
-                            defaultValue={searchParams.get('maxPrice') || ''}
-                            onBlur={(e) => handleFilterChange('maxPrice', e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleFilterChange('maxPrice', (e.target as HTMLInputElement).value)}/>
-                    </div>
-                </div>
-            )}
-        </aside>
-    );
-
     return (
         <div className="max-w-7xl mx-auto px-6 py-12 flex flex-col md:flex-row gap-12">
 
@@ -307,9 +121,153 @@ export default function CatalogClient({
                 {showMobileFilters ? 'Ocultar Filtros' : `Mostrar Filtros${hasActiveFilters ? ' ●' : ''}`}
             </button>
 
-            <Sidebar />
+            {/* ── SIDEBAR ── */}
+            <aside className={`w-full md:w-64 space-y-8 shrink-0 ${showMobileFilters ? 'block' : 'hidden md:block'}`}>
 
-            {/* PRODUCT GRID / LIST */}
+                {hasActiveFilters && (
+                    <button onClick={clearAllFilters}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-100 dark:hover:bg-red-900/40 transition-all">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        Limpiar filtros
+                    </button>
+                )}
+
+                {/* Buscar */}
+                <div className="space-y-3">
+                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Buscar</h3>
+                    <div className="relative">
+                        <input type="text"
+                            placeholder="Nombre, SKU, color, talla..."
+                            className="w-full pl-4 pr-10 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-sm font-bold"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleFilterChange('search', search)}
+                        />
+                        <button onClick={() => handleFilterChange('search', search)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        </button>
+                    </div>
+                    {searchParams.get('search') && (
+                        <p className="text-[10px] text-blue-600 font-bold">Buscando: "{searchParams.get('search')}"</p>
+                    )}
+                </div>
+
+                {/* Disponibilidad */}
+                <div className="space-y-3">
+                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Disponibilidad</h3>
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                        <div className="relative">
+                            <input type="checkbox" checked={onlyWithStock}
+                                onChange={(e) => handleFilterChange('onlyWithStock', e.target.checked ? 'true' : '')}
+                                className="sr-only"/>
+                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${onlyWithStock ? 'bg-blue-600 border-blue-600' : 'border-gray-300 dark:border-gray-600 group-hover:border-blue-400'}`}>
+                                {onlyWithStock && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>}
+                            </div>
+                        </div>
+                        <span className="text-sm font-bold text-foreground">Solo con stock disponible</span>
+                    </label>
+                </div>
+
+                {/* Tipo de precio */}
+                {isWholesale && (
+                    <div className="space-y-3">
+                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Tipo de precio</h3>
+                        <div className="flex flex-col gap-1.5">
+                            {[{ value: 'all', label: 'Todos' }, { value: 'wholesale', label: 'Solo mayoreo' }, { value: 'retail', label: 'Solo menudeo' }].map(opt => (
+                                <button key={opt.value}
+                                    onClick={() => handleFilterChange('priceType', opt.value === 'all' ? '' : opt.value)}
+                                    className={`text-left text-sm font-bold py-2 px-4 rounded-xl transition-all ${priceType === opt.value || (opt.value === 'all' && !priceType) ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Categorías */}
+                <div className="space-y-2">
+                    <button onClick={() => setIsCategoriesOpen(!isCategoriesOpen)}
+                        className="w-full flex items-center justify-between group">
+                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">Categorías</h3>
+                        <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isCategoriesOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                    <div className={`flex flex-col gap-0.5 overflow-hidden transition-all duration-300 ${isCategoriesOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                        <button onClick={() => handleFilterChange('category', '')}
+                            className={`text-left text-sm font-bold py-2.5 px-4 rounded-xl transition-all ${!selectedCategory ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500'}`}>
+                            Todas las categorías
+                        </button>
+                        {categories.map((cat: any) => (
+                            <div key={cat.id}>
+                                <button onClick={() => handleFilterChange('category', cat.slug)}
+                                    className={`w-full text-left text-sm font-bold py-2.5 px-4 rounded-xl transition-all flex justify-between items-center ${selectedCategory === cat.slug ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500'}`}>
+                                    <span>{cat.name}</span>
+                                    <span className="flex items-center gap-1.5">
+                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md ${selectedCategory === cat.slug ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
+                                            {cat._count?.products || 0}
+                                        </span>
+                                        {cat.subcategories?.length > 0 && (
+                                            <div onClick={(e) => { e.stopPropagation(); setExpandedCategories(prev => ({ ...prev, [cat.slug]: !prev[cat.slug] })); }}
+                                                className="p-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-md transition-colors">
+                                                <svg className={`w-3 h-3 transition-transform ${expandedCategories[cat.slug] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                                            </div>
+                                        )}
+                                    </span>
+                                </button>
+                                {expandedCategories[cat.slug] && cat.subcategories?.length > 0 && (
+                                    <div className="ml-4 mt-1 mb-2 flex flex-col gap-0.5 border-l-2 border-blue-100 dark:border-blue-900/30 pl-3">
+                                        {cat.subcategories.map((sub: any) => (
+                                            <button key={sub.id}
+                                                onClick={() => handleFilterChange('subcategory', selectedSubcategory === sub.slug ? '' : sub.slug)}
+                                                className={`text-left text-xs font-bold py-1.5 px-3 rounded-lg transition-all ${selectedSubcategory === sub.slug ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}>
+                                                {sub.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Marcas */}
+                {brands.length > 0 && (
+                    <div className="space-y-3">
+                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Marcas</h3>
+                        <div className="flex flex-wrap gap-2">
+                            {brands.map((brand: any) => (
+                                <button key={brand.id}
+                                    onClick={() => handleFilterChange('brand', selectedBrand === brand.id ? '' : brand.id)}
+                                    className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${selectedBrand === brand.id ? 'bg-foreground text-background border-foreground' : 'bg-transparent border-border text-gray-400 hover:border-gray-400'}`}>
+                                    {brand.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Rango de precio */}
+                {isLoggedIn && (
+                    <div className="space-y-3">
+                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Rango de Precio</h3>
+                        <div className="flex gap-2 items-center">
+                            <input type="number" placeholder="Min"
+                                className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm font-bold text-center"
+                                defaultValue={searchParams.get('minPrice') || ''}
+                                onBlur={(e) => handleFilterChange('minPrice', e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleFilterChange('minPrice', (e.target as HTMLInputElement).value)}/>
+                            <span className="text-gray-400 font-bold text-xs">—</span>
+                            <input type="number" placeholder="Max"
+                                className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm font-bold text-center"
+                                defaultValue={searchParams.get('maxPrice') || ''}
+                                onBlur={(e) => handleFilterChange('maxPrice', e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleFilterChange('maxPrice', (e.target as HTMLInputElement).value)}/>
+                        </div>
+                    </div>
+                )}
+            </aside>
+
+            {/* ── PRODUCT GRID / LIST ── */}
             <div className="flex-1 space-y-8">
 
                 {/* Header bar */}
@@ -420,7 +378,13 @@ export default function CatalogClient({
                                 </div>
                             </div>
                         ))}
-                        {products.length === 0 && <EmptyState onClear={clearAllFilters} />}
+                        {products.length === 0 && (
+                            <div className="col-span-full py-24 text-center space-y-4">
+                                <div className="text-6xl text-gray-200 dark:text-gray-800 font-black">🔍</div>
+                                <p className="font-bold text-gray-500 uppercase tracking-widest text-xs">No encontramos productos con esos filtros</p>
+                                <button onClick={clearAllFilters} className="px-8 py-3 bg-blue-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20">Limpiar Filtros</button>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -480,7 +444,13 @@ export default function CatalogClient({
                                 </div>
                             </Link>
                         ))}
-                        {products.length === 0 && <EmptyState onClear={clearAllFilters} />}
+                        {products.length === 0 && (
+                            <div className="py-24 text-center space-y-4">
+                                <div className="text-6xl text-gray-200 dark:text-gray-800 font-black">🔍</div>
+                                <p className="font-bold text-gray-500 uppercase tracking-widest text-xs">No encontramos productos con esos filtros</p>
+                                <button onClick={clearAllFilters} className="px-8 py-3 bg-blue-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20">Limpiar Filtros</button>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -497,19 +467,6 @@ export default function CatalogClient({
                     </div>
                 )}
             </div>
-        </div>
-    );
-}
-
-function EmptyState({ onClear }: { onClear: () => void }) {
-    return (
-        <div className="col-span-full py-24 text-center space-y-4">
-            <div className="text-6xl text-gray-200 dark:text-gray-800 font-black">🔍</div>
-            <p className="font-bold text-gray-500 uppercase tracking-widest text-xs">No encontramos productos con esos filtros</p>
-            <button onClick={onClear}
-                className="px-8 py-3 bg-blue-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20">
-                Limpiar Filtros
-            </button>
         </div>
     );
 }
