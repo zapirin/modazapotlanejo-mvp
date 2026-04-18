@@ -6,7 +6,7 @@ import { getLocationsSettings } from '../settings/actions';
 
 export default function ReportsPage() {
     const [activeTab, setActiveTab] = useState<'sales' | 'commissions' | 'zcuts'>('sales');
-    const [perms, setPerms] = useState({ canViewReports: true, canViewCommissions: true, canViewZCuts: true });
+    const [perms, setPerms] = useState({ canViewReports: true, canViewCommissions: true, canViewZCuts: true, isCashier: false, sessionStartedAt: null as Date | null });
     const [loading, setLoading] = useState(false);
     const [activeFilter, setActiveFilter] = useState('today');
     const [dateRange, setDateRange] = useState<ReportDateRange>(() => {
@@ -103,7 +103,12 @@ export default function ReportsPage() {
             if (res.success && res.data) setLocations(res.data);
         });
         getReportPermissions().then(p => {
-            setPerms({ canViewReports: p.canViewReports, canViewCommissions: p.canViewCommissions, canViewZCuts: p.canViewZCuts });
+            setPerms({ canViewReports: p.canViewReports, canViewCommissions: p.canViewCommissions, canViewZCuts: p.canViewZCuts, isCashier: p.isCashier, sessionStartedAt: p.sessionStartedAt ? new Date(p.sessionStartedAt) : null });
+            // Si es cajero, fijar el rango de fechas a la sesión activa
+            if (p.isCashier && p.sessionStartedAt) {
+                setDateRange({ startDate: new Date(p.sessionStartedAt), endDate: new Date() });
+                setActiveFilter('session');
+            }
             // Si el tab activo no está permitido, saltar al primero que sí lo esté
             setActiveTab(tab => {
                 if (tab === 'sales' && p.canViewReports) return 'sales';
@@ -207,8 +212,15 @@ export default function ReportsPage() {
                 </div>
                 
                 <div className="flex flex-col items-end gap-3 w-full md:w-auto">
+                    {/* Cajero: mostrar rango de sesión activa en lugar de filtros */}
+                    {perms.isCashier && perms.sessionStartedAt && (
+                        <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-2xl px-4 py-2 text-xs font-bold text-blue-700 dark:text-blue-300">
+                            <span>📅</span>
+                            <span>Sesión activa desde {new Date(perms.sessionStartedAt).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                    )}
                     {/* Location filter — commissions only */}
-                    {activeTab === 'commissions' && locations.length > 1 && (
+                    {!perms.isCashier && activeTab === 'commissions' && locations.length > 1 && (
                         <select value={selectedLocationId} onChange={e => setSelectedLocationId(e.target.value)}
                             className="bg-input border border-border rounded-xl px-4 py-2 text-sm font-bold text-foreground outline-none w-full md:w-auto">
                             <option value="">Todas las sucursales</option>
@@ -217,45 +229,49 @@ export default function ReportsPage() {
                             ))}
                         </select>
                     )}
-                    {/* Filtros Predefinidos */}
-                    <div className="flex flex-wrap shadow-sm bg-input border border-border p-1 rounded-2xl w-full md:w-auto overflow-x-auto">
-                        {[
-                            { id: 'today', name: 'Hoy' },
-                            { id: 'week', name: 'Semana' },
-                            { id: 'month', name: 'Mes' },
-                            { id: 'last_month', name: 'Mes Ant.' },
-                            { id: 'quarter', name: 'Trimestre' },
-                            { id: 'last_quarter', name: 'Trimes Ant.' },
-                            { id: 'year', name: 'Año' },
-                            { id: 'last_year', name: 'Año Ant.' },
-                        ].map(f => (
-                            <button
-                                key={f.id}
-                                onClick={() => handleFilterChange(f.id)}
-                                className={`px-4 py-2 text-xs font-bold rounded-xl transition whitespace-nowrap ${activeFilter === f.id ? 'bg-foreground text-background shadow-md' : 'text-gray-500 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5'}`}
-                            >
-                                {f.name}
-                            </button>
-                        ))}
-                    </div>
+                    {/* Filtros Predefinidos y rango manual — ocultos para cajeros */}
+                    {!perms.isCashier && (
+                        <>
+                        <div className="flex flex-wrap shadow-sm bg-input border border-border p-1 rounded-2xl w-full md:w-auto overflow-x-auto">
+                            {[
+                                { id: 'today', name: 'Hoy' },
+                                { id: 'week', name: 'Semana' },
+                                { id: 'month', name: 'Mes' },
+                                { id: 'last_month', name: 'Mes Ant.' },
+                                { id: 'quarter', name: 'Trimestre' },
+                                { id: 'last_quarter', name: 'Trimes Ant.' },
+                                { id: 'year', name: 'Año' },
+                                { id: 'last_year', name: 'Año Ant.' },
+                            ].map(f => (
+                                <button
+                                    key={f.id}
+                                    onClick={() => handleFilterChange(f.id)}
+                                    className={`px-4 py-2 text-xs font-bold rounded-xl transition whitespace-nowrap ${activeFilter === f.id ? 'bg-foreground text-background shadow-md' : 'text-gray-500 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5'}`}
+                                >
+                                    {f.name}
+                                </button>
+                            ))}
+                        </div>
 
-                    {/* Rango Manual */}
-                    <div className="flex items-center gap-2 bg-input border border-border rounded-2xl p-1.5 w-full md:w-auto">
-                        <span className="text-xs font-bold text-gray-400 pl-3 uppercase tracking-widest">Desde</span>
-                        <input 
-                            type="date"
-                            value={formatDateObj(dateRange.startDate)}
-                            onChange={(e) => handleCustomDateChange('start', e.target.value)}
-                            className="bg-transparent text-sm font-bold text-foreground outline-none px-2"
-                        />
-                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest px-2">Hasta</span>
-                        <input 
-                            type="date"
-                            value={formatDateObj(dateRange.endDate)}
-                            onChange={(e) => handleCustomDateChange('end', e.target.value)}
-                            className="bg-transparent text-sm font-bold text-foreground outline-none px-2 pr-4"
-                        />
-                    </div>
+                        {/* Rango Manual */}
+                        <div className="flex items-center gap-2 bg-input border border-border rounded-2xl p-1.5 w-full md:w-auto">
+                            <span className="text-xs font-bold text-gray-400 pl-3 uppercase tracking-widest">Desde</span>
+                            <input
+                                type="date"
+                                value={formatDateObj(dateRange.startDate)}
+                                onChange={(e) => handleCustomDateChange('start', e.target.value)}
+                                className="bg-transparent text-sm font-bold text-foreground outline-none px-2"
+                            />
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest px-2">Hasta</span>
+                            <input
+                                type="date"
+                                value={formatDateObj(dateRange.endDate)}
+                                onChange={(e) => handleCustomDateChange('end', e.target.value)}
+                                className="bg-transparent text-sm font-bold text-foreground outline-none px-2 pr-4"
+                            />
+                        </div>
+                        </>
+                    )}
                 </div>
             </div>
 

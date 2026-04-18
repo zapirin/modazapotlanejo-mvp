@@ -5,7 +5,7 @@ import { createCoupon, updateCoupon, deleteCoupon } from '@/app/actions/coupons'
 
 const EMPTY_FORM = {
     code: '',
-    discountType: 'PERCENTAGE' as 'PERCENTAGE' | 'FIXED',
+    discountType: 'PERCENTAGE' as 'PERCENTAGE' | 'FIXED' | 'FREE_SHIPPING',
     discountValue: '',
     minPurchase: '',
     maxUses: '',
@@ -51,7 +51,7 @@ export default function CouponsClient({ initialCoupons }: { initialCoupons: any[
         const payload = {
             code: form.code,
             discountType: form.discountType,
-            discountValue: parseFloat(form.discountValue),
+            discountValue: form.discountType === 'FREE_SHIPPING' ? 0 : parseFloat(form.discountValue),
             minPurchase: form.minPurchase ? parseFloat(form.minPurchase) : 0,
             maxUses: form.maxUses ? parseInt(form.maxUses) : null,
             maxUsesPerBuyer: form.maxUsesPerBuyer ? parseInt(form.maxUsesPerBuyer) : null,
@@ -157,9 +157,9 @@ export default function CouponsClient({ initialCoupons }: { initialCoupons: any[
                                         </td>
                                         <td className="px-4 py-4">
                                             <span className="font-black text-emerald-600 text-base">
-                                                {c.discountType === 'PERCENTAGE' ? `${c.discountValue}%` : `$${c.discountValue.toFixed(2)}`}
+                                                {c.discountType === 'PERCENTAGE' ? `${c.discountValue}%` : c.discountType === 'FREE_SHIPPING' ? '🚚 Envío gratis' : `$${c.discountValue.toFixed(2)}`}
                                             </span>
-                                            <div className="text-[10px] text-gray-400 mt-0.5">{c.discountType === 'PERCENTAGE' ? 'Porcentaje' : 'Monto fijo'}</div>
+                                            <div className="text-[10px] text-gray-400 mt-0.5">{c.discountType === 'PERCENTAGE' ? 'Porcentaje' : c.discountType === 'FREE_SHIPPING' ? 'Envío gratis' : 'Monto fijo'}</div>
                                         </td>
                                         <td className="px-4 py-4 text-sm font-bold text-foreground">
                                             {c.minPurchase > 0 ? `$${c.minPurchase.toFixed(2)}` : '—'}
@@ -239,8 +239,10 @@ export default function CouponsClient({ initialCoupons }: { initialCoupons: any[
                                     >
                                         <option value="PERCENTAGE">% Porcentaje</option>
                                         <option value="FIXED">$ Monto fijo</option>
+                                        <option value="FREE_SHIPPING">🚚 Envío gratis</option>
                                     </select>
                                 </div>
+                                {form.discountType !== 'FREE_SHIPPING' && (
                                 <div>
                                     <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-1.5">
                                         {form.discountType === 'PERCENTAGE' ? 'Porcentaje (%)' : 'Monto ($)'} *
@@ -257,6 +259,7 @@ export default function CouponsClient({ initialCoupons }: { initialCoupons: any[
                                         className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
+                                )}
                             </div>
 
                             <div>

@@ -1103,16 +1103,16 @@ export async function bulkCreateProducts(products: any[]) {
 export async function getSuspendedSales() {
     try {
         const user = await getSessionUser();
-        const locationId = user?.locationId || null;
-
         const sellerId = await getEffectiveSellerId(user);
 
+        // Cajeros: filtrar por su sucursal. SELLER/ADMIN: ver todas las suspendidas del negocio.
+        const whereClause: any = { status: "SUSPENDED", sellerId };
+        if (user?.role === 'CASHIER' && user?.locationId) {
+            whereClause.locationId = user.locationId;
+        }
+
         const sales = await (prisma.sale as any).findMany({
-            where: {
-                status: "SUSPENDED",
-                locationId: locationId,
-                sellerId: sellerId
-            },
+            where: whereClause,
             include: {
                 client: true,
                 items: {

@@ -74,6 +74,7 @@ export async function createOrder(data: {
                 skydropxQuotationId: data.skydropxQuotationId || null,
                 shippingCarrier: data.shippingCarrier || null,
                 shippingServiceName: data.shippingServiceName || null,
+                sourceDomain: data.domain || null,
                 items: {
                     create: data.items.map(item => ({
                         variantId: item.variantId,

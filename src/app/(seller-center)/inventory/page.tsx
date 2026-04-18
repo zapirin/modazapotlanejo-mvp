@@ -348,7 +348,7 @@ export default function InventoryPage() {
                     <h1 className="text-3xl lg:text-4xl font-black text-foreground tracking-tight">Todos los Productos</h1>
                     <p className="text-gray-500 dark:text-gray-400 font-medium mt-2">Inventario en tiempo real sincronizado con tu Punto de Venta.</p>
                 </div>
-                <div className="flex w-full md:w-auto gap-3">
+                <div className="flex flex-wrap w-full md:w-auto gap-3 justify-end">
                     <input
                         type="file"
                         ref={fileInputRef}

@@ -285,11 +285,16 @@ export default function CartPage() {
         return total;
     };
 
-    const totalCouponSavings = Array.from(appliedCoupons.values()).reduce((s, c) => s + c.discountAmount, 0);
+    const hasFreeShippingCoupon = Array.from(appliedCoupons.values()).some((c: any) => c.freeShipping);
+    const totalCouponSavings = Array.from(appliedCoupons.values()).reduce((s, c: any) => {
+        if (c.freeShipping) return s + (selectedRate?.totalPrice || 0);
+        return s + c.discountAmount;
+    }, 0);
 
     // Total final con envío
     const getTotalWithShipping = () => {
-        return getSubtotalWithAll() + (!pickupMode && selectedRate ? selectedRate.totalPrice : 0);
+        const shipping = (!pickupMode && selectedRate && !hasFreeShippingCoupon) ? selectedRate.totalPrice : 0;
+        return getSubtotalWithAll() + shipping;
     };
 
     const handleCheckout = async () => {
@@ -318,7 +323,7 @@ export default function CartPage() {
                     discount: (discountResult?.discount || 0) + (coupon?.discountAmount || 0),
                     status: 'PENDING_PAYMENT',
                     shippingAddressId: pickupMode ? undefined : (selectedAddressId || undefined),
-                    shippingCost: pickupMode ? 0 : (selectedRate?.totalPrice || 0),
+                    shippingCost: (pickupMode || hasFreeShippingCoupon) ? 0 : (selectedRate?.totalPrice || 0),
                     skydropxRateId: pickupMode ? undefined : (selectedRate?.rateId || undefined),
                     skydropxQuotationId: pickupMode ? undefined : (selectedRate?.quotationId || undefined),
                     shippingCarrier: pickupMode ? undefined : (selectedRate?.carrier || undefined),
@@ -326,7 +331,7 @@ export default function CartPage() {
                     paymentMethod: isKalexa
                         ? (paymentMethod === 'paypal' ? 'Tarjeta de Débito/Crédito' : 'Depósito/Transferencia')
                         : (paymentMethod === 'transfer' ? 'Depósito/Transferencia' : undefined),
-                    domain: isKalexa ? 'kalexa' : 'modazapotlanejo',
+                    domain: typeof window !== 'undefined' ? window.location.hostname : undefined,
                 });
 
                 if (result.success && result.orderId) {
@@ -371,6 +376,16 @@ export default function CartPage() {
                 window.scrollTo({ top: 0, behavior: "smooth" });
                 setOrderNumbers(realOrderNumbers);
                 return;
+            }
+
+            // Agregar envío como línea en Stripe si aplica
+            const shippingLinePrice = (pickupMode || hasFreeShippingCoupon) ? 0 : (selectedRate?.totalPrice || 0);
+            if (shippingLinePrice > 0) {
+                allItems.push({
+                    productName: `Envío — ${selectedRate?.carrier || 'Paquetería'} (${selectedRate?.serviceName || ''})`.replace(/\(\)$/, '').trim(),
+                    quantity: 1,
+                    price: shippingLinePrice,
+                });
             }
 
             // Default: Stripe Checkout
@@ -962,7 +977,14 @@ export default function CartPage() {
                                 {selectedRate && !pickupMode && (
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-500 font-medium">Envío ({selectedRate.carrier})</span>
-                                        <span className="font-bold text-foreground">${selectedRate.totalPrice.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                                        {hasFreeShippingCoupon ? (
+                                            <span className="font-bold flex items-center gap-2">
+                                                <span className="line-through text-gray-400">${selectedRate.totalPrice.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                                                <span className="text-emerald-600">$0.00 🚚</span>
+                                            </span>
+                                        ) : (
+                                            <span className="font-bold text-foreground">${selectedRate.totalPrice.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                                        )}
                                     </div>
                                 )}
                                 <div className="flex justify-between items-center pt-2">

@@ -543,6 +543,7 @@ model Order {
   skydropxQuotationId String?
   shippingCarrier     String?
   shippingServiceName String?
+  sourceDomain        String?
   commissionRate          Float            @default(0)
   commissionAmount        Float            @default(0)
   sellerEarnings          Float            @default(0)

@@ -8,38 +8,51 @@ import { getSessionUser } from "@/app/actions/auth";
 export async function getCurrentCashSession(locationId?: string) {
     try {
         const user = await getSessionUser();
-        // Buscar sesión abierta en la locación — si no hay locationId buscar cualquiera del usuario
+
+        const sessionInclude = {
+            movements: { orderBy: { createdAt: 'asc' as const } },
+            openedBy: { select: { id: true, name: true } },
+            location: {
+                select: {
+                    id: true,
+                    name: true,
+                    address: true,
+                    ticketHeader: true,
+                    ticketFooter: true,
+                    showDateAndTimeToPos: true,
+                }
+            },
+            sales: {
+                include: { paymentMethod: true }
+            }
+        };
+
+        const resolvedLocationId = locationId || user?.locationId || null;
+
+        // Cualquier usuario: primero buscar su propia sesión abierta en la sucursal.
+        // Esto permite sesiones paralelas (varios cajeros en la misma sucursal).
+        if (resolvedLocationId && user?.id) {
+            const ownSession = await prisma.cashRegisterSession.findFirst({
+                where: { status: 'OPEN', locationId: resolvedLocationId, openedById: user.id },
+                orderBy: { openedAt: 'desc' },
+                include: sessionInclude,
+            });
+            if (ownSession) return ownSession;
+        }
+
+        // Comportamiento estándar: buscar cualquier sesión abierta en la sucursal
         const whereClause: any = { status: 'OPEN' };
-        if (locationId) {
-            whereClause.locationId = locationId;
-        } else if (user?.locationId) {
-            whereClause.locationId = user.locationId;
+        if (resolvedLocationId) {
+            whereClause.locationId = resolvedLocationId;
         } else {
-            // Sin locación definida: buscar sesión del propio usuario
             whereClause.openedById = user?.id || null;
         }
 
-        const session = await prisma.cashRegisterSession.findFirst({
+        return await prisma.cashRegisterSession.findFirst({
             where: whereClause,
-            include: {
-                movements: true,
-                openedBy: { select: { id: true, name: true } },
-                location: {
-                    select: {
-                        id: true,
-                        name: true,
-                        address: true,
-                        ticketHeader: true,
-                        ticketFooter: true,
-                        showDateAndTimeToPos: true,
-                    }
-                },
-                sales: {
-                    include: { paymentMethod: true }
-                }
-            }
+            orderBy: { openedAt: 'desc' },
+            include: sessionInclude,
         });
-        return session;
     } catch (error) {
         console.error('Error fetching current cash session:', error);
         return null;

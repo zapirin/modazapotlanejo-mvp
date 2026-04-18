@@ -770,14 +770,14 @@ export default function EditProductPage() {
 
                     {step === 3 && (
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                            <div className="border-b border-border pb-6 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
-                                <div>
+                            <div className="border-b border-border pb-6 flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+                                <div className="shrink-0">
                                     <h2 className="text-2xl font-black text-foreground">Composición de Mayoreo</h2>
                                     <p className="text-sm text-gray-500">Define los métodos de venta y su composición por piezas.</p>
                                 </div>
-                                
+
                                 {formData.sellByPackage && (
-                                    <div className="flex flex-col sm:flex-row items-center gap-4 bg-gray-100 dark:bg-gray-800/50 p-3 rounded-2xl border border-border w-full lg:w-auto">
+                                    <div className="flex flex-wrap items-center gap-3 bg-gray-100 dark:bg-gray-800/50 p-3 rounded-2xl border border-border w-full lg:w-auto min-w-0">
                                         <div className="flex items-center gap-2 overflow-x-auto max-w-full pb-2 sm:pb-0 no-scrollbar">
                                             {formData.wholesaleMethods.map(method => (
                                                 <div key={method.id} className="flex shrink-0">

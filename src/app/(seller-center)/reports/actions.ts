@@ -349,27 +349,42 @@ export async function getCommissionReport({ startDate, endDate, locationId }: {
 export async function getReportPermissions() {
     try {
         const user = await getSessionUser();
-        if (!user) return { role: null, canViewReports: false, canViewCommissions: false, canViewZCuts: false };
+        if (!user) return { role: null, canViewReports: false, canViewCommissions: false, canViewZCuts: false, isCashier: false, sessionStartedAt: null as Date | null };
 
         if (user.role === 'SELLER' || user.role === 'ADMIN') {
-            return { role: user.role, canViewReports: true, canViewCommissions: true, canViewZCuts: true };
+            return { role: user.role, canViewReports: true, canViewCommissions: true, canViewZCuts: true, isCashier: false, sessionStartedAt: null as Date | null };
         }
 
         if (user.role === 'CASHIER') {
             const cashier = await (prisma.user as any).findUnique({
                 where: { id: user.id },
-                select: { canViewReports: true, canViewCommissions: true, canViewZCuts: true }
+                select: { canViewReports: true, canViewCommissions: true, canViewZCuts: true, allowedLocationIds: true }
             });
+
+            // Buscar la sesión activa del cajero para restringir el rango de fechas
+            let sessionStartedAt: Date | null = null;
+            const locIds: string[] = cashier?.allowedLocationIds || [];
+            if (locIds.length > 0) {
+                const openSession = await prisma.cashRegisterSession.findFirst({
+                    where: { locationId: { in: locIds }, status: 'OPEN' },
+                    orderBy: { openedAt: 'desc' },
+                    select: { openedAt: true },
+                });
+                sessionStartedAt = openSession?.openedAt ?? null;
+            }
+
             return {
                 role: 'CASHIER',
+                isCashier: true,
                 canViewReports: cashier?.canViewReports ?? false,
                 canViewCommissions: cashier?.canViewCommissions ?? false,
                 canViewZCuts: cashier?.canViewZCuts ?? false,
+                sessionStartedAt,
             };
         }
 
-        return { role: user.role, canViewReports: false, canViewCommissions: false, canViewZCuts: false };
+        return { role: user.role, canViewReports: false, canViewCommissions: false, canViewZCuts: false, isCashier: false, sessionStartedAt: null as Date | null };
     } catch {
-        return { role: null, canViewReports: false, canViewCommissions: false, canViewZCuts: false };
+        return { role: null, canViewReports: false, canViewCommissions: false, canViewZCuts: false, isCashier: false, sessionStartedAt: null as Date | null };
     }
 }

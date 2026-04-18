@@ -86,7 +86,7 @@ const COLOR_MAP: Record<string, Record<string, string>> = {
 export default async function LandingPage() {
     noStore();
     const headersList = await headers();
-    const host = headersList.get('host');
+    const host = (headersList.get('host') || '').split(',')[0].trim().replace(/^https?:\/\//, '');
     const brand = await getActiveBrandConfig(host);
 
     const sellerId = brand.sellerId || undefined;
@@ -127,6 +127,7 @@ export default async function LandingPage() {
 
     // @ts-ignore
     const isWholesale = !!user?.isWholesale;
+    const showPricesWithoutLogin = (host || '').includes('kalexafashion');
     const nowMs = Date.now(); // calculado una sola vez en servidor
     const month = new Date(nowMs).getMonth(); // usa el mismo nowMs para consistencia
 
@@ -342,7 +343,7 @@ export default async function LandingPage() {
                     </div>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
                         {products.map((product: any) => (
-                            <ProductCard key={`latest-${product.id}`} product={product} user={user} isWholesale={isWholesale} nowMs={nowMs} />
+                            <ProductCard key={`latest-${product.id}`} product={product} user={user} isWholesale={isWholesale} nowMs={nowMs} showPricesWithoutLogin={showPricesWithoutLogin} />
                         ))}
                     </div>
                 </div>
@@ -361,7 +362,7 @@ export default async function LandingPage() {
                         </div>
                         <div className="grid grid-cols-2 gap-6">
                             {newArrivals.slice(0, 4).map((product: any) => (
-                                <ProductCard key={`new-${product.id}`} product={product} user={user} isWholesale={isWholesale} nowMs={nowMs} />
+                                <ProductCard key={`new-${product.id}`} product={product} user={user} isWholesale={isWholesale} nowMs={nowMs} showPricesWithoutLogin={showPricesWithoutLogin} />
                             ))}
                         </div>
                     </div>
@@ -375,7 +376,7 @@ export default async function LandingPage() {
                         </div>
                         <div className="grid grid-cols-2 gap-6">
                             {bestSellers.map((product: any) => (
-                                <ProductCard key={`best-${product.id}`} product={product} user={user} isWholesale={isWholesale} badge="🔥 Hot" nowMs={nowMs} />
+                                <ProductCard key={`best-${product.id}`} product={product} user={user} isWholesale={isWholesale} badge="🔥 Hot" nowMs={nowMs} showPricesWithoutLogin={showPricesWithoutLogin} />
                             ))}
                         </div>
                     </div>
@@ -434,7 +435,7 @@ export default async function LandingPage() {
                             </div>
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
                                 {(featured.products as any[]).map((product: any) => (
-                                    <ProductCard key={`feat-${product.id}`} product={product} user={user} isWholesale={isWholesale} badge="⭐" nowMs={nowMs} />
+                                    <ProductCard key={`feat-${product.id}`} product={product} user={user} isWholesale={isWholesale} badge="⭐" nowMs={nowMs} showPricesWithoutLogin={showPricesWithoutLogin} />
                                 ))}
                             </div>
                         </div>

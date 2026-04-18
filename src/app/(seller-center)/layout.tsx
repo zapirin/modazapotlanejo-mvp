@@ -4,6 +4,16 @@ import { getSessionUser } from '../actions/auth';
 import { getBrandConfig } from '@/lib/brand';
 import SidebarLayout from './SidebarLayout';
 import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const headersList = await headers();
+  const host = headersList.get('host');
+  const brand = getBrandConfig(host);
+  return {
+    title: { default: brand.name, template: `%s — ${brand.name}` },
+  };
+}
 
 export default async function SellerCenterLayout({
   children,

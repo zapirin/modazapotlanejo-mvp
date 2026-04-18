@@ -1,8 +1,9 @@
 import { redirect, notFound } from 'next/navigation';
 
-export default function CatchAll({ params }: { params: { slug: string[] } }) {
+export default async function CatchAll({ params }: { params: Promise<{ slug: string[] }> }) {
     // Let Next.js serve static files (.html, .txt, .xml, etc.) from public/
-    const last = params.slug[params.slug.length - 1] || '';
+    const { slug } = await params;
+    const last = slug[slug.length - 1] || '';
     if (last.includes('.')) notFound();
     redirect('/');
 }

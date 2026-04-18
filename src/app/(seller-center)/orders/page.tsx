@@ -2,6 +2,8 @@ import { getSessionUser } from '@/app/actions/auth';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import OrdersClient from './OrdersClient';
+import { headers } from 'next/headers';
+import { getBrandConfig } from '@/lib/brand';
 
 export default async function OrdersPage() {
     const user = await getSessionUser();
@@ -16,6 +18,10 @@ export default async function OrdersPage() {
             </div>
         );
     }
+
+    const headersList = await headers();
+    const host = headersList.get('host');
+    const brand = getBrandConfig(host);
 
     const isBuyer = (user.role as string) === 'BUYER';
     const isAdmin = (user.role as string) === 'ADMIN';
@@ -45,8 +51,8 @@ export default async function OrdersPage() {
                     </h1>
                     <p className="text-gray-500 font-medium mt-2">
                         {isBuyer
-                            ? 'Historial de pedidos realizados en Moda Zapotlanejo.'
-                            : 'Pedidos que compradores han realizado de tus productos.'}
+                            ? `Historial de pedidos realizados en ${brand.name}.`
+                            : `Pedidos que compradores han realizado de tus productos en ${brand.name}.`}
                     </p>
                 </div>
                 {isBuyer && (

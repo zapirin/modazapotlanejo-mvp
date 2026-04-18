@@ -13,6 +13,32 @@ import { createClient, searchClients, getClientById } from '../clients/actions';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
 import { toast } from 'sonner';
 
+// Orden estándar de tallas de ropa — de menor a mayor
+const SIZE_ORDER: Record<string, number> = {
+    'xs': 0, 'extra chica': 0,
+    's': 1, 'small': 1, 'ch': 1, 'chica': 1, 'pequeña': 1,
+    'm': 2, 'medium': 2, 'med': 2, 'mediana': 2,
+    'l': 3, 'large': 3, 'grande': 3, 'g': 3,
+    'xl': 4, 'extra grande': 4,
+    'xxl': 5, '2xl': 5, 'doble xl': 5,
+    'xxxl': 6, '3xl': 6, 'triple xl': 6,
+    'unico': 99, 'único': 99, 'talla unica': 99,
+};
+const sizeRank = (size: string): number => SIZE_ORDER[size?.toLowerCase?.()?.trim()] ?? -1;
+const sortVariants = (variants: any[]): any[] =>
+    variants.slice().sort((a, b) => {
+        const aSize = String(a.size ?? '');
+        const bSize = String(b.size ?? '');
+        const allNumeric = variants.every(v => !isNaN(parseFloat(v.size)) && isFinite(Number(v.size)));
+        if (allNumeric) return parseFloat(aSize) - parseFloat(bSize);
+        const ra = sizeRank(aSize), rb = sizeRank(bSize);
+        if (ra !== -1 && rb !== -1) return ra - rb;
+        if (ra !== -1) return -1;
+        if (rb !== -1) return 1;
+        return 0; // Desconocido: preservar orden DB (createdAt asc)
+    });
+
+
 function POSContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -2192,11 +2218,7 @@ function POSContent() {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-border">
-                                                {selectedProduct.variants.slice().sort((a: any, b: any) => {
-                                                        const allNumeric = (selectedProduct?.variants || []).every((v: any) => !isNaN(parseFloat(v.size)) && isFinite(Number(v.size)));
-                                                        if (allNumeric) return parseFloat(a.size) - parseFloat(b.size);
-                                                        return 0; // Preservar orden original del vendedor
-                                                    }).map((v: any) => (
+                                                {sortVariants(selectedProduct.variants).map((v: any) => (
                                                     <tr key={v.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                                                         <td className="py-3 px-6">
                                                             <div className="flex items-center gap-3">
@@ -2254,11 +2276,7 @@ function POSContent() {
                             ) : (
                                 // MODO SIMPLE (BOTONES DE SELECCIÓN RÁPIDA)
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {selectedProduct.variants.slice().sort((a: any, b: any) => {
-                                                        const allNumeric = (selectedProduct?.variants || []).every((v: any) => !isNaN(parseFloat(v.size)) && isFinite(Number(v.size)));
-                                                        if (allNumeric) return parseFloat(a.size) - parseFloat(b.size);
-                                                        return 0; // Preservar orden original del vendedor
-                                                    }).map((v: any) => (
+                                    {sortVariants(selectedProduct.variants).map((v: any) => (
                                         <button
                                             key={v.id}
                                             onClick={() => handleSingleVariantSelect(v)}
@@ -2464,26 +2482,40 @@ function POSContent() {
                             </p>
                         </div>
                         <div className="p-6 space-y-3 text-sm text-gray-600 dark:text-gray-400 font-medium">
-                            <p>Para operar en esta locación debes primero cerrar la sesión anterior con el Corte Z, o pedir al cajero anterior que cierre su turno.</p>
-                            <p className="font-black text-foreground">Opciones:</p>
-                            <ul className="list-disc list-inside space-y-1">
-                                <li>Pedir a {otherCashierSession.openedBy?.name || 'el cajero anterior'} que haga su Corte Z</li>
-                                <li>Continuar con la sesión abierta si eres el mismo cajero</li>
-                            </ul>
+                            <p>
+                                <span className="font-black text-foreground">{otherCashierSession.openedBy?.name || 'Otro cajero'}</span> tiene una caja abierta en esta sucursal.
+                                Puedes abrir tu propia sesión independiente.
+                            </p>
+                            {(currentUser?.role === 'SELLER' || currentUser?.role === 'ADMIN') && (
+                                <p className="text-xs text-gray-400">Como administrador también puedes tomar la sesión existente si el cajero olvidó cerrar.</p>
+                            )}
                         </div>
                         <div className="p-6 border-t border-border flex flex-col gap-3">
+                            {/* Cualquier usuario puede abrir su propia sesión paralela */}
                             <button
                                 onClick={() => {
-                                    // Continuar con la sesión existente (ej. el cajero olvidó cerrar)
-                                    setCurrentSession(otherCashierSession);
                                     setShowOtherCashierModal(false);
                                     setOtherCashierSession(null);
-                                    toast.info('Continuando con la sesión existente.');
+                                    setShowOpenSessionModal(true);
                                 }}
-                                className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black uppercase tracking-wider text-xs"
+                                className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black uppercase tracking-wider text-xs flex items-center justify-center gap-2"
                             >
-                                Continuar con sesión existente
+                                🔑 Abrir mi propia sesión
                             </button>
+                            {/* Solo SELLER / ADMIN puede tomar la sesión de otro cajero */}
+                            {(currentUser?.role === 'SELLER' || currentUser?.role === 'ADMIN') && (
+                                <button
+                                    onClick={() => {
+                                        setCurrentSession(otherCashierSession);
+                                        setShowOtherCashierModal(false);
+                                        setOtherCashierSession(null);
+                                        toast.info('Continuando con la sesión existente.');
+                                    }}
+                                    className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-foreground rounded-xl font-black uppercase tracking-wider text-xs"
+                                >
+                                    Tomar sesión del cajero
+                                </button>
+                            )}
                             <button
                                 onClick={() => {
                                     setShowOtherCashierModal(false);
@@ -2787,9 +2819,12 @@ function POSContent() {
                                             <div className="border-t border-border pt-2 space-y-1">
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Movimientos Manuales</p>
                                                 {(currentSession.movements || []).map((m: any) => (
-                                                    <div key={m.id} className="flex justify-between text-xs">
-                                                        <span className="text-gray-500 line-clamp-1">{m.reason}</span>
-                                                        <span className={`font-bold ${m.type === 'IN' ? 'text-green-500' : 'text-red-500'}`}>
+                                                    <div key={m.id} className="flex justify-between text-xs gap-2">
+                                                        <span className="text-gray-500 line-clamp-1 flex-1">{m.reason}</span>
+                                                        <span className="text-gray-400 shrink-0">
+                                                            {new Date(m.createdAt).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                                        </span>
+                                                        <span className={`font-bold shrink-0 ${m.type === 'IN' ? 'text-green-500' : 'text-red-500'}`}>
                                                             {m.type === 'IN' ? '+' : '-'}${m.amount.toFixed(2)}
                                                         </span>
                                                     </div>

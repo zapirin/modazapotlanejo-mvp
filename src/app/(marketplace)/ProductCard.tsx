@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 
-export default function ProductCard({ product, user, isWholesale, badge, nowMs }: any) {
+export default function ProductCard({ product, user, isWholesale, badge, nowMs, showPricesWithoutLogin = false }: any) {
     const isNew = nowMs ? (nowMs - new Date(product.createdAt).getTime()) < 7 * 24 * 60 * 60 * 1000 : false;
     return (
         <Link href={`/catalog/${product.slug || product.id}`} className="group block space-y-4">
@@ -27,12 +27,12 @@ export default function ProductCard({ product, user, isWholesale, badge, nowMs }
             </div>
             <div className="space-y-1">
                 <h4 className="font-bold text-sm tracking-tight text-foreground group-hover:text-blue-600 transition-colors uppercase truncate">{product.name}</h4>
-                {user ? (
+                {(user || showPricesWithoutLogin) ? (
                     <div className="flex items-center gap-2">
                         <p className="text-blue-600 font-black text-lg">
-                            ${(isWholesale && product.wholesalePrice ? product.wholesalePrice : (product.basePrice || product.price)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                            ${(user && isWholesale && product.wholesalePrice ? product.wholesalePrice : (product.basePrice || product.price)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </p>
-                        {isWholesale && product.wholesalePrice && (
+                        {user && isWholesale && product.wholesalePrice && (
                             <span className="text-[8px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full">Mayoreo</span>
                         )}
                     </div>

@@ -18,6 +18,7 @@ export default function CatalogClient({
     sellerId,
     isWholesale = false,
     isLoggedIn  = false,
+    showPricesWithoutLogin = false,
 }: {
     initialProducts: any[];
     totalProducts:   number;
@@ -30,6 +31,7 @@ export default function CatalogClient({
     sellerId?:        string;
     isWholesale?: boolean;
     isLoggedIn?:  boolean;
+    showPricesWithoutLogin?: boolean;
 }) {
     const searchParams = useSearchParams();
     const router       = useRouter();
@@ -343,8 +345,8 @@ export default function CatalogClient({
                                         <h4 className="font-bold text-sm tracking-tight group-hover:text-blue-600 transition-colors uppercase">{product.name}</h4>
                                     </Link>
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        {isLoggedIn ? (
-                                            isWholesale && product.sellByPackage && Array.isArray(product.wholesaleComposition) && product.wholesaleComposition.length > 0 ? (
+                                        {(isLoggedIn || showPricesWithoutLogin) ? (
+                                            isLoggedIn && isWholesale && product.sellByPackage && Array.isArray(product.wholesaleComposition) && product.wholesaleComposition.length > 0 ? (
                                                 <div className="flex flex-col gap-0.5">
                                                     {product.wholesaleComposition.slice(0, 2).map((method: any, i: number) => {
                                                         const pieces = Object.values(method.composition || {}).reduce((a: number, b: any) => a + (parseInt(b) || 0), 0) as number;
@@ -412,7 +414,7 @@ export default function CatalogClient({
                                         {product.category?.name}{product.subcategory?.name ? ` · ${product.subcategory.name}` : ''}
                                         {product.brand?.name ? ` · ${product.brand.name}` : ''}
                                     </p>
-                                    {isLoggedIn ? (
+                                    {(isLoggedIn || showPricesWithoutLogin) ? (
                                         <p className="text-blue-600 font-black text-lg">${(product.price || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
                                     ) : (
                                         <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Inicia sesión para ver precio</p>

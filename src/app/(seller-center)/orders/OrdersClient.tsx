@@ -272,16 +272,14 @@ function Timeline({ status }: { status: string }) {
     );
 }
 
-// Determina el origen legible del pedido basado en el dominio registrado del comprador
-function getOrderSource(registeredDomain?: string | null): { label: string; color: string } {
-    if (registeredDomain === 'kalexafashion.com') {
-        return { label: 'kalexafashion.com', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' };
+// Determina el origen legible del pedido basado en el dominio donde se realizó la compra
+function getOrderSource(domain?: string | null, fallbackDomain?: string | null): { label: string; color: string } {
+    const d = domain || fallbackDomain || '';
+    if (d.includes('kalexa')) {
+        return { label: 'Kalexa Fashion', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' };
     }
-    if (registeredDomain === 'kalexa.modazapotlanejo.com') {
-        return { label: 'kalexa.modazapotlanejo.com', color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300' };
-    }
-    if (registeredDomain === 'zonadelvestir.com') {
-        return { label: 'zonadelvestir.com', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' };
+    if (d.includes('zonadelvestir')) {
+        return { label: 'Zona del Vestir', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' };
     }
     return { label: 'Moda Zapotlanejo', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' };
 }
@@ -414,7 +412,7 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller, isAdm
                                         <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Pedido #{order.orderNumber}</p>
                                         {/* Badge de origen — solo para Kalexa */}
                                         {isKalexa && order.buyer && (() => {
-                                            const src = getOrderSource(order.buyer.registeredDomain);
+                                            const src = getOrderSource(order.sourceDomain, order.buyer?.registeredDomain);
                                             return (
                                                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide ${src.color}`}>
                                                     🌐 {src.label}

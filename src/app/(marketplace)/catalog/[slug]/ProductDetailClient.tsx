@@ -18,6 +18,7 @@ export default function ProductDetailClient({
     prevProduct = null,
     nextProduct = null,
     relatedProducts = [],
+    showPricesWithoutLogin = false,
 }: {
     product: any;
     user: any;
@@ -27,6 +28,7 @@ export default function ProductDetailClient({
     prevProduct?: { id: string; name: string; image: string | null } | null;
     nextProduct?: { id: string; name: string; image: string | null } | null;
     relatedProducts?: any[];
+    showPricesWithoutLogin?: boolean;
 }) {
     const [sizeQuantities, setSizeQuantities] = useState<Record<string, number>>({});
     const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string | null>>({});
@@ -396,11 +398,11 @@ export default function ProductDetailClient({
                     </div>
 
                     {/* PRECIO */}
-                    {user ? (
+                    {(user || showPricesWithoutLogin) ? (
                         <div className="space-y-4">
                             {/* Precio menudeo + descuento si aplica */}
                             <div className="flex items-baseline gap-3 flex-wrap">
-                                {discountResult ? (
+                                {user && discountResult ? (
                                     <>
                                         <span className="text-4xl font-black tracking-tight text-emerald-600">
                                             ${pricePerPieceWithDiscount.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
@@ -420,8 +422,8 @@ export default function ProductDetailClient({
                                 <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">por pieza</span>
                             </div>
 
-                            {/* Niveles de precio disponibles para todos */}
-                            {priceTiers.length > 0 && (
+                            {/* Niveles de precio — solo si está logueado */}
+                            {user && priceTiers.length > 0 && (
                                 <div className="space-y-2">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
                                         Descuentos por volumen
@@ -442,8 +444,19 @@ export default function ProductDetailClient({
                                 </div>
                             )}
 
-                            {/* Opciones de mayoreo — SOLO para mayoristas */}
-                            {isWholesale && product.sellByPackage && Array.isArray(product.wholesaleComposition) && product.wholesaleComposition.length > 0 && (
+                            {/* Mayoreo — requiere login aunque se vean precios */}
+                            {!user && showPricesWithoutLogin && (
+                                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-2xl border border-purple-100 dark:border-purple-800/50 space-y-2">
+                                    <p className="text-purple-700 dark:text-purple-300 font-black text-xs uppercase tracking-widest">Modos de Mayoreo</p>
+                                    <p className="text-gray-500 text-xs font-medium">Inicia sesión para ver corridas, paquetes y precios de mayoreo.</p>
+                                    <Link href="/login" className="inline-flex px-5 py-2 bg-purple-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-purple-700 transition">
+                                        Iniciar Sesión
+                                    </Link>
+                                </div>
+                            )}
+
+                            {/* Opciones de mayoreo — SOLO para mayoristas logueados */}
+                            {user && isWholesale && product.sellByPackage && Array.isArray(product.wholesaleComposition) && product.wholesaleComposition.length > 0 && (
                                 <div className="space-y-2">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Opciones de mayoreo</p>
                                     <div className="flex flex-col gap-2">
