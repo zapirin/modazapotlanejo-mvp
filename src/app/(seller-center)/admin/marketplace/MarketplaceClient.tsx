@@ -42,6 +42,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     const [activeTab, setActiveTab] = useState('site');
     const [settings, setSettings] = useState(initialSettings);
     const [loading, setLoading] = useState(false);
+    const [savingBrand, setSavingBrand] = useState<string | null>(null);
 
     // Tab: Site
     const [title, setTitle] = useState(initialSettings?.title || '');
@@ -1142,21 +1143,26 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                     </div>
                                 </div>
                                 <button onClick={async () => {
-                                    setLoading(true);
-                                    const res = await updateBrandConfig(brand.domain, {
-                                        name: brand.name,
-                                        tagline: brand.tagline,
-                                        description: brand.description,
-                                        logoUrl: brand.logoUrl,
-                                        heroImage: brand.heroImage,
-                                        primaryColor: brand.primaryColor
-                                    });
-                                    setLoading(false);
-                                    if (res.success) toast.success(`Configuración guardada para ${brand.name}`);
-                                    else toast.error(res.error || 'Error al guardar');
-                                }} disabled={loading}
+                                    setSavingBrand(brand.domain);
+                                    try {
+                                        const res = await updateBrandConfig(brand.domain, {
+                                            name: brand.name,
+                                            tagline: brand.tagline,
+                                            description: brand.description,
+                                            logoUrl: brand.logoUrl,
+                                            heroImage: brand.heroImage,
+                                            primaryColor: brand.primaryColor
+                                        });
+                                        if (res.success) toast.success(`Configuración guardada para ${brand.name}`);
+                                        else toast.error(res.error || 'Error al guardar');
+                                    } catch (e: any) {
+                                        toast.error('Error: ' + e.message);
+                                    } finally {
+                                        setSavingBrand(null);
+                                    }
+                                }} disabled={savingBrand === brand.domain}
                                 className="w-full py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition disabled:opacity-50">
-                                    {loading ? 'Guardando...' : '💾 Guardar Configuración de Marca'}
+                                    {savingBrand === brand.domain ? 'Guardando...' : '💾 Guardar Configuración de Marca'}
                                 </button>
                             </div>
                         ))}
