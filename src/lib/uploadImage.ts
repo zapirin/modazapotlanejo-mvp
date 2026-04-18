@@ -13,9 +13,13 @@ export async function uploadImageToBase64(file: File): Promise<string> {
 // Valida que el archivo sea una imagen válida
 export function validateImageFile(file: File): { valid: boolean; error?: string } {
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg'];
     const maxSize = 5 * 1024 * 1024; // 5MB
 
-    if (!validTypes.includes(file.type)) {
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    const typeOk = validTypes.includes(file.type) || validExtensions.includes(ext);
+
+    if (!typeOk) {
         return { valid: false, error: 'Formato no permitido. Usa JPG, PNG, WebP, GIF o SVG.' };
     }
     if (file.size > maxSize) {
