@@ -45,6 +45,19 @@ async function getOrphanedFiles(): Promise<{ filename: string; sizeKB: number }[
         }
     }
 
+    // 4. También revisar BrandConfig (logos y hero images de las marcas)
+    const brands = await (prisma.brandConfig as any).findMany({
+        select: { logoUrl: true, heroImage: true },
+    });
+    for (const b of brands) {
+        for (const url of [b.logoUrl, b.heroImage]) {
+            if (url && !url.startsWith('data:')) {
+                const filename = url.split('/').pop();
+                if (filename) referencedUrls.add(filename);
+            }
+        }
+    }
+
     // 4. Encontrar huérfanos
     const orphans: { filename: string; sizeKB: number }[] = [];
     for (const file of files) {
