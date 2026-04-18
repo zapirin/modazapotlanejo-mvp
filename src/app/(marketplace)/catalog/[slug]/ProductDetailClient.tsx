@@ -378,14 +378,7 @@ export default function ProductDetailClient({
                             <Link href={`/vendor/${product.seller.sellerSlug || product.seller.id}`} className="text-sm font-bold text-blue-500 flex items-center gap-2 hover:text-blue-700 transition-colors group">
                                 {/* Mini logo o inicial del vendedor */}
                                 <span className="w-6 h-6 rounded-lg overflow-hidden shrink-0 border border-blue-200 dark:border-blue-800 inline-flex items-center justify-center bg-blue-50 dark:bg-blue-900/20">
-                                    {(product.seller as any).logoUrl && !(product.seller as any).logoUrl.startsWith('data:') ? (
-                                        <Image
-                                            src={(product.seller as any).logoUrl}
-                                            alt={product.seller.businessName || product.seller.name}
-                                            width={24} height={24}
-                                            className="w-full h-full object-contain"
-                                        />
-                                    ) : (product.seller as any).logoUrl?.startsWith('data:') ? (
+                                    {(product.seller as any).logoUrl ? (
                                         // eslint-disable-next-line @next/next/no-img-element
                                         <img
                                             src={(product.seller as any).logoUrl}

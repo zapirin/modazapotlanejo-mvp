@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { getBuyerOrders, releasePayment } from '@/app/actions/escrow';
 import { toast } from 'sonner';
 
@@ -103,9 +102,7 @@ export default function BuyerOrdersPage() {
                                         return (
                                             <div key={item.id} className="flex items-center gap-4">
                                                 <div className="w-14 h-14 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0">
-                                                    {image && !image.startsWith('data:') ? (
-                                                        <Image src={image} alt={product?.name || ''} width={56} height={56} className="w-full h-full object-cover" />
-                                                    ) : image?.startsWith('data:') ? (
+                                                    {image ? (
                                                         // eslint-disable-next-line @next/next/no-img-element
                                                         <img src={image} alt={product?.name} className="w-full h-full object-cover" />
                                                     ) : (
