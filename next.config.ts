@@ -24,7 +24,6 @@ const nextConfig: NextConfig = {
     },
   },
   images: {
-    unoptimized: true,
     remotePatterns: [
       { protocol: "https", hostname: "modazapotlanejo.com" },
       { protocol: "https", hostname: "kalexafashion.com" },

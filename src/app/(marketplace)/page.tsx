@@ -400,7 +400,10 @@ export default async function LandingPage() {
                                     <Link key={seller.id} href={`/vendor/${seller.sellerSlug || seller.id}`}
                                         className="group p-6 bg-card rounded-3xl border border-border hover:border-amber-300 hover:shadow-xl transition-all hover:-translate-y-1 text-center space-y-3">
                                         <div className="w-16 h-16 mx-auto rounded-2xl overflow-hidden border border-border bg-gray-50 flex items-center justify-center">
-                                            {seller.logoUrl ? (
+                                            {seller.logoUrl && !seller.logoUrl.startsWith('data:') ? (
+                                                <Image src={seller.logoUrl} alt={seller.businessName || seller.name}
+                                                    width={64} height={64} className="w-full h-full object-contain" />
+                                            ) : seller.logoUrl?.startsWith('data:') ? (
                                                 // eslint-disable-next-line @next/next/no-img-element
                                                 <img src={seller.logoUrl} alt={seller.businessName || seller.name}
                                                     className="w-full h-full object-contain" suppressHydrationWarning />

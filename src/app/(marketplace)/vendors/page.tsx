@@ -1,5 +1,6 @@
 import { getVendors } from '../vendor/actions';
 import Link from 'next/link';
+import Image from 'next/image';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -35,7 +36,10 @@ export default async function VendorsPage() {
                         >
                             <div className="flex items-start gap-5">
                                 <div className="w-16 h-16 rounded-2xl overflow-hidden shrink-0 group-hover:scale-110 transition-transform shadow-lg">
-                                    {vendor.logoUrl ? (
+                                    {vendor.logoUrl && !vendor.logoUrl.startsWith('data:') ? (
+                                        <Image src={vendor.logoUrl} alt={vendor.businessName || vendor.name}
+                                            width={64} height={64} className="w-full h-full object-contain bg-white" />
+                                    ) : vendor.logoUrl?.startsWith('data:') ? (
                                         // eslint-disable-next-line @next/next/no-img-element
                                         <img src={vendor.logoUrl} alt={vendor.businessName || vendor.name}
                                             className="w-full h-full object-contain bg-white" loading="lazy" suppressHydrationWarning />

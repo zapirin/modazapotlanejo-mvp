@@ -62,7 +62,9 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     // Tab: Sellers
     const [sellers, setSellers] = useState<any[]>([]);
     const [loadingSellers, setLoadingSellers] = useState(false);
-    const [compressing, setCompressing] = useState(false);
+    const [orphanScan, setOrphanScan] = useState<{ count: number; totalMB: string } | null>(null);
+    const [orphanDeleting, setOrphanDeleting] = useState(false);
+    const [orphanResult, setOrphanResult] = useState<{ deleted: number; freedMB: string } | null>(null);
     const [applications, setApplications] = useState<any[]>([]);
     const [loadingApps, setLoadingApps] = useState(false);
     const [sellerSubTab, setSellerSubTab] = useState<'active' | 'inactive'>('active');
@@ -76,7 +78,6 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     const [loadingInactive, setLoadingInactive] = useState(false);
     const [plans, setPlans] = useState<any[]>([]);
     const [savingPlans, setSavingPlans] = useState(false);
-    const [compressionResult, setCompressionResult] = useState<{savedMB: string; compressed: number} | null>(null);
 
     // Tab: Featured
     const [productQuery, setProductQuery] = useState('');
@@ -114,31 +115,31 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
         setSavingPlans(false);
     };
 
-    const handleCompressImages = async () => {
-        if (!confirm('¿Comprimir todas las imágenes en la BD? Esto puede tardar 1-2 minutos.')) return;
-        setCompressing(true);
-        setCompressionResult(null);
-        let offset = 0;
-        let totalSaved = 0;
-        let totalCompressed = 0;
+    const handleScanOrphans = async () => {
+        setOrphanScan(null);
+        setOrphanResult(null);
         try {
-            while (true) {
-                const res = await fetch('/api/admin/compress-images', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ offset }),
-                });
-                const data = await res.json();
-                totalSaved += data.savedKB || 0;
-                totalCompressed += data.compressed || 0;
-                if (!data.hasMore) break;
-                offset = data.nextOffset;
-            }
-            setCompressionResult({ savedMB: (totalSaved/1024).toFixed(1), compressed: totalCompressed });
+            const res = await fetch('/api/admin/orphaned-images');
+            const data = await res.json();
+            setOrphanScan({ count: data.count, totalMB: data.totalMB });
         } catch (e: any) {
-            alert('Error: ' + e.message);
+            alert('Error al escanear: ' + e.message);
+        }
+    };
+
+    const handleDeleteOrphans = async () => {
+        if (!orphanScan || orphanScan.count === 0) return;
+        if (!confirm(`¿Eliminar ${orphanScan.count} archivos huérfanos (${orphanScan.totalMB} MB)? Esta acción no se puede deshacer.`)) return;
+        setOrphanDeleting(true);
+        try {
+            const res = await fetch('/api/admin/orphaned-images', { method: 'DELETE' });
+            const data = await res.json();
+            setOrphanResult({ deleted: data.deleted, freedMB: data.freedMB });
+            setOrphanScan(null);
+        } catch (e: any) {
+            alert('Error al eliminar: ' + e.message);
         } finally {
-            setCompressing(false);
+            setOrphanDeleting(false);
         }
     };
 
@@ -630,12 +631,31 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                 <h2 className="text-xl font-black">🏭 Gestión de Vendedores</h2>
                                 <div className="flex items-center gap-3">
                                     <span className="text-xs text-gray-400 font-bold">{sellers.length} vendedores</span>
-                                    <button onClick={handleCompressImages} disabled={compressing}
-                                        className="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 text-amber-700 rounded-xl text-xs font-black hover:bg-amber-100 transition disabled:opacity-50 flex items-center gap-2">
-                                        {compressing ? '⏳ Comprimiendo...' : '🗜️ Comprimir Imágenes BD'}
-                                    </button>
-                                    {compressionResult && (
-                                        <span className="text-xs font-bold text-emerald-600">✅ {compressionResult.compressed} imgs · -{compressionResult.savedMB}MB</span>
+                                    {!orphanScan && !orphanResult && (
+                                        <button onClick={handleScanOrphans}
+                                            className="px-4 py-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 text-orange-700 rounded-xl text-xs font-black hover:bg-orange-100 transition flex items-center gap-2">
+                                            🔍 Escanear Archivos Huérfanos
+                                        </button>
+                                    )}
+                                    {orphanScan && (
+                                        <div className="flex items-center gap-2">
+                                            {orphanScan.count === 0 ? (
+                                                <span className="text-xs font-bold text-emerald-600">✅ Sin huérfanos — disco limpio</span>
+                                            ) : (
+                                                <>
+                                                    <span className="text-xs font-bold text-orange-600">{orphanScan.count} archivos · {orphanScan.totalMB} MB</span>
+                                                    <button onClick={handleDeleteOrphans} disabled={orphanDeleting}
+                                                        className="px-3 py-1.5 bg-red-50 dark:bg-red-900/20 border border-red-200 text-red-700 rounded-xl text-xs font-black hover:bg-red-100 transition disabled:opacity-50">
+                                                        {orphanDeleting ? '⏳ Eliminando...' : '🗑️ Eliminar'}
+                                                    </button>
+                                                </>
+                                            )}
+                                            <button onClick={() => setOrphanScan(null)}
+                                                className="text-xs text-gray-400 hover:text-gray-600 font-bold">✕</button>
+                                        </div>
+                                    )}
+                                    {orphanResult && (
+                                        <span className="text-xs font-bold text-emerald-600">✅ {orphanResult.deleted} archivos eliminados · {orphanResult.freedMB} MB liberados</span>
                                     )}
                                 </div>
                             </div>
