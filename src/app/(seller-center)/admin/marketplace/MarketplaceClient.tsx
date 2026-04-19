@@ -20,6 +20,8 @@ import {
     deleteSellerForever,
     reactivateSeller,
     updateBrandConfig,
+    toggleBrandActive,
+    deleteBrandConfig,
 } from '@/app/actions/marketplace';
 import { updateApplicationStatus } from '@/app/(seller-center)/admin/applications/actions';
 import { getSellerApplications } from '@/app/actions/admin';
@@ -1150,9 +1152,48 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                             <div key={brand.domain} className="bg-card border border-border rounded-2xl p-6 space-y-4">
                                 {/* Preview header */}
                                 <div className={`p-4 rounded-2xl ${brand.primaryColor === 'violet' ? 'bg-violet-600' : brand.primaryColor === 'emerald' ? 'bg-emerald-600' : brand.primaryColor === 'amber' ? 'bg-amber-600' : brand.primaryColor === 'rose' ? 'bg-rose-600' : 'bg-blue-600'} text-white`}>
-                                    <p className="font-black text-lg">{brand.name}</p>
-                                    <p className="text-xs opacity-80">{brand.tagline}</p>
-                                    <p className="text-[10px] opacity-60 mt-1">{brand.domain}</p>
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <p className="font-black text-lg">{brand.name}</p>
+                                            <p className="text-xs opacity-80">{brand.tagline}</p>
+                                            <p className="text-[10px] opacity-60 mt-1">{brand.domain}</p>
+                                        </div>
+                                        <div className="flex gap-2 shrink-0">
+                                            <button
+                                                onClick={async () => {
+                                                    const next = !brand.isActive;
+                                                    const res = await toggleBrandActive(brand.domain, next);
+                                                    if (res.success) {
+                                                        setBrands(prev => prev.map((b: any) => b.domain === brand.domain ? { ...b, isActive: next } : b));
+                                                        toast.success(next ? 'Marca activada' : 'Marca desactivada');
+                                                    } else {
+                                                        toast.error(res.error || 'Error');
+                                                    }
+                                                }}
+                                                className="px-2.5 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-[10px] font-black transition"
+                                                title={brand.isActive ? 'Desactivar marca' : 'Activar marca'}>
+                                                {brand.isActive ? '⏸ Desactivar' : '▶ Activar'}
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    if (!confirm(`¿Eliminar permanentemente la marca "${brand.name}" (${brand.domain})? Esta acción no se puede deshacer.`)) return;
+                                                    const res = await deleteBrandConfig(brand.domain);
+                                                    if (res.success) {
+                                                        setBrands(prev => prev.filter((b: any) => b.domain !== brand.domain));
+                                                        toast.success('Marca eliminada');
+                                                    } else {
+                                                        toast.error(res.error || 'Error al eliminar');
+                                                    }
+                                                }}
+                                                className="px-2.5 py-1 bg-red-500/80 hover:bg-red-500 rounded-lg text-[10px] font-black transition"
+                                                title="Eliminar marca">
+                                                🗑 Eliminar
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {!brand.isActive && (
+                                        <div className="mt-2 px-2 py-1 bg-black/30 rounded-lg text-[10px] font-black text-yellow-300">⚠ Marca desactivada — no visible en el sitio</div>
+                                    )}
                                 </div>
                                 {/* Campos */}
                                 <div className="space-y-3">

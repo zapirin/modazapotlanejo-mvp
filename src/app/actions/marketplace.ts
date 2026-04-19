@@ -398,6 +398,33 @@ export async function savePlans(plans: any[]) {
     } catch (e: any) { return { success: false, error: e.message }; }
 }
 
+export async function toggleBrandActive(domain: string, isActive: boolean) {
+    try {
+        await checkAdmin();
+        await (prisma.brandConfig as any).update({
+            where: { domain },
+            data: { isActive }
+        });
+        revalidatePath('/', 'layout');
+        revalidatePath('/catalog');
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function deleteBrandConfig(domain: string) {
+    try {
+        await checkAdmin();
+        await prisma.brandConfig.delete({ where: { domain } });
+        revalidatePath('/', 'layout');
+        revalidatePath('/catalog');
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 export async function updateBrandConfig(domain: string, data: {
     name?: string;
     tagline?: string;
