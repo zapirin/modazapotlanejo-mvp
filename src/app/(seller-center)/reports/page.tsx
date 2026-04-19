@@ -130,7 +130,7 @@ export default function ReportsPage() {
 
     const fetchSalesData = async () => {
         setLoading(true);
-        const res = await getSalesReports(dateRange);
+        const res = await getSalesReports({ ...dateRange, locationId: selectedLocationId || undefined });
         if (res.success) {
             setData(res);
         } else {
@@ -141,7 +141,7 @@ export default function ReportsPage() {
 
     const fetchZCutsData = async () => {
         setLoading(true);
-        const res = await getZCutsReport(dateRange);
+        const res = await getZCutsReport({ ...dateRange, locationId: selectedLocationId || undefined });
         if (res.success) {
             setZcutsData(res);
         } else {
@@ -219,8 +219,8 @@ export default function ReportsPage() {
                             <span>Sesión activa desde {new Date(perms.sessionStartedAt).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                     )}
-                    {/* Location filter — commissions only */}
-                    {!perms.isCashier && activeTab === 'commissions' && locations.length > 1 && (
+                    {/* Location filter — visible in all tabs for seller/admin */}
+                    {!perms.isCashier && locations.length > 1 && (
                         <select value={selectedLocationId} onChange={e => setSelectedLocationId(e.target.value)}
                             className="bg-input border border-border rounded-xl px-4 py-2 text-sm font-bold text-foreground outline-none w-full md:w-auto">
                             <option value="">Todas las sucursales</option>

@@ -9,10 +9,10 @@ export interface ReportDateRange {
     endDate: Date;
 }
 
-export async function getSalesReports({ startDate, endDate }: ReportDateRange) {
+export async function getSalesReports({ startDate, endDate, locationId }: ReportDateRange & { locationId?: string }) {
     try {
         const user = await getSessionUser();
-        
+
         // Build seller/location isolation filter
         let sellerFilter: any = {};
         if (user?.role !== 'ADMIN') {
@@ -26,6 +26,10 @@ export async function getSalesReports({ startDate, endDate }: ReportDateRange) {
                 const locIds: string[] = cashier?.allowedLocationIds || [];
                 if (locIds.length > 0) sellerFilter = { locationId: { in: locIds } };
             }
+        }
+        // Apply optional location filter for SELLER/ADMIN (cashier already restricted)
+        if (locationId && user?.role !== 'CASHIER') {
+            sellerFilter = { ...sellerFilter, locationId };
         }
 
         // 1. Fetch all SALES in the date range that are completed
@@ -135,7 +139,7 @@ export async function getSalesReports({ startDate, endDate }: ReportDateRange) {
 }
 
 // ─── Cortes Z ──────────────────────────────────────────────────────────────
-export async function getZCutsReport({ startDate, endDate }: ReportDateRange) {
+export async function getZCutsReport({ startDate, endDate, locationId }: ReportDateRange & { locationId?: string }) {
     try {
         const user = await getSessionUser();
 
@@ -149,6 +153,10 @@ export async function getZCutsReport({ startDate, endDate }: ReportDateRange) {
             });
             const locIds: string[] = cashier?.allowedLocationIds || [];
             if (locIds.length > 0) locationFilter = { locationId: { in: locIds } };
+        }
+        // Apply optional location filter for SELLER/ADMIN
+        if (locationId && user?.role !== 'CASHIER') {
+            locationFilter = { ...locationFilter, locationId };
         }
         // ADMIN: no filter
 
