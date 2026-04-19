@@ -60,6 +60,8 @@ model BrandConfig {
   heroImage          String?
   heroImages         String[]
   primaryColor       String   @default("blue")
+  isSingleVendor     Boolean  @default(false)
+  sellerId           String?
   featuredSellerIds  String[]
   featuredProductIds String[]
   featuredCategories String[]
