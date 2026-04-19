@@ -58,6 +58,19 @@ async function getOrphanedFiles(): Promise<{ filename: string; sizeKB: number }[
         }
     }
 
+    // 5. También revisar MarketplaceSettings (hero images globales)
+    const mktSettings = await (prisma.marketplaceSettings as any).findFirst({
+        select: { heroImage: true, heroImages: true },
+    });
+    if (mktSettings) {
+        for (const url of [mktSettings.heroImage, ...(mktSettings.heroImages || [])]) {
+            if (url && !url.startsWith('data:')) {
+                const filename = url.split('/').pop();
+                if (filename) referencedUrls.add(filename);
+            }
+        }
+    }
+
     // 4. Encontrar huérfanos
     const orphans: { filename: string; sizeKB: number }[] = [];
     for (const file of files) {

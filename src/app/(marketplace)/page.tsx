@@ -107,10 +107,10 @@ export default async function LandingPage() {
 
     const heroImageUrl = brand.isSingleVendor ? (brand.heroImage || siteSettings?.data?.heroImage || null) : (siteSettings?.data?.heroImage || brand.heroImage || null);
 
-    // Build slider images: DB heroImages → brand config images → single heroImage → product images
+    // Build slider images: for single-vendor use brand heroImage; for marketplace use global heroImages
     const heroImages: string[] = (() => {
         const dbImages = (siteSettings?.data as any)?.heroImages as string[] | undefined;
-        if (dbImages && dbImages.length > 0) return dbImages;
+        if (!brand.isSingleVendor && dbImages && dbImages.length > 0) return dbImages;
         if (brand.heroImages && brand.heroImages.length > 0) return brand.heroImages;
         const slides: string[] = [];
         if (heroImageUrl) slides.push(heroImageUrl);
