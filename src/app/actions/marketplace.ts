@@ -404,6 +404,7 @@ export async function updateBrandConfig(domain: string, data: {
     description?: string;
     logoUrl?: string;
     heroImage?: string;
+    heroImages?: string[];
     primaryColor?: string;
 }) {
     try {

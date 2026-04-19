@@ -242,6 +242,24 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
         }
     };
 
+    const handleAddBrandHeroImage = async (brandDomain: string, file: File) => {
+        const validation = validateImageFile(file);
+        if (!validation.valid) { toast.error(validation.error); return; }
+        setLoading(true);
+        try {
+            const { url, sizeKB } = await processImage(file, 'brand-hero');
+            setBrands(prev => prev.map(b => b.domain === brandDomain
+                ? { ...b, heroImages: [...(b.heroImages || []), url] }
+                : b
+            ));
+            toast.success(`Imagen agregada al slider (${sizeKB}KB). No olvides guardar.`);
+        } catch {
+            toast.error('Error al procesar la imagen');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleSaveSite = async () => {
         setLoading(true);
         const res = await updateMarketplaceSettingsFull({ title, heroImage: heroImages[0] || '', heroImages, logoUrl, sellerLabel, privacyUrl, termsUrl });
@@ -1114,19 +1132,52 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             </div>
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-[9px] font-black uppercase text-gray-400">Imagen Hero</label>
+                                            <label className="text-[9px] font-black uppercase text-gray-400">Imagen Hero (fallback)</label>
                                             <div className="flex gap-2">
                                                 <input value={brand.heroImage || ''}
                                                     onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? {...b, heroImage: e.target.value} : b))}
                                                     placeholder="/hero.png"
                                                     className="flex-1 px-3 py-2 bg-input border border-border rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
                                                 <label className="cursor-pointer p-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl transition">
-                                                    <input type="file" className="hidden" accept="image/*" 
+                                                    <input type="file" className="hidden" accept="image/*"
                                                         onChange={e => e.target.files?.[0] && handleBrandImageUpload(brand.domain, 'heroImage', e.target.files[0])} />
                                                     <span title="Subir imagen">📤</span>
                                                 </label>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    {/* Slider de imágenes independiente por marca */}
+                                    <div className="space-y-2 pt-1">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-[9px] font-black uppercase text-gray-400">Slider de imágenes</label>
+                                            <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 rounded-full text-[9px] font-black text-gray-500">
+                                                {(brand.heroImages || []).length} imagen{(brand.heroImages || []).length !== 1 ? 'es' : ''}
+                                            </span>
+                                        </div>
+                                        {(brand.heroImages || []).length > 0 && (
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {(brand.heroImages || []).map((img: string, imgIdx: number) => (
+                                                    <div key={imgIdx} className="relative h-20 rounded-xl overflow-hidden border border-border group">
+                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                        <img src={img} alt={`Slide ${imgIdx + 1}`} className="w-full h-full object-cover" />
+                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition" />
+                                                        <button
+                                                            onClick={() => setBrands(prev => prev.map((b, i) => i === idx ? { ...b, heroImages: (b.heroImages || []).filter((_: string, fi: number) => fi !== imgIdx) } : b))}
+                                                            className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] font-black opacity-0 group-hover:opacity-100 transition hover:bg-red-600">×</button>
+                                                        <span className="absolute bottom-1 left-1 px-1 py-0.5 bg-black/60 text-white text-[8px] font-black rounded">{imgIdx + 1}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {(brand.heroImages || []).length === 0 && (
+                                            <p className="text-[10px] text-gray-400 font-medium py-1">Sin imágenes — se usará la imagen hero de arriba.</p>
+                                        )}
+                                        <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-border rounded-xl text-xs font-black hover:bg-gray-200 transition disabled:opacity-50">
+                                            <input type="file" className="hidden" accept="image/*" disabled={loading}
+                                                onChange={e => e.target.files?.[0] && handleAddBrandHeroImage(brand.domain, e.target.files[0])} />
+                                            {loading ? '⏳ Subiendo...' : '📁 Agregar imagen al slider'}
+                                        </label>
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-black uppercase text-gray-400">Color principal</label>
@@ -1151,6 +1202,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             description: brand.description,
                                             logoUrl: brand.logoUrl,
                                             heroImage: brand.heroImage,
+                                            heroImages: brand.heroImages || [],
                                             primaryColor: brand.primaryColor
                                         });
                                         if (res.success) toast.success(`Configuración guardada para ${brand.name}`);

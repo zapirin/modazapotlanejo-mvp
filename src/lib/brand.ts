@@ -126,6 +126,7 @@ export function mergeBrandWithDB(base: BrandConfig, dbBrand: any): BrandConfig {
         footerDescription: dbBrand.description || base.footerDescription,
         primaryColor: dbBrand.primaryColor || base.primaryColor,
         heroImage: dbBrand.heroImage || base.heroImage,
+        heroImages: dbBrand.heroImages?.length > 0 ? dbBrand.heroImages : base.heroImages,
         featuredSellerIds: dbBrand.featuredSellerIds || base.featuredSellerIds,
         featuredProductIds: dbBrand.featuredProductIds || base.featuredProductIds,
         featuredCategories: dbBrand.featuredCategories || base.featuredCategories,
