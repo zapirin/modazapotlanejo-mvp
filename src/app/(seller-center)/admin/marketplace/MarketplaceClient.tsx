@@ -44,6 +44,16 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     const [loading, setLoading] = useState(false);
     const [savingBrand, setSavingBrand] = useState<string | null>(null);
 
+    // Modal nueva marca
+    const [showNewBrandModal, setShowNewBrandModal] = useState(false);
+    const [newBrandSellerId, setNewBrandSellerId] = useState('');
+    const [newBrandDomain, setNewBrandDomain] = useState('');
+    const [newBrandName, setNewBrandName] = useState('');
+    const [newBrandColor, setNewBrandColor] = useState('blue');
+    const [newBrandSaving, setNewBrandSaving] = useState(false);
+    const [modalSellers, setModalSellers] = useState<any[]>([]);
+    const [modalSellersLoaded, setModalSellersLoaded] = useState(false);
+
     // Tab: Site
     const [title, setTitle] = useState(initialSettings?.title || '');
     const [heroImage, setHeroImage] = useState(initialSettings?.heroImage || '');
@@ -258,6 +268,49 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
             toast.error('Error al procesar la imagen');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const openNewBrandModal = async () => {
+        setShowNewBrandModal(true);
+        if (!modalSellersLoaded) {
+            const res = await getSellersList();
+            if (res.success) setModalSellers(res.data || []);
+            setModalSellersLoaded(true);
+        }
+    };
+
+    const handleSellerPickedForBrand = (sellerId: string) => {
+        setNewBrandSellerId(sellerId);
+        const s = modalSellers.find((s: any) => s.id === sellerId);
+        if (s) setNewBrandName(s.businessName || s.name || '');
+    };
+
+    const handleCreateBrand = async () => {
+        if (!newBrandDomain.trim() || !newBrandName.trim()) {
+            toast.error('El dominio y el nombre son obligatorios');
+            return;
+        }
+        setNewBrandSaving(true);
+        try {
+            const res = await updateBrandConfig(newBrandDomain.trim().toLowerCase(), {
+                name: newBrandName.trim(),
+                primaryColor: newBrandColor,
+                isSingleVendor: !!newBrandSellerId,
+                sellerId: newBrandSellerId || undefined,
+            });
+            if (res.success) {
+                toast.success(`Marca "${newBrandName}" creada`);
+                setBrands((prev: any[]) => [...prev, res.data]);
+                setShowNewBrandModal(false);
+                setNewBrandSellerId(''); setNewBrandDomain(''); setNewBrandName(''); setNewBrandColor('blue');
+            } else {
+                toast.error(res.error || 'Error al crear marca');
+            }
+        } catch (e: any) {
+            toast.error('Error: ' + e.message);
+        } finally {
+            setNewBrandSaving(false);
         }
     };
 
@@ -1082,9 +1135,15 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
             {/* ── TAB: MARCAS ── */}
             {activeTab === 'brands' && (
                 <div className="space-y-6">
-                    <div>
-                        <h2 className="text-xl font-black">🌐 Configuración de Marcas</h2>
-                        <p className="text-xs text-gray-400 mt-1">Personaliza cada dominio — logo, nombre, colores y contenido destacado.</p>
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h2 className="text-xl font-black">🌐 Configuración de Marcas</h2>
+                            <p className="text-xs text-gray-400 mt-1">Personaliza cada dominio — logo, nombre, colores y contenido destacado.</p>
+                        </div>
+                        <button onClick={openNewBrandModal}
+                            className="shrink-0 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition flex items-center gap-2">
+                            + Nueva Marca
+                        </button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {brands.map((brand: any, idx: number) => (
@@ -1205,11 +1264,81 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                     </div>
                     {brands.length === 0 && (
                         <div className="p-12 text-center bg-gray-50 dark:bg-gray-900/50 rounded-3xl border border-dashed border-border mt-6">
-                            <p className="text-sm font-bold text-gray-400">No hay configuraciones de marca en la base de datos.</p>
-                            <button onClick={() => setBrands([{ domain: 'kalexafashion.com', name: 'Kalexa Fashion', primaryColor: 'kalexa' }])}
-                                className="mt-4 text-xs font-black text-blue-600 hover:underline">
-                                + Agregar borrador para Kalexa
-                            </button>
+                            <p className="text-sm font-bold text-gray-400">No hay configuraciones de marca. Crea la primera con el botón "Nueva Marca".</p>
+                        </div>
+                    )}
+
+                    {/* ── MODAL NUEVA MARCA ── */}
+                    {showNewBrandModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) setShowNewBrandModal(false); }}>
+                            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+                            <div className="relative bg-card border border-border rounded-3xl p-8 w-full max-w-lg shadow-2xl space-y-6">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-black">Nueva Marca Independiente</h3>
+                                    <button onClick={() => setShowNewBrandModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none">×</button>
+                                </div>
+
+                                {/* Selector de vendedor */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Vendedor (tienda principal)</label>
+                                    {!modalSellersLoaded ? (
+                                        <div className="flex items-center gap-2 text-xs text-gray-400"><span className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />Cargando vendedores...</div>
+                                    ) : (
+                                        <select value={newBrandSellerId} onChange={e => handleSellerPickedForBrand(e.target.value)}
+                                            className="w-full px-4 py-3 bg-input border border-border rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none">
+                                            <option value="">— Sin vendedor (marca sin tienda vinculada) —</option>
+                                            {modalSellers.map((s: any) => (
+                                                <option key={s.id} value={s.id}>{s.businessName || s.name} {s.sellerSlug ? `(${s.sellerSlug})` : ''}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                    {newBrandSellerId && (
+                                        <p className="text-[10px] text-blue-600 font-bold">✓ El catálogo solo mostrará productos de este vendedor.</p>
+                                    )}
+                                </div>
+
+                                {/* Dominio */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Dominio</label>
+                                    <input value={newBrandDomain} onChange={e => setNewBrandDomain(e.target.value)}
+                                        placeholder="mitienda.com"
+                                        className="w-full px-4 py-3 bg-input border border-border rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
+                                    <p className="text-[10px] text-gray-400">El dominio debe apuntar a este servidor para funcionar.</p>
+                                </div>
+
+                                {/* Nombre de la marca */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Nombre de la marca</label>
+                                    <input value={newBrandName} onChange={e => setNewBrandName(e.target.value)}
+                                        placeholder="Mi Tienda Fashion"
+                                        className="w-full px-4 py-3 bg-input border border-border rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
+                                </div>
+
+                                {/* Color */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Color principal</label>
+                                    <select value={newBrandColor} onChange={e => setNewBrandColor(e.target.value)}
+                                        className="w-full px-4 py-3 bg-input border border-border rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none">
+                                        <option value="blue">🔵 Azul</option>
+                                        <option value="violet">🟣 Violeta</option>
+                                        <option value="kalexa">⚛️ Kalexa Purple</option>
+                                        <option value="emerald">🟢 Esmeralda</option>
+                                        <option value="amber">🟡 Ámbar</option>
+                                        <option value="rose">🌸 Rosa</option>
+                                    </select>
+                                </div>
+
+                                <div className="flex gap-3 pt-2">
+                                    <button onClick={() => setShowNewBrandModal(false)}
+                                        className="flex-1 py-3 border border-border rounded-xl text-sm font-black hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+                                        Cancelar
+                                    </button>
+                                    <button onClick={handleCreateBrand} disabled={newBrandSaving || !newBrandDomain.trim() || !newBrandName.trim()}
+                                        className="flex-1 py-3 bg-blue-600 text-white rounded-xl text-sm font-black hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
+                                        {newBrandSaving ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Creando...</> : '🌐 Crear Marca'}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>

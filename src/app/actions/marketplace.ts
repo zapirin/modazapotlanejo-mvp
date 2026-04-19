@@ -406,6 +406,8 @@ export async function updateBrandConfig(domain: string, data: {
     heroImage?: string;
     heroImages?: string[];
     primaryColor?: string;
+    isSingleVendor?: boolean;
+    sellerId?: string;
 }) {
     try {
         await checkAdmin();

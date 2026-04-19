@@ -411,9 +411,23 @@ export async function getActiveBrandConfig(host: string | null) {
         });
         
         if (dbBrand) {
-            return mergeBrandWithDB(baseConfig, dbBrand);
+            // Para dominios dinámicos (no en config estática), construir base desde cero
+            const isKnownStaticDomain = ['modazapotlanejo.com','zonadelvestir.com','kalexafashion.com'].some(d => cleanHost.includes(d.split('.')[0]));
+            const effectiveBase = isKnownStaticDomain ? baseConfig : {
+                ...baseConfig,
+                domain: dbBrand.domain,
+                name: dbBrand.name,
+                tagline: dbBrand.tagline || '',
+                description: dbBrand.description || '',
+                footerDescription: dbBrand.description || '',
+                primaryColor: dbBrand.primaryColor || 'blue',
+                isSingleVendor: dbBrand.isSingleVendor ?? false,
+                sellerId: dbBrand.sellerId || undefined,
+                logo: { text: dbBrand.name.toUpperCase(), initial: dbBrand.name.charAt(0).toUpperCase(), url: dbBrand.logoUrl || '/logo_modazapo.png' },
+            };
+            return mergeBrandWithDB(effectiveBase, dbBrand);
         }
-        
+
         return baseConfig;
     } catch (error) {
         console.error('Error fetching brand config from DB:', error);
