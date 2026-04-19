@@ -127,7 +127,12 @@ export default async function LandingPage() {
 
     // @ts-ignore
     const isWholesale = !!user?.isWholesale;
-    const showPricesWithoutLogin = true; // prices visible on landing for all domains
+    const _brandCfgEntry = (siteSettings?.data as any)?.brandsConfig?.find((b: any) =>
+        host.includes(b.domain.split('.')[0])
+    );
+    const showPricesWithoutLogin = _brandCfgEntry
+        ? _brandCfgEntry.showPricesPublicly !== false
+        : (siteSettings?.data as any)?.showPricesPublicly !== false;
     const nowMs = Date.now(); // calculado una sola vez en servidor
     const month = new Date(nowMs).getMonth(); // usa el mismo nowMs para consistencia
 

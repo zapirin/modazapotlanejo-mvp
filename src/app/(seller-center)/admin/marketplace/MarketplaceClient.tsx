@@ -112,6 +112,9 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     });
     const [brands, setBrands] = useState<any[]>(initialSettings?.brandsConfig || []);
     const [editingBrand, setEditingBrand] = useState<any>(null);
+    const [showPricesPublicly, setShowPricesPublicly] = useState<boolean>(initialSettings?.showPricesPublicly !== false);
+    const _kalexaCfg = initialSettings?.brandsConfig?.find((b: any) => b.domain.includes('kalexa'));
+    const [showPricesPubliclyKalexa, setShowPricesPubliclyKalexa] = useState<boolean>(_kalexaCfg?.showPricesPublicly !== false);
     const [photographyEnabled, setPhotographyEnabled] = useState(initialSettings?.photographyEnabled !== false);
     const [photoPrices, setPhotoPrices] = useState(initialSettings?.photographyPrices || [
         { paquete: 'Básico', piezas: '1–10 piezas', precio: '$800', includes: 'Fondo blanco · 1 toma/pieza' },
@@ -573,6 +576,44 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                         + Agregar
                                     </button>
                                 )}
+                            </div>
+                        </div>
+
+                        {/* ── Visibilidad de precios ── */}
+                        <div className="space-y-3 pt-2 border-t border-border">
+                            <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Visibilidad de Precios</h3>
+                            <p className="text-xs text-gray-500">En ambos casos, <strong>agregar al carrito siempre requiere iniciar sesión</strong>.</p>
+                            {/* Toggle Marketplace */}
+                            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-border">
+                                <div>
+                                    <p className="text-sm font-black">Marketplace (modazapotlanejo.com / zonadelvestir.com)</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">{showPricesPublicly ? 'Precios visibles sin login' : 'Precios ocultos — requieren iniciar sesión'}</p>
+                                </div>
+                                <button onClick={async () => {
+                                    const next = !showPricesPublicly;
+                                    setShowPricesPublicly(next);
+                                    const res = await updateMarketplaceSettingsFull({ showPricesPublicly: next });
+                                    if (res.success) toast.success(next ? 'Precios visibles para todos en el Marketplace' : 'Precios ocultos en el Marketplace');
+                                    else { setShowPricesPublicly(!next); toast.error(res.error || 'Error'); }
+                                }} className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ${showPricesPublicly ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-700'}`}>
+                                    <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${showPricesPublicly ? 'left-7' : 'left-1'}`} />
+                                </button>
+                            </div>
+                            {/* Toggle Kalexa */}
+                            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-border">
+                                <div>
+                                    <p className="text-sm font-black">Kalexa Fashion (kalexafashion.com)</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">{showPricesPubliclyKalexa ? 'Precios visibles sin login' : 'Precios ocultos — requieren iniciar sesión'}</p>
+                                </div>
+                                <button onClick={async () => {
+                                    const next = !showPricesPubliclyKalexa;
+                                    setShowPricesPubliclyKalexa(next);
+                                    const res = await updateBrandConfig('kalexafashion.com', { showPricesPublicly: next });
+                                    if (res.success) toast.success(next ? 'Precios visibles para todos en Kalexa' : 'Precios ocultos en Kalexa');
+                                    else { setShowPricesPubliclyKalexa(!next); toast.error(res.error || 'Error'); }
+                                }} className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ${showPricesPubliclyKalexa ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-700'}`}>
+                                    <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${showPricesPubliclyKalexa ? 'left-7' : 'left-1'}`} />
+                                </button>
                             </div>
                         </div>
 

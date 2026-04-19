@@ -5,6 +5,7 @@ import ProductDetailClient from './ProductDetailClient';
 import { getSessionUser } from '@/app/actions/auth';
 import { headers } from 'next/headers';
 import { getBrandConfig } from '@/lib/brand';
+import { getMarketplaceSettings } from '@/app/actions/marketplace';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -61,10 +62,11 @@ export default async function ProductPage({
     // Resolve params if they are promises (Next.js 15 behavior)
     const resolvedParams = await params;
 
-    const [product, user, adjacentProducts] = await Promise.all([
+    const [product, user, adjacentProducts, mktSettings] = await Promise.all([
         getProductDetail(resolvedParams.slug),
         getSessionUser(),
-        getAdjacentProducts(resolvedParams.slug)
+        getAdjacentProducts(resolvedParams.slug),
+        getMarketplaceSettings(),
     ]);
 
     if (!product) notFound();
@@ -126,7 +128,10 @@ export default async function ProductPage({
                 prevProduct={adjacentProducts.prev}
                 nextProduct={adjacentProducts.next}
                 relatedProducts={relatedProducts}
-                showPricesWithoutLogin={false}
+                showPricesWithoutLogin={(() => {
+                    const brandEntry = (mktSettings?.data as any)?.brandsConfig?.find((b: any) => host.includes(b.domain.split('.')[0]));
+                    return brandEntry ? brandEntry.showPricesPublicly !== false : (mktSettings?.data as any)?.showPricesPublicly !== false;
+                })()}
             />
         </>
     );

@@ -4,6 +4,7 @@ import CatalogClient from './CatalogClient';
 import { getSessionUser } from '@/app/actions/auth';
 import { headers } from 'next/headers';
 import { getBrandConfig } from '@/lib/brand';
+import { getMarketplaceSettings } from '@/app/actions/marketplace';
 import type { Metadata } from 'next';
 
 // Mapas de títulos y descripciones por categoría optimizados para cada dominio
@@ -92,12 +93,13 @@ export default async function CatalogPage({
 
     const sellerId = brandConfig.sellerId || undefined;
 
-    const [result, categories, brands, user, variantOptions] = await Promise.all([
+    const [result, categories, brands, user, variantOptions, mktSettings] = await Promise.all([
         getProducts({ category, subcategory, brand, search, sort, minPrice, maxPrice, onlyWithStock, priceType, color, size, offset, limit: pageSize, sellerId }),
         getCategories(sellerId),
         getBrands(sellerId),
         getSessionUser(),
         getAvailableVariantOptions(sellerId),
+        getMarketplaceSettings(),
     ]);
 
     return (
@@ -114,7 +116,10 @@ export default async function CatalogPage({
             // @ts-ignore
             isWholesale={!!user?.isWholesale}
             isLoggedIn={!!user}
-            showPricesWithoutLogin={false}
+            showPricesWithoutLogin={(() => {
+                const brandEntry = (mktSettings?.data as any)?.brandsConfig?.find((b: any) => host.includes(b.domain.split('.')[0]));
+                return brandEntry ? brandEntry.showPricesPublicly !== false : (mktSettings?.data as any)?.showPricesPublicly !== false;
+            })()}
         />
     );
 }

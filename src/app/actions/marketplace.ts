@@ -283,6 +283,7 @@ export async function updateMarketplaceSettingsFull(data: {
     photographyPrices?: any;
     photographyEnabled?: boolean;
     brandColors?: Record<string, string>;
+    showPricesPublicly?: boolean;
 }) {
     try {
         await checkAdmin();
@@ -435,6 +436,7 @@ export async function updateBrandConfig(domain: string, data: {
     primaryColor?: string;
     isSingleVendor?: boolean;
     sellerId?: string;
+    showPricesPublicly?: boolean;
 }) {
     try {
         await checkAdmin();
