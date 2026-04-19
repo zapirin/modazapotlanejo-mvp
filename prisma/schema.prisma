@@ -58,6 +58,7 @@ model BrandConfig {
   description        String?
   logoUrl            String?
   heroImage          String?
+  heroImages         String[]
   primaryColor       String   @default("blue")
   featuredSellerIds  String[]
   featuredProductIds String[]
