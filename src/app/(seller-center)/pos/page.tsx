@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { searchProducts, getPriceTiers, getPaymentMethods, getPOSCategories, getProductsByCategory, processSale, getSuspendedSales, suspendSale, deleteSuspendedSale, createLayaway, getSaleById, updateSale } from '../products/new/actions';
 import { getCurrentCashSession, openCashSession, addCashMovement, closeCashSession, createTransfer, getAllowedLocations, checkSellerPOSAccess, getSalesBySession, getSalespersons } from './actions';
-import { getStoreSettings, getLocationsSettings } from '../settings/actions';
+import { getStoreSettings, getLocationsSettings, getRequireSalesperson } from '../settings/actions';
 import { createClient, searchClients, getClientById } from '../clients/actions';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
 import { toast } from 'sonner';
@@ -183,6 +183,7 @@ function POSContent() {
 
     // Global Store & Location Config
     const [globalConfig, setGlobalConfig] = useState<any>(null);
+    const [requireSalesperson, setRequireSalesperson] = useState(false);
 
     // Hook de conectividad — detecta online/offline y sincroniza automáticamente
     useEffect(() => {
@@ -283,18 +284,20 @@ function POSContent() {
     useEffect(() => {
         async function loadData() {
             // Paso 1: cargar datos que no dependen de sesión ni locación
-            const [tiers, methods, cats, storeSettingsRes, initialSuspended, locationsRes] = await Promise.all([
+            const [tiers, methods, cats, storeSettingsRes, initialSuspended, locationsRes, spRes] = await Promise.all([
                 getPriceTiers(),
                 getPaymentMethods(),
                 getPOSCategories(),
                 getStoreSettings(),
                 getSuspendedSales(),
-                getLocationsSettings()
+                getLocationsSettings(),
+                getRequireSalesperson(),
             ]);
 
             setSuspendedSales(initialSuspended);
             if (storeSettingsRes.success) setGlobalConfig(storeSettingsRes.data);
             if (locationsRes.success && locationsRes.data) setLocations(locationsRes.data);
+            setRequireSalesperson(spRes.requireSalesperson);
 
             const sortedMethods = methods.sort((a: any, b: any) => {
                 if (a.name.toLowerCase().includes('efectivo')) return -1;
@@ -648,6 +651,11 @@ function POSContent() {
         
         if (selectedPaymentMethod === 'Crédito de Tienda' && !selectedClient) {
             toast.error("Debe seleccionar un cliente del panel derecho para procesar una venta a crédito.");
+            return;
+        }
+
+        if (requireSalesperson && salespersons.length > 1 && !selectedSalesperson) {
+            toast.error("⚠️ Debes asignar un vendedor de piso antes de procesar la venta.");
             return;
         }
 
@@ -1820,7 +1828,10 @@ function POSContent() {
 
                     {/* Vendedor de piso */}
                     {salespersons.length > 1 && (
-                        <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+                        <div className={`bg-card border rounded-xl shadow-sm overflow-hidden ${requireSalesperson && !selectedSalesperson ? 'border-orange-400 dark:border-orange-500' : 'border-border'}`}>
+                            {requireSalesperson && !selectedSalesperson && (
+                                <p className="px-4 pt-2 text-[10px] font-black uppercase tracking-widest text-orange-500">⚠ Requerido — elige un vendedor</p>
+                            )}
                             {selectedSalesperson ? (
                                 <div className="flex items-center justify-between px-4 py-2 bg-purple-50 dark:bg-purple-900/20">
                                     <div className="flex items-center gap-2">
@@ -1849,7 +1860,7 @@ function POSContent() {
                                     }}
                                     className="w-full px-4 py-3 bg-transparent outline-none text-sm font-medium text-gray-500 cursor-pointer"
                                 >
-                                    <option value="">— Asignar Vendedor (opcional) —</option>
+                                    <option value="">{requireSalesperson ? '— Seleccionar Vendedor (obligatorio) —' : '— Asignar Vendedor (opcional) —'}</option>
                                     {salespersons.map(sp => (
                                         <option key={sp.id} value={sp.id}>{sp.name}</option>
                                     ))}

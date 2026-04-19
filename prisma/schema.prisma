@@ -158,6 +158,7 @@ model User {
   canViewCommissions  Boolean                @default(false)
   canViewZCuts        Boolean                @default(false)
   canCreateProducts   Boolean                @default(false)
+  requireSalesperson  Boolean                @default(false)
   locationId          String?
   resetToken          String?                @unique
   resetTokenExpiry    DateTime?
