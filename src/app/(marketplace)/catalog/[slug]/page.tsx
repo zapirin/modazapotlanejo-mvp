@@ -126,7 +126,7 @@ export default async function ProductPage({
                 prevProduct={adjacentProducts.prev}
                 nextProduct={adjacentProducts.next}
                 relatedProducts={relatedProducts}
-                showPricesWithoutLogin={host.includes('kalexafashion')}
+                showPricesWithoutLogin={false}
             />
         </>
     );

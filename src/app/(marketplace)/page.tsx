@@ -127,7 +127,7 @@ export default async function LandingPage() {
 
     // @ts-ignore
     const isWholesale = !!user?.isWholesale;
-    const showPricesWithoutLogin = (host || '').includes('kalexafashion');
+    const showPricesWithoutLogin = true; // prices visible on landing for all domains
     const nowMs = Date.now(); // calculado una sola vez en servidor
     const month = new Date(nowMs).getMonth(); // usa el mismo nowMs para consistencia
 

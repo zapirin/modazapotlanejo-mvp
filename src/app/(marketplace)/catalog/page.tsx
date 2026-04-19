@@ -114,7 +114,7 @@ export default async function CatalogPage({
             // @ts-ignore
             isWholesale={!!user?.isWholesale}
             isLoggedIn={!!user}
-            showPricesWithoutLogin={host.includes('kalexafashion')}
+            showPricesWithoutLogin={false}
         />
     );
 }
