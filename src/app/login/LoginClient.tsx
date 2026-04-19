@@ -131,7 +131,7 @@ export default function LoginClient({ brand }: { brand: BrandConfig }) {
 
                     <div className="mt-8 text-center space-y-3">
                         <p className="text-sm text-gray-500">¿No tienes cuenta? <Link href="/register/buyer" className="font-bold transition-colors hover:underline" style={{color: brandColor}}>Regístrate aquí</Link></p>
-                        <Link href="/" className="inline-block text-sm font-bold text-gray-400 hover:underline transition-colors">← Volver {brand.isSingleVendor ? 'a la Tienda' : 'al Marketplace'}</Link>
+                        <Link href="/" className="inline-block text-sm font-bold text-gray-400 hover:underline transition-colors">← Volver a {brand.name}</Link>
                     </div>
                 </div>
             </div>
