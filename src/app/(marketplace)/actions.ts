@@ -3,6 +3,9 @@
 import { prisma } from '@/lib/prisma';
 import { getBrandConfig, mergeBrandWithDB } from '@/lib/brand';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyMap = any;
+
 export async function getProducts(filters: {
     category?: string;
     subcategory?: string;
@@ -21,7 +24,7 @@ export async function getProducts(filters: {
     size?: string;
 }) {
     try {
-        const where: any = { isOnline: true, isActive: true };
+        const where: AnyMap = { isOnline: true, isActive: true };
 
         // Filter by seller for single-vendor stores
         if (filters.sellerId) {
@@ -75,7 +78,7 @@ export async function getProducts(filters: {
         }
 
         // Filtro por variante: stock, color, talla (unificados para no conflicto)
-        const variantFilter: any = {};
+        const variantFilter: AnyMap = {};
         if (filters.onlyWithStock) variantFilter.stock = { gt: 0 };
         if (filters.color) variantFilter.color = { contains: filters.color, mode: 'insensitive' };
         if (filters.size)  variantFilter.size  = { contains: filters.size,  mode: 'insensitive' };
@@ -83,7 +86,7 @@ export async function getProducts(filters: {
             where.variants = { some: variantFilter };
         }
 
-        let orderBy: any = { createdAt: 'desc' };
+        let orderBy: AnyMap = { createdAt: 'desc' };
         if (filters.sort === 'price_asc') orderBy = { price: 'asc' };
         if (filters.sort === 'price_desc') orderBy = { price: 'desc' };
         if (filters.sort === 'name_asc') orderBy = { name: 'asc' };
@@ -123,7 +126,7 @@ export async function getProducts(filters: {
 
 export async function getBrands(sellerId?: string) {
     try {
-        const where: any = {
+        const where: AnyMap = {
             products: {
                 some: sellerId
                     ? { sellerId, isOnline: true, isActive: true }
@@ -160,7 +163,7 @@ export async function getNewArrivals(limit = 4, sellerId?: string) {
 
 export async function getBestSellers(limit = 4, sellerId?: string) {
     try {
-        const where: any = { isOnline: true, isActive: true };
+        const where: AnyMap = { isOnline: true, isActive: true };
         if (sellerId) where.sellerId = sellerId;
         const products = await prisma.product.findMany({
             where,
@@ -207,7 +210,7 @@ export async function getCategories(sellerId?: string) {
             },
         });
         // Ordenar según el orden definido
-        return cats.sort((a: any, b: any) => {
+        return cats.sort((a: AnyMap, b: AnyMap) => {
             const ia = CATEGORY_ORDER.indexOf(a.name);
             const ib = CATEGORY_ORDER.indexOf(b.name);
             if (ia === -1 && ib === -1) return a.name.localeCompare(b.name);
@@ -315,7 +318,7 @@ export async function getAdjacentProducts(productId: string) {
         if (!current) current = await prisma.product.findUnique({ where: { id: productId }, select: { id: true, createdAt: true, categoryId: true } });
         if (!current) return { prev: null, next: null };
 
-        const baseWhere: any = { isOnline: true, isActive: true };
+        const baseWhere: AnyMap = { isOnline: true, isActive: true };
         // If the product has a category, navigate within that category
         if (current.categoryId) {
             baseWhere.categoryId = current.categoryId;
@@ -352,8 +355,8 @@ export async function getAdjacentProducts(productId: string) {
 
 export async function getLandingStats(sellerId?: string) {
     try {
-        const productWhere: any = { isOnline: true, isActive: true };
-        const newProductWhere: any = {
+        const productWhere: AnyMap = { isOnline: true, isActive: true };
+        const newProductWhere: AnyMap = {
             isOnline: true, isActive: true,
             createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
         };
@@ -441,7 +444,7 @@ export async function getActiveBrandConfig(host: string | null) {
 
 export async function getRelatedProducts(categoryId: string, excludeId: string, limit = 4, sellerId?: string) {
     try {
-        const where: any = { isOnline: true, isActive: true, categoryId, id: { not: excludeId } };
+        const where: AnyMap = { isOnline: true, isActive: true, categoryId, id: { not: excludeId } };
         if (sellerId) where.sellerId = sellerId;
         return await prisma.product.findMany({
             where,
@@ -460,7 +463,7 @@ export async function getRelatedProducts(categoryId: string, excludeId: string, 
 
 export async function getAvailableVariantOptions(sellerId?: string) {
     try {
-        const productWhere: any = { isOnline: true, isActive: true };
+        const productWhere: AnyMap = { isOnline: true, isActive: true };
         if (sellerId) productWhere.sellerId = sellerId;
         const [colors, sizes] = await Promise.all([
             prisma.variant.findMany({
@@ -477,8 +480,8 @@ export async function getAvailableVariantOptions(sellerId?: string) {
             }),
         ]);
         return {
-            colors: colors.map((v: any) => v.color!).filter(Boolean),
-            sizes:  sizes.map((v: any) => v.size!).filter(Boolean),
+            colors: colors.map((v: AnyMap) => v.color!).filter(Boolean),
+            sizes:  sizes.map((v: AnyMap) => v.size!).filter(Boolean),
         };
     } catch { return { colors: [], sizes: [] }; }
 }

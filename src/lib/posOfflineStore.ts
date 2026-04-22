@@ -136,7 +136,7 @@ export interface CachedProduct {
     price: number;
     images: string[];
     sku: string | null;
-    variants: { id: string; attributes: any; stock: number; sku: string | null }[];
+    variants: { id: string; attributes: Record<string, string>; stock: number; sku: string | null }[];
     category?: { name: string } | null;
     brand?: { name: string } | null;
 }

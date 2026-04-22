@@ -69,6 +69,7 @@ export default function InventoryPage() {
     // Bulk Edit State
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
 
     // Computed filtered products for list and "select all"
     const filteredProducts = products.filter((p: any) => {
@@ -343,6 +344,13 @@ export default function InventoryPage() {
 
     return (
         <div className="max-w-6xl mx-auto py-6 lg:py-10 px-4" onClick={() => setOpenMenuId(null)}>
+            {/* Lightbox */}
+            {previewImage && (
+                <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
+                    <img src={previewImage} className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain" alt="" onClick={e => e.stopPropagation()} />
+                    <button onClick={() => setPreviewImage(null)} className="absolute top-4 right-4 text-white bg-black/50 hover:bg-black/80 w-10 h-10 rounded-full flex items-center justify-center text-xl transition-colors">✕</button>
+                </div>
+            )}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
                 <div>
                     <h1 className="text-3xl lg:text-4xl font-black text-foreground tracking-tight">Todos los Productos</h1>
@@ -555,8 +563,15 @@ export default function InventoryPage() {
                                             </td>
                                             <td className="p-5">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-14 h-14 bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center text-2xl overflow-hidden shadow-inner flex-shrink-0 group-hover:scale-110 transition-transform">
-                                                        {product.images?.[0] ? <img src={product.images[0]} className="w-full h-full object-cover" alt="" /> : '👕'}
+                                                    <div className="w-14 h-14 bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center text-2xl overflow-hidden shadow-inner flex-shrink-0 group-hover:scale-110 transition-transform relative">
+                                                        {product.images?.[0] ? (
+                                                            <div className="relative w-full h-full group/img cursor-pointer" onClick={e => { e.stopPropagation(); setPreviewImage(product.images[0]); }}>
+                                                                <img src={product.images[0]} className="w-full h-full object-cover" alt="" />
+                                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center rounded-2xl">
+                                                                    <span className="text-white text-lg">🔍</span>
+                                                                </div>
+                                                            </div>
+                                                        ) : '👕'}
                                                     </div>
                                                     <div>
                                                         <p className="font-black text-foreground text-lg tracking-tight leading-tight">{product.name}</p>

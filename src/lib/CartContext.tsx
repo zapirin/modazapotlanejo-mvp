@@ -37,17 +37,18 @@ const CartContext = createContext<CartContextType | null>(null);
 const CART_KEY = 'mz_cart';
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
-    const [items, setItems] = useState<CartItem[]>([]);
-    const [loaded, setLoaded] = useState(false);
-
-    // Load from localStorage on mount
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem(CART_KEY);
-            if (saved) setItems(JSON.parse(saved));
-        } catch {}
-        setLoaded(true);
-    }, []);
+    const [items, setItems] = useState<CartItem[]>(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                const saved = localStorage.getItem(CART_KEY);
+                return saved ? JSON.parse(saved) : [];
+            } catch {
+                return [];
+            }
+        }
+        return [];
+    });
+    const [loaded] = useState(true);
 
     // Save to localStorage on change — excluir imágenes base64 para no exceder la cuota
     useEffect(() => {
@@ -60,10 +61,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                     image: item.image?.startsWith('data:') ? '' : (item.image || '')
                 }));
                 localStorage.setItem(CART_KEY, JSON.stringify(itemsToSave));
-            } catch (e) {
+            } catch {
                 // Si aun así falla, guardar sin imágenes
                 try {
-                    const minimal = items.map(({ image: _img, ...rest }) => ({ ...rest, image: '' }));
+                    const minimal = items.map(item => ({ ...item, image: '' }));
                     localStorage.setItem(CART_KEY, JSON.stringify(minimal));
                 } catch {
                     console.warn('No se pudo guardar el carrito en localStorage');
@@ -75,7 +76,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const addItem = useCallback((item: CartItem) => {
         setItems(prev => {
             // Asegurar que normalPrice siempre tenga valor
-            const normalizedItem = { ...item, normalPrice: item.normalPrice ?? item.price, wholesaleTotal: (item as any).wholesaleTotal };
+            const normalizedItem = { ...item, normalPrice: item.normalPrice ?? item.price, wholesaleTotal: item.wholesaleTotal };
             const existing = prev.find(i => i.variantId === item.variantId);
             if (existing) {
                 return prev.map(i =>

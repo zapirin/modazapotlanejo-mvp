@@ -109,14 +109,29 @@ export function getBrandConfig(host: string | null): BrandConfig {
     const cleanHost = host.split(':')[0].toLowerCase().replace(/^www\./, '');
     if (cleanHost.includes('kalexa')) return BRANDS['kalexafashion.com'];
     if (cleanHost.includes('kalexa.modazapotlanejo')) return BRANDS['kalexafashion.com'];
-    if (cleanHost.includes('zonadelvestir')) return BRANDS['zonadelvestir.com'];
+    if (cleanHost.includes('zonadelvestir') || cleanHost.startsWith('zona.')) return BRANDS['zonadelvestir.com'];
     if (cleanHost.includes('tienda-modazapo')) return BRANDS['modazapotlanejo.com'];
     if (cleanHost.includes('localhost')) return BRANDS['kalexafashion.com'];
     return BRANDS[cleanHost] || BRANDS['modazapotlanejo.com'];
 }
 
+interface DBBrandConfig {
+    name?: string | null;
+    tagline?: string | null;
+    description?: string | null;
+    primaryColor?: string | null;
+    heroImage?: string | null;
+    heroImages?: string[] | null;
+    isSingleVendor?: boolean | null;
+    sellerId?: string | null;
+    featuredSellerIds?: string[] | null;
+    featuredProductIds?: string[] | null;
+    featuredCategories?: string[] | null;
+    logoUrl?: string | null;
+}
+
 // Merge BD data into static brand config
-export function mergeBrandWithDB(base: BrandConfig, dbBrand: any): BrandConfig {
+export function mergeBrandWithDB(base: BrandConfig, dbBrand: DBBrandConfig | null | undefined): BrandConfig {
     if (!dbBrand) return base;
     return {
         ...base,
@@ -126,7 +141,7 @@ export function mergeBrandWithDB(base: BrandConfig, dbBrand: any): BrandConfig {
         footerDescription: dbBrand.description || base.footerDescription,
         primaryColor: dbBrand.primaryColor || base.primaryColor,
         heroImage: dbBrand.heroImage || base.heroImage,
-        heroImages: dbBrand.heroImages?.length > 0 ? dbBrand.heroImages : base.heroImages,
+        heroImages: (dbBrand.heroImages?.length ?? 0) > 0 ? dbBrand.heroImages! : base.heroImages,
         isSingleVendor: dbBrand.isSingleVendor ?? base.isSingleVendor,
         sellerId: dbBrand.sellerId || base.sellerId,
         featuredSellerIds: dbBrand.featuredSellerIds || base.featuredSellerIds,

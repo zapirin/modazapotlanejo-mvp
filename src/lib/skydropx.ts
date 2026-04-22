@@ -206,9 +206,19 @@ export async function getShippingQuotes(
         // PASO 3 — Parsear tarifas (formato real: data.rates[], campos planos)
         const EXCLUDED_CARRIERS = ["correos de méxico", "correos de mexico", "sepomex"];
 
+        interface RawSkydropxRate {
+            id?: string;
+            total?: string;
+            provider_display_name?: string;
+            provider_name?: string;
+            provider_service_name?: string;
+            currency_code?: string;
+            days?: string;
+        }
+
         const rates: ShippingRate[] = (data?.rates ?? [])
-            .filter((r: any) => r.total != null && parseFloat(r.total) > 0)
-            .map((r: any) => ({
+            .filter((r: RawSkydropxRate) => r.total != null && parseFloat(r.total) > 0)
+            .map((r: RawSkydropxRate) => ({
                 rateId:        String(r.id ?? ""),
                 quotationId,
                 carrier:       r.provider_display_name ?? r.provider_name ?? "Desconocido",
@@ -235,8 +245,8 @@ export async function getShippingQuotes(
         console.log("[Skydropx] Tarifas reales devueltas:", rates.length);
         return { success: true, rates };
 
-    } catch (error: any) {
-        console.error("[Skydropx] Error en cotización:", error?.message || error);
+    } catch (error: unknown) {
+        console.error("[Skydropx] Error en cotización:", error instanceof Error ? error.message : String(error));
         return { success: false, rates: [], error: "Error de conexión con el servicio de envíos." };
     }
 }
@@ -318,7 +328,15 @@ export async function createSkydropxShipment(
         console.log("[Skydropx] Shipment raw:", JSON.stringify(data).slice(0, 400));
 
         const attrs = data?.data?.attributes ?? data?.shipment ?? data?.data ?? data;
-        const label = (data?.included || []).find((i: any) => i.type === "labels");
+        interface SkydropxIncludedItem {
+            type: string;
+            attributes?: {
+                tracking_number?: string;
+                label_url?: string;
+            };
+        }
+
+        const label = (data?.included || []).find((i: SkydropxIncludedItem) => i.type === "labels");
 
         return {
             success:        true,
@@ -329,8 +347,8 @@ export async function createSkydropxShipment(
             serviceName:    attrs?.service_name    ?? "",
         };
 
-    } catch (error: any) {
-        console.error("[Skydropx] Error en shipment:", error?.message || error);
+    } catch (error: unknown) {
+        console.error("[Skydropx] Error en shipment:", error instanceof Error ? error.message : String(error));
         return { success: false, error: "Error de conexión al generar la guía." };
     }
 }
@@ -380,19 +398,27 @@ export async function getTrackingInfo(
         const data = await response.json();
         const attrs = data?.data?.attributes ?? data?.shipment ?? data;
 
+        interface TrackingEvent {
+            date?: string;
+            created_at?: string;
+            description?: string;
+            message?: string;
+            location?: string;
+        }
+
         return {
             success:   true,
             status:    attrs?.status        ?? attrs?.tracking_status ?? "UNKNOWN",
             lastEvent: attrs?.last_event    ?? attrs?.tracking_status ?? "",
-            events:    (attrs?.tracking_history || attrs?.events || []).map((e: any) => ({
+            events:    (attrs?.tracking_history || attrs?.events || []).map((e: TrackingEvent) => ({
                 date:        e.date        ?? e.created_at ?? "",
                 description: e.description ?? e.message    ?? "",
                 location:    e.location    ?? "",
             })),
         };
 
-    } catch (error: any) {
-        console.error("[Skydropx] Error en tracking:", error?.message || error);
+    } catch (error: unknown) {
+        console.error("[Skydropx] Error en tracking:", error instanceof Error ? error.message : String(error));
         return { success: false, error: "Error de conexión al consultar tracking." };
     }
 }

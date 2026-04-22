@@ -158,7 +158,9 @@ model User {
   canViewCommissions  Boolean                @default(false)
   canViewZCuts        Boolean                @default(false)
   canCreateProducts   Boolean                @default(false)
-  requireSalesperson  Boolean                @default(false)
+  requireCashSession          Boolean                @default(false)
+  requireSalesperson          Boolean                @default(false)
+  cashierCanDeleteSuspended   Boolean                @default(true)
   locationId          String?
   resetToken          String?                @unique
   resetTokenExpiry    DateTime?

@@ -1,11 +1,20 @@
 // Utilidades de cálculo de descuentos — no es un Server Action
 // Se puede importar tanto en cliente como en servidor
 
+export interface DiscountTier {
+    id?: string;
+    name?: string;
+    autoApplyMarketplace?: boolean | null;
+    minQuantity?: number | null;
+    discountPercentage?: number | null;
+    defaultPriceMinusFixed?: number | null;
+}
+
 export function calculateAutoDiscount(
-    tiers: any[],
+    tiers: DiscountTier[],
     totalQuantity: number,
     subtotal: number
-): { tier: any; discount: number; finalTotal: number; originalTotal: number } | null {
+): { tier: DiscountTier; discount: number; finalTotal: number; originalTotal: number } | null {
     if (!tiers || tiers.length === 0 || totalQuantity === 0) return null;
 
     const eligible = tiers
@@ -16,7 +25,7 @@ export function calculateAutoDiscount(
             const min = t.minQuantity ?? 0;
             return min === 0 || totalQuantity >= min;
         })
-        .sort((a: any, b: any) => {
+        .sort((a: DiscountTier, b: DiscountTier) => {
             // El nivel con minQuantity más alto que se cumpla gana
             return (b.minQuantity ?? 0) - (a.minQuantity ?? 0);
         });

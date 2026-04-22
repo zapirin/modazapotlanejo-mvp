@@ -120,3 +120,100 @@ export async function updateApplicationStatus(id: string, status: 'APPROVED' | '
         return { success: false, error: 'Error al procesar la solicitud.' };
     }
 }
+
+export async function createSellerManually(data: {
+    storeName: string;
+    contactName: string;
+    email: string;
+    phone?: string;
+    planName: string;
+    registeredDomain?: string;
+}) {
+    try {
+        const normalizedEmail = data.email.toLowerCase().trim();
+
+        // 1. Validar que el correo no exista
+        const existingUser = await prisma.user.findFirst({
+            where: { email: normalizedEmail }
+        });
+
+        if (existingUser) {
+            return { success: false, error: 'El correo ya está registrado.' };
+        }
+
+        // 2. Generar contraseña temporal
+        const tempPassword = Math.random().toString(36).slice(-8);
+        const passwordHash = hashPassword(tempPassword);
+
+        // Map plans to permissions (based on the frontend list)
+        const planMapping: Record<string, { maxLocations: number, maxCashiers: number, maxProducts: number | null }> = {
+            'Básico': { maxLocations: 1, maxCashiers: 1, maxProducts: 50 },
+            'Estándar': { maxLocations: 2, maxCashiers: 3, maxProducts: 200 },
+            'Pro': { maxLocations: 5, maxCashiers: 10, maxProducts: null },
+            'Empresarial': { maxLocations: 20, maxCashiers: 50, maxProducts: null }
+        };
+        const permissions = planMapping[data.planName] || planMapping['Básico'];
+
+        const newUser = await prisma.$transaction(async (tx) => {
+            // 3. Crear usuario
+            const slug = await uniqueSlug(data.storeName || data.contactName, tx);
+            const user = await tx.user.create({
+                data: {
+                    email: normalizedEmail,
+                    name: data.contactName,
+                    passwordHash,
+                    role: Role.SELLER,
+                    businessName: data.storeName,
+                    sellerSlug: slug,
+                    phone: data.phone || null,
+                    whatsapp: data.phone || null,
+                    posEnabled: true,
+                    planName: data.planName,
+                    maxLocations: permissions.maxLocations,
+                    maxCashiers: permissions.maxCashiers,
+                    maxProducts: permissions.maxProducts,
+                }
+            });
+
+            // 4. Crear StoreSettings
+            await (tx.storeSettings as any).create({
+                data: {
+                    sellerId: user.id,
+                    storeName: data.storeName,
+                    phone: data.phone || null,
+                }
+            });
+
+            return user;
+        });
+
+        // 6. Enviar correo de bienvenida
+        const sellerDomain = data.registeredDomain || 'modazapotlanejo.com';
+        const BRAND_COLORS: Record<string, string> = {
+            'modazapotlanejo.com': '#2563eb',
+            'zonadelvestir.com': '#7c3aed',
+            'kalexafashion.com': '#8124E3',
+        };
+        const BRAND_NAMES: Record<string, string> = {
+            'modazapotlanejo.com': 'Moda Zapotlanejo',
+            'zonadelvestir.com': 'Zona del Vestir',
+            'kalexafashion.com': 'Kalexa Fashion',
+        };
+
+        await sendWelcomeToSeller({
+            email: normalizedEmail,
+            name: data.contactName,
+            storeName: data.storeName,
+            tempPassword,
+            brandName: BRAND_NAMES[sellerDomain] || 'Moda Zapotlanejo',
+            brandColor: BRAND_COLORS[sellerDomain] || '#2563eb',
+            domain: sellerDomain,
+        });
+
+        revalidatePath('/admin/marketplace');
+        return { success: true, user: newUser };
+    } catch (error) {
+        console.error("Create Seller Manually Error:", error);
+        return { success: false, error: 'Error al crear el vendedor.' };
+    }
+}

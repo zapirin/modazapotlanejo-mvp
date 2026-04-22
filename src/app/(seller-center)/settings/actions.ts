@@ -447,3 +447,36 @@ export async function updateRequireSalesperson(value: boolean) {
         return { success: false, error: error.message };
     }
 }
+
+export async function getCashierCanDeleteSuspended() {
+    try {
+        const user = await getSessionUser();
+        if (!user) return { success: false, cashierCanDeleteSuspended: true };
+        if ((user as any).managedBySellerId) {
+            const seller = await prisma.user.findUnique({
+                where: { id: (user as any).managedBySellerId },
+                select: { cashierCanDeleteSuspended: true } as any
+            });
+            return { success: true, cashierCanDeleteSuspended: (seller as any)?.cashierCanDeleteSuspended ?? true };
+        }
+        return { success: true, cashierCanDeleteSuspended: (user as any).cashierCanDeleteSuspended ?? true };
+    } catch {
+        return { success: false, cashierCanDeleteSuspended: true };
+    }
+}
+
+export async function updateCashierCanDeleteSuspended(value: boolean) {
+    try {
+        const user = await getSessionUser();
+        if (!user) return { success: false, error: 'No autorizado' };
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { cashierCanDeleteSuspended: value } as any
+        });
+        revalidatePath('/settings/general');
+        revalidatePath('/pos');
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}

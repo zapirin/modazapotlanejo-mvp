@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { getStoreSettings, updateStoreSettings, updateSellerLogo, getRequireCashSession, updateRequireCashSession, getRequireSalesperson, updateRequireSalesperson, createStripeConnectLink, getStripeConnectStatus } from '../actions';
+import { getStoreSettings, updateStoreSettings, updateSellerLogo, getRequireCashSession, updateRequireCashSession, getRequireSalesperson, updateRequireSalesperson, getCashierCanDeleteSuspended, updateCashierCanDeleteSuspended, createStripeConnectLink, getStripeConnectStatus } from '../actions';
 import { useSearchParams } from 'next/navigation';
 import { validateImageFile } from '@/lib/uploadImage';
 import { processImage } from '@/lib/imageUtils';
@@ -23,6 +23,7 @@ export default function GeneralSettingsPage() {
     const [shippingZip, setShippingZip] = useState('');
     const [requireCashSession, setRequireCashSession] = useState(false);
     const [requireSalesperson, setRequireSalesperson] = useState(false);
+    const [cashierCanDeleteSuspended, setCashierCanDeleteSuspended] = useState(true);
     const [aiProvider, setAiProvider] = useState('');
     const [aiApiKey, setAiApiKey] = useState('');
     const [savingAi, setSavingAi] = useState(false);
@@ -69,6 +70,8 @@ export default function GeneralSettingsPage() {
         setRequireCashSession(cashRes.requireCashSession);
         const spRes = await getRequireSalesperson();
         setRequireSalesperson(spRes.requireSalesperson);
+        const cdRes = await getCashierCanDeleteSuspended();
+        setCashierCanDeleteSuspended(cdRes.cashierCanDeleteSuspended);
         // Cargar estado de Stripe Connect
         const stripeRes = await getStripeConnectStatus();
         setStripeStatus(stripeRes.status);
@@ -246,6 +249,25 @@ export default function GeneralSettingsPage() {
                             className={`relative w-14 h-7 rounded-full transition-colors duration-300 focus:outline-none shrink-0 ${requireSalesperson ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
                         >
                             <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300 ${requireSalesperson ? 'translate-x-7' : 'translate-x-0'}`} />
+                        </button>
+                    </div>
+                    {/* Toggle Cajero puede eliminar ventas suspendidas */}
+                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-border">
+                        <div>
+                            <p className="font-black text-sm text-foreground">Cajero puede eliminar ventas suspendidas</p>
+                            <p className="text-xs text-gray-500 mt-0.5">Si está activo, los cajeros podrán eliminar ventas suspendidas sin abonos. Las ventas con abonos solo las puede eliminar el administrador.</p>
+                        </div>
+                        <button
+                            onClick={async () => {
+                                const newVal = !cashierCanDeleteSuspended;
+                                setCashierCanDeleteSuspended(newVal);
+                                const res = await updateCashierCanDeleteSuspended(newVal);
+                                if (res.success) toast.success(newVal ? 'Cajeros pueden eliminar ventas suspendidas' : 'Solo el admin puede eliminar ventas suspendidas');
+                                else { setCashierCanDeleteSuspended(!newVal); toast.error('Error al guardar'); }
+                            }}
+                            className={`relative w-14 h-7 rounded-full transition-colors duration-300 focus:outline-none shrink-0 ${cashierCanDeleteSuspended ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                        >
+                            <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300 ${cashierCanDeleteSuspended ? 'translate-x-7' : 'translate-x-0'}`} />
                         </button>
                     </div>
                 </div>

@@ -19,6 +19,7 @@ export default function ProductsGridClient({ products, categories, brands, suppl
     const [selectedBrand, setSelectedBrand] = useState('');
     const [selectedSupplier, setSelectedSupplier] = useState('');
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
 
     const safeCategories = categories || [];
     const safeBrands = brands || [];
@@ -57,6 +58,13 @@ export default function ProductsGridClient({ products, categories, brands, suppl
 
     return (
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6">
+            {/* Lightbox */}
+            {previewImage && (
+                <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
+                    <img src={previewImage} className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain" alt="" onClick={e => e.stopPropagation()} />
+                    <button onClick={() => setPreviewImage(null)} className="absolute top-4 right-4 text-white bg-black/50 hover:bg-black/80 w-10 h-10 rounded-full flex items-center justify-center text-xl transition-colors">✕</button>
+                </div>
+            )}
             {limitError && (
                 <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3">
                     <span className="text-red-500 text-xl">🚫</span>
@@ -315,7 +323,12 @@ export default function ProductsGridClient({ products, categories, brands, suppl
                                             </td>
                                             <td className="px-4 py-2 text-center">
                                                 {product.images?.[0] ? (
-                                                    <img src={product.images[0]} className="w-8 h-10 object-cover mx-auto rounded border border-gray-200" alt="thmb" />
+                                                    <div className="relative w-8 h-10 mx-auto group/img cursor-pointer" onClick={() => setPreviewImage(product.images[0])}>
+                                                        <img src={product.images[0]} className="w-full h-full object-cover rounded border border-gray-200" alt="thmb" />
+                                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center rounded">
+                                                            <span className="text-white text-xs">🔍</span>
+                                                        </div>
+                                                    </div>
                                                 ) : (
                                                     <span className="text-gray-300 text-xs italic">N/A</span>
                                                 )}
@@ -378,13 +391,18 @@ export default function ProductsGridClient({ products, categories, brands, suppl
 
                                     <div className="h-48 bg-gray-100 flex flex-col items-center justify-center border-b border-gray-100 relative group">
                                         {product.images && product.images.length > 0 ? (
-                                            <img
-                                                src={product.images[0]}
-                                                alt={product.name}
-                                                className={`w-full h-full object-cover transition-transform duration-500 ${isSelected ? 'scale-105' : 'group-hover:scale-105'}`}
-                                                loading="lazy"
-                                                suppressHydrationWarning
-                                            />
+                                            <div className="relative w-full h-full group/img cursor-pointer" onClick={() => setPreviewImage(product.images[0])}>
+                                                <img
+                                                    src={product.images[0]}
+                                                    alt={product.name}
+                                                    className={`w-full h-full object-cover transition-transform duration-500 ${isSelected ? 'scale-105' : 'group-hover/img:scale-105'}`}
+                                                    loading="lazy"
+                                                    suppressHydrationWarning
+                                                />
+                                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <span className="text-white text-3xl drop-shadow">🔍</span>
+                                                </div>
+                                            </div>
                                         ) : (
                                             <>
                                                 <span className="text-4xl mb-2 grayscale opacity-50">📸</span>

@@ -28,22 +28,22 @@ const MAX_ITEMS = 12;
 const STORAGE_KEY = 'modazapo_recently_viewed';
 
 export function RecentlyViewedProvider({ children }: { children: React.ReactNode }) {
-    const [items, setItems] = useState<RecentItem[]>([]);
+    const [items, setItems] = useState<RecentItem[]>(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            return saved ? JSON.parse(saved) : [];
+        }
+        return [];
+    });
 
     useEffect(() => {
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            if (stored) setItems(JSON.parse(stored));
-        } catch {}
-    }, []);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    }, [items]);
 
     const addItem = (item: RecentItem) => {
         setItems(prev => {
             const filtered = prev.filter(i => i.id !== item.id);
             const updated = [item, ...filtered].slice(0, MAX_ITEMS);
-            try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-            } catch {}
             return updated;
         });
     };

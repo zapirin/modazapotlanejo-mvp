@@ -23,7 +23,7 @@ import {
     toggleBrandActive,
     deleteBrandConfig,
 } from '@/app/actions/marketplace';
-import { updateApplicationStatus } from '@/app/(seller-center)/admin/applications/actions';
+import { updateApplicationStatus, createSellerManually } from '@/app/(seller-center)/admin/applications/actions';
 import { getSellerApplications } from '@/app/actions/admin';
 import { requestPasswordReset } from '@/app/actions/auth';
 import { validateImageFile } from '@/lib/uploadImage';
@@ -98,6 +98,28 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     const [selectedSellers, setSelectedSellers] = useState<string[]>(initialSettings?.featuredSellerIds || []);
     const [selectedProducts, setSelectedProducts] = useState<string[]>(initialSettings?.featuredProductIds || []);
     const [allSellers, setAllSellers] = useState<any[]>([]);
+
+    // Manual Seller Creation
+    const [showCreateSeller, setShowCreateSeller] = useState(false);
+    const [createSellerData, setCreateSellerData] = useState({
+        storeName: '', contactName: '', email: '', phone: '', planName: 'Básico'
+    });
+    const [creatingSeller, setCreatingSeller] = useState(false);
+
+    const handleCreateSellerManually = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setCreatingSeller(true);
+        const res = await createSellerManually(createSellerData);
+        if (res.success) {
+            toast.success('Vendedor creado y correo enviado');
+            setShowCreateSeller(false);
+            setCreateSellerData({ storeName: '', contactName: '', email: '', phone: '', planName: 'Básico' });
+            loadSellers(); // Recargar lista
+        } else {
+            toast.error(res.error || 'Error al crear vendedor');
+        }
+        setCreatingSeller(false);
+    };
 
     // Tab: Photos
     const [photoRequests, setPhotoRequests] = useState<any[]>([]);
@@ -746,6 +768,10 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                             <div className="flex items-center justify-between flex-wrap gap-3">
                                 <h2 className="text-xl font-black">🏭 Gestión de Vendedores</h2>
                                 <div className="flex items-center gap-3">
+                                    <button onClick={() => setShowCreateSeller(true)}
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition shadow-sm">
+                                        + Crear Vendedor
+                                    </button>
                                     <span className="text-xs text-gray-400 font-bold">{sellers.length} vendedores</span>
                                     {!orphanScan && !orphanResult && (
                                         <button onClick={handleScanOrphans}
@@ -927,6 +953,68 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                     )}
                                 </div>
                             ))}
+                        </div>
+                    )}
+
+                    {/* Modal Crear Vendedor */}
+                    {showCreateSeller && (
+                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                            <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-y-auto max-h-[90vh]">
+                                <button onClick={() => setShowCreateSeller(false)}
+                                    className="absolute top-6 right-6 w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-full text-gray-500 hover:text-foreground transition font-black">✕</button>
+                                <h2 className="text-xl font-black mb-1">Nuevo Vendedor</h2>
+                                <p className="text-xs text-gray-500 mb-6">El vendedor recibirá un correo con una contraseña temporal para acceder a su panel.</p>
+                                
+                                <form onSubmit={handleCreateSellerManually} className="space-y-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Nombre del Negocio (Marca)</label>
+                                        <input type="text" required
+                                            value={createSellerData.storeName}
+                                            onChange={e => setCreateSellerData({ ...createSellerData, storeName: e.target.value })}
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-border rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500/50 outline-none" />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Nombre del Propietario</label>
+                                            <input type="text" required
+                                                value={createSellerData.contactName}
+                                                onChange={e => setCreateSellerData({ ...createSellerData, contactName: e.target.value })}
+                                                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-border rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500/50 outline-none" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">WhatsApp / Teléfono</label>
+                                            <input type="text"
+                                                value={createSellerData.phone}
+                                                onChange={e => setCreateSellerData({ ...createSellerData, phone: e.target.value })}
+                                                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-border rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500/50 outline-none" />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Correo Electrónico (Usuario)</label>
+                                        <input type="email" required
+                                            value={createSellerData.email}
+                                            onChange={e => setCreateSellerData({ ...createSellerData, email: e.target.value })}
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-border rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500/50 outline-none" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Plan Inicial</label>
+                                        <select
+                                            value={createSellerData.planName}
+                                            onChange={e => setCreateSellerData({ ...createSellerData, planName: e.target.value })}
+                                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-border rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500/50 outline-none cursor-pointer">
+                                            {PLANS.map(plan => (
+                                                <option key={plan.name} value={plan.name}>{plan.name} ({plan.maxLocations} locs, {plan.maxCashiers} cajeros)</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="pt-4">
+                                        <button type="submit" disabled={creatingSeller}
+                                            className="w-full px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-black tracking-widest uppercase hover:bg-blue-700 transition disabled:opacity-50">
+                                            {creatingSeller ? 'Creando vendedor...' : 'Crear Vendedor'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
                         </div>
                     )}
                 </div>
