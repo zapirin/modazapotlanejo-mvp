@@ -138,9 +138,23 @@ function POSContent() {
     const [showReceiptModal, setShowReceiptModal] = useState(false);
     const [showTicketOptions, setShowTicketOptions] = useState(false);
     const [offlineSyncTime, setOfflineSyncTime] = useState<string>('');
+    const printReceiptBtnRef = useRef<HTMLButtonElement>(null);
     useEffect(() => {
         setOfflineSyncTime(new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }));
     }, []);
+
+    // Enter para imprimir ticket cuando el modal de recibo está abierto
+    useEffect(() => {
+        if (!showReceiptModal) return;
+        const handleReceiptEnter = (e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                printReceiptBtnRef.current?.click();
+            }
+        };
+        window.addEventListener('keydown', handleReceiptEnter);
+        return () => window.removeEventListener('keydown', handleReceiptEnter);
+    }, [showReceiptModal]);
 
     // Cajón de dinero
     const openCashDrawer = (reason?: string) => {
@@ -381,11 +395,14 @@ function POSContent() {
             } else {
                 // Sin sesión — mostrar modal para abrir caja
                 setCurrentSession(null);
-                if (locId || allowedLocs.length === 0) {
-                    // Si solo hay 1 locación o no hay locaciones, mostrar modal directo
-                    setShowOpenSessionModal(true);
+                // Solo auto-mostrar el modal si el control de caja es obligatorio
+                if ((storeSettingsRes?.data as any)?.requireCashControl !== false) {
+                    if (locId || allowedLocs.length === 0) {
+                        // Si solo hay 1 locación o no hay locaciones, mostrar modal directo
+                        setShowOpenSessionModal(true);
+                    }
+                    // Si tiene más de 1 locación, el modal pedirá elegir primero
                 }
-                // Si tiene más de 1 locación, el modal pedirá elegir primero
             }
             // currentSession se setea arriba
             
@@ -642,8 +659,8 @@ function POSContent() {
     const handleProcessSale = async (overriddenPayments?: { method: string, amount: number }[], explicitReceivedAmount?: number) => {
         if (cart.length === 0) return;
 
-        // BLOQUEO DURO — no se puede vender sin caja abierta
-        if (!currentSession) {
+        // BLOQUEO DURO — no se puede vender sin caja abierta (si está activo el control)
+        if (!currentSession && globalConfig?.requireCashControl !== false) {
             toast.error("⚠️ Debes abrir la caja antes de realizar ventas.");
             setShowOpenSessionModal(true);
             return;
@@ -2132,7 +2149,7 @@ function POSContent() {
                                 handleTransfer();
                                 return;
                             }
-                            if (!currentSession) {
+                            if (!currentSession && globalConfig?.requireCashControl !== false) {
                                 toast.warning("Debe abrir la caja primero antes de realizar ventas.");
                                 setShowOpenSessionModal(true);
                                 return;
@@ -2142,7 +2159,7 @@ function POSContent() {
                         disabled={
                             cart.length === 0 || 
                             isProcessing || 
-                            (!isTransferMode && !currentSession) ||
+                            (!isTransferMode && !currentSession && globalConfig?.requireCashControl !== false) ||
                             (isTransferMode && (!transferSourceId || !transferDestId)) || 
                             (!isReturnMode && !isTransferMode && calculateBalance() > 0 && (parseFloat(receivedAmount) || 0) < calculateBalance())
                         }
@@ -3236,6 +3253,8 @@ function POSContent() {
                                 Cerrar
                             </button>
                             <button
+                                ref={printReceiptBtnRef}
+                                autoFocus
                                 onClick={() => {
                                     const receiptEl = document.getElementById('thermal-receipt');
                                     if (!receiptEl) return;
@@ -3259,7 +3278,7 @@ function POSContent() {
                                 className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all flex justify-center items-center gap-2"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
-                                Imprimir Ticket
+                                Imprimir Ticket (Enter)
                             </button>
                         </div>
                     </div>
