@@ -1139,8 +1139,7 @@ export async function getSuspendedSales() {
 export async function deleteSuspendedSale(saleId: string) {
     try {
         const user = await getSessionUser();
-        // Solo SELLER y ADMIN pueden eliminar ventas suspendidas
-        if (!user || user.role === 'CASHIER') {
+        if (!user) {
             return { success: false, error: 'No autorizado' };
         }
         await prisma.sale.delete({

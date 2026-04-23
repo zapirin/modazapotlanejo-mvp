@@ -948,6 +948,7 @@ function POSContent() {
 
         // Delete the suspended sale from DB since we are resuming it
         await deleteSuspendedSale(sale.id);
+        setSuspendedSales(prev => prev.filter((s: any) => s.id !== sale.id));
         
         setShowSuspendedModal(false);
         setIsReturnMode(false);
