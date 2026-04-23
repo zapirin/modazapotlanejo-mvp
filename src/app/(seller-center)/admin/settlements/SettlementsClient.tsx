@@ -79,9 +79,11 @@ export default function SettlementsClient({ initialData }: { initialData: Seller
                                     <p className="text-sm text-gray-500">{seller.sellerEmail}</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1">Por liquidar</p>
+                                    <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${seller.totalPending < 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                                        {seller.totalPending < 0 ? 'Adeudo de Comisiones' : 'Por liquidar'}
+                                    </p>
                                     <p className="text-2xl font-black text-foreground">
-                                        ${seller.totalPending.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                        ${Math.abs(seller.totalPending).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                                     </p>
                                 </div>
                             </div>
@@ -102,9 +104,9 @@ export default function SettlementsClient({ initialData }: { initialData: Seller
                                     setSelectedSeller(seller);
                                     setIsModalOpen(true);
                                 }}
-                                className="w-full py-4 bg-foreground text-background rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-[0.98] transition-all"
+                                className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] active:scale-[0.98] transition-all ${seller.totalPending < 0 ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:border-red-800' : 'bg-foreground text-background'}`}
                             >
-                                Revisar y Liquidar
+                                {seller.totalPending < 0 ? 'Registrar Cobro' : 'Revisar y Liquidar'}
                             </button>
                         </div>
                     ))}
@@ -129,9 +131,11 @@ export default function SettlementsClient({ initialData }: { initialData: Seller
                                     <span className="font-black">{selectedSeller.sellerName}</span>
                                 </div>
                                 <div className="flex justify-between items-center border-t border-border pt-4">
-                                    <span className="text-sm font-bold text-gray-500 uppercase tracking-widest">Total a Pagar:</span>
-                                    <span className="text-3xl font-black text-blue-600">
-                                        ${selectedSeller.totalPending.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                    <span className="text-sm font-bold text-gray-500 uppercase tracking-widest">
+                                        {selectedSeller.totalPending < 0 ? 'Monto a Cobrar:' : 'Total a Pagar:'}
+                                    </span>
+                                    <span className={`text-3xl font-black ${selectedSeller.totalPending < 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                                        ${Math.abs(selectedSeller.totalPending).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                                     </span>
                                 </div>
                             </div>
@@ -185,9 +189,9 @@ export default function SettlementsClient({ initialData }: { initialData: Seller
                             <button 
                                 onClick={handleSettle}
                                 disabled={loading}
-                                className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-blue-500/20"
+                                className={`flex-[2] py-4 text-white rounded-2xl font-black uppercase tracking-widest text-xs disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl ${selectedSeller.totalPending < 0 ? 'bg-red-600 hover:bg-red-700 shadow-red-500/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'}`}
                             >
-                                {loading ? 'Procesando...' : 'Confirmar y Liquidar'}
+                                {loading ? 'Procesando...' : (selectedSeller.totalPending < 0 ? 'Confirmar Cobro' : 'Confirmar y Liquidar')}
                             </button>
                         </div>
                     </div>

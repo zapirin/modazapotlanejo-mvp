@@ -22,14 +22,16 @@ export default function EarningsClient({ balance, settlements }: EarningsClientP
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-blue-600 rounded-[2.5rem] p-8 text-white shadow-xl shadow-blue-500/20 relative overflow-hidden group">
+                <div className={`${(balance?.availableBalance || 0) < 0 ? 'bg-red-600 shadow-red-500/20' : 'bg-blue-600 shadow-blue-500/20'} rounded-[2.5rem] p-8 text-white shadow-xl relative overflow-hidden group`}>
                     <div className="relative z-10">
-                        <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-2">Saldo Disponible</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-2">
+                            {(balance?.availableBalance || 0) < 0 ? 'Adeudo de Comisiones' : 'Saldo Disponible'}
+                        </p>
                         <h2 className="text-4xl font-black mb-1">
-                            ${(balance?.availableBalance || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                            ${Math.abs(balance?.availableBalance || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                         </h2>
                         <p className="text-xs font-bold opacity-70">
-                            {balance?.pendingOrdersCount || 0} órdenes por liquidar
+                            {balance?.pendingOrdersCount || 0} órdenes sin liquidar
                         </p>
                     </div>
                 </div>
@@ -89,8 +91,8 @@ export default function EarningsClient({ balance, settlements }: EarningsClientP
                                                 -${s.commissionTotal.toLocaleString('es-MX')}
                                             </td>
                                             <td className="px-6 py-4 text-right">
-                                                <span className="text-lg font-black text-blue-600">
-                                                    ${s.amount.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                                <span className={`text-lg font-black ${s.amount < 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                                                    ${Math.abs(s.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                                                 </span>
                                             </td>
                                         </tr>

@@ -47,7 +47,17 @@ export async function getPendingSettlements() {
             }
 
             const data = sellersMap.get(order.sellerId);
-            data.totalPending += order.sellerEarnings;
+            const isDirectPayment = order.paymentMethod && 
+                ['transferencia', 'efectivo', 'depósito', 'deposito', 'transfer', 'cash'].some(m => order.paymentMethod!.toLowerCase().includes(m));
+
+            if (isDirectPayment) {
+                // Seller received full amount. They owe the marketplace the commission.
+                data.totalPending -= order.commissionAmount;
+            } else {
+                // Marketplace received full amount. Marketplace owes seller the earnings.
+                data.totalPending += order.sellerEarnings;
+            }
+            
             data.commissionTotal += order.commissionAmount;
             data.orders.push(order);
         });
@@ -158,17 +168,29 @@ export async function getSellerBalance() {
         const user = await getSessionUser();
         if (!user) return null;
 
-        const pending = await prisma.order.aggregate({
+        const pendingOrders = await prisma.order.findMany({
             where: {
                 sellerId: user.id,
                 status: 'COMPLETED',
                 isSettled: false
             },
-            _sum: {
-                sellerEarnings: true
-            },
-            _count: {
-                id: true
+            select: {
+                id: true,
+                sellerEarnings: true,
+                commissionAmount: true,
+                paymentMethod: true
+            }
+        });
+
+        let availableBalance = 0;
+        pendingOrders.forEach(order => {
+            const isDirectPayment = order.paymentMethod && 
+                ['transferencia', 'efectivo', 'depósito', 'deposito', 'transfer', 'cash'].some(m => order.paymentMethod!.toLowerCase().includes(m));
+            
+            if (isDirectPayment) {
+                availableBalance -= order.commissionAmount;
+            } else {
+                availableBalance += order.sellerEarnings;
             }
         });
 
@@ -182,8 +204,8 @@ export async function getSellerBalance() {
         });
 
         return {
-            availableBalance: pending._sum.sellerEarnings || 0,
-            pendingOrdersCount: pending._count.id || 0,
+            availableBalance,
+            pendingOrdersCount: pendingOrders.length,
             totalPaid: settled._sum.amount || 0
         };
     } catch (error) {
