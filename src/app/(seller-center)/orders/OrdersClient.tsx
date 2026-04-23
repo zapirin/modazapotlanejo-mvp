@@ -297,6 +297,11 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller, isAdm
     const [showNotes, setShowNotes]   = useState<string | null>(null);
     const [notes, setNotes]           = useState<Record<string, string>>({});
     const [editingOrder, setEditingOrder] = useState<any | null>(null);
+    const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+
+    const toggleOrder = (orderId: string) => {
+        setExpandedOrders(prev => ({ ...prev, [orderId]: !prev[orderId] }));
+    };
 
     const tabDef = TABS.find(t => t.key === activeTab)!;
     const visible = orders.filter(o => tabDef.statuses.includes(o.status));
@@ -406,7 +411,10 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller, isAdm
                         <div key={order.id} className="bg-card rounded-3xl border border-border shadow-sm overflow-hidden hover:shadow-md transition-shadow">
 
                             {/* Cabecera */}
-                            <div className="p-6 border-b border-border bg-gray-50/50 dark:bg-gray-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div 
+                                onClick={() => toggleOrder(order.id)}
+                                className="p-6 border-b border-border bg-gray-50/50 dark:bg-gray-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            >
                                 <div>
                                     <div className="flex items-center gap-2 flex-wrap mb-1">
                                         <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Pedido #{order.orderNumber}</p>
@@ -435,8 +443,16 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller, isAdm
                                         {STATUS_CONFIG[order.status]?.label || order.status}
                                     </span>
                                     <p className="text-xl font-black text-foreground">${order.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                                    
+                                    <div className={`w-8 h-8 rounded-full bg-white dark:bg-gray-700 shadow-sm border border-border flex items-center justify-center transform transition-transform ${expandedOrders[order.id] ? 'rotate-180' : ''}`}>
+                                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"></path></svg>
+                                    </div>
                                 </div>
                             </div>
+
+                            {/* Contenido Colapsable */}
+                            {expandedOrders[order.id] && (
+                                <>
 
                             {/* Timeline */}
                             <Timeline status={order.status} />
@@ -677,6 +693,8 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller, isAdm
                                     </div>
                                 </div>
                             </div>
+                            </>
+                            )}
                         </div>
                     ))}
                 </div>
