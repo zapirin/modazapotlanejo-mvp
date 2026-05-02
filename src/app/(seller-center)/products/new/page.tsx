@@ -474,7 +474,7 @@ export default function NewProductPage() {
                                         {brandOpen && (
                                             <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
                                                 {brands
-                                                    .filter(b => b.name.toLowerCase().includes(brandSearch.toLowerCase()))
+                                                    .filter(b => b.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(brandSearch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()))
                                                     .map(brand => (
                                                         <button
                                                             key={brand.id}
@@ -491,7 +491,7 @@ export default function NewProductPage() {
                                                         </button>
                                                     ))
                                                 }
-                                                {brandSearch.trim() && !brands.some(b => b.name.toLowerCase() === brandSearch.toLowerCase()) && (
+                                                {brandSearch.trim() && !brands.some(b => b.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() === brandSearch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()) && (
                                                     <button
                                                         type="button"
                                                         className="w-full text-left px-4 py-2.5 text-sm text-blue-600 font-black hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-t border-border"
@@ -511,7 +511,7 @@ export default function NewProductPage() {
                                                         + Crear &ldquo;{brandSearch.trim()}&rdquo;
                                                     </button>
                                                 )}
-                                                {brands.filter(b => b.name.toLowerCase().includes(brandSearch.toLowerCase())).length === 0 && !brandSearch.trim() && (
+                                                {brands.filter(b => b.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(brandSearch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())).length === 0 && !brandSearch.trim() && (
                                                     <p className="px-4 py-3 text-xs text-gray-400">Escribe para buscar una marca</p>
                                                 )}
                                             </div>
@@ -542,7 +542,7 @@ export default function NewProductPage() {
                                         {supplierOpen && (
                                             <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
                                                 {suppliers
-                                                    .filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()))
+                                                    .filter(s => s.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(supplierSearch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()))
                                                     .map(sup => (
                                                         <button
                                                             key={sup.id}
@@ -558,7 +558,7 @@ export default function NewProductPage() {
                                                         </button>
                                                     ))
                                                 }
-                                                {supplierSearch.trim() && !suppliers.some(s => s.name.toLowerCase() === supplierSearch.toLowerCase()) && (
+                                                {supplierSearch.trim() && !suppliers.some(s => s.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() === supplierSearch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()) && (
                                                     <button
                                                         type="button"
                                                         className="w-full text-left px-4 py-2.5 text-sm text-blue-600 font-black hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-t border-border"
@@ -577,7 +577,7 @@ export default function NewProductPage() {
                                                         + Crear &ldquo;{supplierSearch.trim()}&rdquo;
                                                     </button>
                                                 )}
-                                                {suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase())).length === 0 && !supplierSearch.trim() && (
+                                                {suppliers.filter(s => s.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(supplierSearch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())).length === 0 && !supplierSearch.trim() && (
                                                     <p className="px-4 py-3 text-xs text-gray-400">Escribe para buscar un proveedor</p>
                                                 )}
                                             </div>
