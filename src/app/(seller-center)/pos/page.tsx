@@ -934,9 +934,13 @@ function POSContent() {
                 const cashReceived = explicitReceivedAmount !== undefined
                     ? explicitReceivedAmount
                     : (wasCash ? (parseFloat(receivedAmount) || 0) : 0);
-                const partialSumAtSale = paymentsToUse.reduce((a, p) => a + p.amount, 0);
+                // When explicitReceivedAmount is set (auto-process from partial payments),
+                // the cash amount is already included in paymentsToUse — only sum non-cash partials
+                const nonCashPartials = explicitReceivedAmount !== undefined
+                    ? paymentsToUse.filter(p => !p.method.toLowerCase().includes('efectivo')).reduce((a, p) => a + p.amount, 0)
+                    : paymentsToUse.reduce((a, p) => a + p.amount, 0);
                 const changeDue = !isReturnMode && wasCash
-                    ? Math.max(0, (cashReceived + partialSumAtSale) - totalAtSale)
+                    ? Math.max(0, (cashReceived + nonCashPartials) - totalAtSale)
                     : 0;
 
                 // Save data for the receipt before clearing the cart
