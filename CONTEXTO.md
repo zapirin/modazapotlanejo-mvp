@@ -1,5 +1,5 @@
 # CONTEXTO COMPLETO — PROYECTO MODAZAPO
-*Actualizado el 20/04/2026 — precio público toggle, abonos suspendidas, POS mejoras, lightbox imágenes*
+*Actualizado el 02/05/2026 — búsqueda sin acentos, etiquetas Code 128, sincronización inventario, orden tallas, cambio POS*
 
 ---
 
@@ -172,6 +172,7 @@ pm2 logs modazapo --lines 50 --nostream | tail -30
 
 ### Stock desde sucursales
 - Cuando existen registros en `InventoryLevel`, el stock se calcula desde ahí, no desde `Variant.stock`
+- **IMPORTANTE:** Las ventas en POS decrementan `Variant.stock` Y `InventoryLevel` atómicamente (fix 02/05/2026). Si hay desync, usar la query de sincronización (ver historial de commits `50bf5d3`)
 
 ### Imágenes locales
 - `unoptimized: true` en `next.config.ts` (ya aplicado)
@@ -268,6 +269,7 @@ pm2 logs modazapo --lines 50 --nostream | tail -30
 - **Cajero puede eliminar ventas suspendidas**: toggle en Configuración → Tienda; ventas con abono nunca pueden ser eliminadas por cajero
 - **Bug fix**: ventas suspendidas reanudadas ahora se eliminan correctamente (el problema era que `deleteSuspendedSale` bloqueaba a cajeros — ahora usa `clearResumedSale`)
 - **Corte Z → auto-logout**: al cerrar sesión de caja se desloguea automáticamente; el monto contado queda en `localStorage` para pre-llenarlo al abrir la siguiente sesión
+- **Bug fix cambio en efectivo**: el toast verde de "Cambio" ahora muestra la resta correcta (pagado − total) y no el monto bruto escrito. El bug era un doble conteo cuando se procesaba un pago parcial automático (`explicitReceivedAmount` + `partialSumAtSale` se sumaban dos veces)
 
 ### Reportes
 - Tab **Ventas**: filtros por periodo, sucursal y producto; accesible a cajeros con `canViewReports`
@@ -282,10 +284,17 @@ pm2 logs modazapo --lines 50 --nostream | tail -30
 - Grilla multi-almacén/sucursal para editar stock por ubicación
 - Celda de stock clickeable directamente para abrir modal de ajuste
 - **Lightbox de imágenes**: pasar el mouse sobre la foto de un producto muestra ícono 🔍; al hacer clic se abre en pantalla completa (aplica también en Gestión de Productos — vista tabla y vista tarjeta)
+- **Búsqueda sin acentos**: `/inventory` usa SQL `translate(lower(name), ...)` para búsqueda insensible a acentos (ej: "monaco" encuentra "Mónaco")
+- **Orden de tallas en modal de ajuste**: las variantes se muestran en el orden definido en `variantOptions` (ej: Chica → Mediana → Grande → XL)
+- **Sincronización inventario**: ventas POS ahora actualizan `InventoryLevel` y `Variant.stock` simultáneamente en transacción; todas las rutas (venta, devolución, cancelación, edición, apartado) están cubiertas
 
 ### Productos
 - Constructor de nuevo producto con grilla de variantes multi-ubicación integrada
 - Bulk actions con autenticación corregida y filtros de inventario por tabla
+- **Búsqueda sin acentos** en `/products` (Gestión de Productos): normalización NFD en el cliente
+- **Búsqueda sin acentos en marcas y proveedores** al crear/editar producto: normalización NFD
+- **Generación de etiquetas / códigos de barras** (Code 128 y QR): botón en lista de productos. Code 128 ahora centrado con márgenes en los 4 lados; barras más altas (`height: 70`) y más angostas (`width: 1.2`) para mejor legibilidad
+- **Orden de tallas en detalle de producto** (marketplace): respeta el orden definido en `variantOptions.values` en lugar del orden aleatorio del Set
 
 ### Navegación
 - **404 → Home**: cualquier URL inexistente redirige automáticamente al home (`/`) en los 3 dominios, en lugar de mostrar la página de error de Next.js (`src/app/not-found.tsx`)
