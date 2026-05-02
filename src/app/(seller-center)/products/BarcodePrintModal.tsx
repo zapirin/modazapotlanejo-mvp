@@ -86,7 +86,7 @@ function LabelPreview({ row, codeType, showName, showPrice, showColor, showSize 
                 if (svgRef.current) {
                     try {
                         JsBarcode(svgRef.current, row.barcodeValue, {
-                            format: 'CODE128', width: 2, height: 50,
+                            format: 'CODE128', width: 1.2, height: 70,
                             displayValue: false, margin: 0, background: 'transparent',
                         });
                         // Scale proportionally: keep viewBox, override dimensions
@@ -184,7 +184,7 @@ export default function BarcodePrintModal({ products, onClose }: BarcodePrintMod
                     const JsBarcode = (await import('jsbarcode')).default;
                     const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                     try {
-                        JsBarcode(svgEl, row.barcodeValue, { format: 'CODE128', width: 2, height: 50, displayValue: false, margin: 0, background: 'transparent' });
+                        JsBarcode(svgEl, row.barcodeValue, { format: 'CODE128', width: 1.2, height: 70, displayValue: false, margin: 0, background: 'transparent' });
                         svgEl.setAttribute('width', '100%');
                         svgEl.setAttribute('height', 'auto');
                         svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
