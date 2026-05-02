@@ -86,9 +86,13 @@ function LabelPreview({ row, codeType, showName, showPrice, showColor, showSize 
                 if (svgRef.current) {
                     try {
                         JsBarcode(svgRef.current, row.barcodeValue, {
-                            format: 'CODE128', width: 1.5, height: 38,
+                            format: 'CODE128', width: 2, height: 50,
                             displayValue: false, margin: 0, background: 'transparent',
                         });
+                        // Let the SVG scale proportionally instead of stretching
+                        svgRef.current.removeAttribute('width');
+                        svgRef.current.removeAttribute('height');
+                        svgRef.current.setAttribute('preserveAspectRatio', 'xMidYMid meet');
                     } catch { /* valor inválido */ }
                 }
             });
@@ -106,8 +110,8 @@ function LabelPreview({ row, codeType, showName, showPrice, showColor, showSize 
         return (
             <div className="flex flex-col border border-gray-300 bg-white overflow-hidden rounded" style={{ width: 192, height: 96 }}>
                 {/* Barras — ocupa todo el ancho, margen mínimo */}
-                <div className="flex items-center justify-center" style={{ paddingTop: 3, paddingLeft: 4, paddingRight: 4 }}>
-                    <svg ref={svgRef} style={{ maxWidth: '100%', height: hasInfo ? 46 : 72, display: 'block' }} />
+                <div className="flex items-center justify-center" style={{ paddingTop: 3, paddingLeft: 4, paddingRight: 4, maxHeight: hasInfo ? 46 : 72 }}>
+                    <svg ref={svgRef} style={{ maxWidth: '100%', maxHeight: hasInfo ? 46 : 72, display: 'block' }} />
                 </div>
                 {/* SKU siempre visible bajo las barras */}
                 <p style={{ fontSize: 6, fontFamily: 'monospace', color: '#333', textAlign: 'center', lineHeight: 1, paddingBottom: hasInfo ? 0 : 3 }}>
@@ -179,7 +183,12 @@ export default function BarcodePrintModal({ products, onClose }: BarcodePrintMod
                 if (codeType === 'code128') {
                     const JsBarcode = (await import('jsbarcode')).default;
                     const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                    try { JsBarcode(svgEl, row.barcodeValue, { format: 'CODE128', width: 1.5, height: 40, displayValue: false, margin: 0, background: 'transparent' }); } catch { /* skip */ }
+                    try {
+                        JsBarcode(svgEl, row.barcodeValue, { format: 'CODE128', width: 2, height: 50, displayValue: false, margin: 0, background: 'transparent' });
+                        svgEl.removeAttribute('width');
+                        svgEl.removeAttribute('height');
+                        svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                    } catch { /* skip */ }
                     // Code128: barras + SKU arriba, info abajo
                     const infoHtml128 = hasInfo ? `<div class="info">
                         ${showName  ? `<span class="name">${row.productName}</span>` : ''}
