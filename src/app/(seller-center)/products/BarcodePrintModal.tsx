@@ -86,7 +86,7 @@ function LabelPreview({ row, codeType, showName, showPrice, showColor, showSize 
                 if (svgRef.current) {
                     try {
                         JsBarcode(svgRef.current, row.barcodeValue, {
-                            format: 'CODE128', width: 1.8, height: 38,
+                            format: 'CODE128', width: 1.5, height: 38,
                             displayValue: false, margin: 0, background: 'transparent',
                         });
                     } catch { /* valor inválido */ }
@@ -107,7 +107,7 @@ function LabelPreview({ row, codeType, showName, showPrice, showColor, showSize 
             <div className="flex flex-col border border-gray-300 bg-white overflow-hidden rounded" style={{ width: 192, height: 96 }}>
                 {/* Barras — ocupa todo el ancho, margen mínimo */}
                 <div className="flex items-center justify-center" style={{ paddingTop: 3, paddingLeft: 4, paddingRight: 4 }}>
-                    <svg ref={svgRef} style={{ width: '100%', height: hasInfo ? 46 : 72, display: 'block' }} />
+                    <svg ref={svgRef} style={{ maxWidth: '100%', height: hasInfo ? 46 : 72, display: 'block' }} />
                 </div>
                 {/* SKU siempre visible bajo las barras */}
                 <p style={{ fontSize: 6, fontFamily: 'monospace', color: '#333', textAlign: 'center', lineHeight: 1, paddingBottom: hasInfo ? 0 : 3 }}>
@@ -179,7 +179,7 @@ export default function BarcodePrintModal({ products, onClose }: BarcodePrintMod
                 if (codeType === 'code128') {
                     const JsBarcode = (await import('jsbarcode')).default;
                     const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                    try { JsBarcode(svgEl, row.barcodeValue, { format: 'CODE128', width: 1.8, height: 40, displayValue: false, margin: 0, background: 'transparent' }); } catch { /* skip */ }
+                    try { JsBarcode(svgEl, row.barcodeValue, { format: 'CODE128', width: 1.5, height: 40, displayValue: false, margin: 0, background: 'transparent' }); } catch { /* skip */ }
                     // Code128: barras + SKU arriba, info abajo
                     const infoHtml128 = hasInfo ? `<div class="info">
                         ${showName  ? `<span class="name">${row.productName}</span>` : ''}
@@ -217,7 +217,7 @@ body{background:white}
 /* ── Code 128: columna — barras arriba, info abajo ── */
 .label.code128{display:flex;flex-direction:column}
 .label.code128 .code128{display:flex;flex-direction:column;align-items:center;padding:3px 4px 0}
-.label.code128 .code128 svg{width:100%;height:auto;display:block}
+.label.code128 .code128 svg{max-width:100%;height:auto;display:block}
 .label.code128.has-info .code128 svg{max-height:0.46in}
 .label.code128.no-info  .code128 svg{max-height:0.76in}
 .label.code128 .sku{text-align:center;font-family:monospace;font-size:5.5pt;color:#333;line-height:1;padding:0 4px}
