@@ -73,7 +73,7 @@ export default function InventoryPage() {
 
     // Computed filtered products for list and "select all"
     const filteredProducts = products.filter((p: any) => {
-        const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchSearch = p.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(searchQuery.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
         let matchCategory = true;
         if (selectedCategory) {
             if (selectedCategory.includes('|')) {

@@ -33,7 +33,7 @@ export default function ProductsGridClient({ products, categories, brands, suppl
         const matchTab = activeTab === 'published' ? (p.isOnline || p.isPOS) :
                          activeTab === 'draft' ? (!p.isOnline && !p.isPOS) : true;
         const matchSearch = searchQuery === '' ||
-            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(searchQuery.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()) ||
             (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
         const matchCategory = selectedCategory === '' || p.categoryId === selectedCategory;
         const matchBrand = selectedBrand === '' || p.brandId === selectedBrand;
