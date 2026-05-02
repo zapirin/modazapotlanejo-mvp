@@ -89,9 +89,9 @@ function LabelPreview({ row, codeType, showName, showPrice, showColor, showSize 
                             format: 'CODE128', width: 2, height: 50,
                             displayValue: false, margin: 0, background: 'transparent',
                         });
-                        // Let the SVG scale proportionally instead of stretching
-                        svgRef.current.removeAttribute('width');
-                        svgRef.current.removeAttribute('height');
+                        // Scale proportionally: keep viewBox, override dimensions
+                        svgRef.current.setAttribute('width', '100%');
+                        svgRef.current.setAttribute('height', 'auto');
                         svgRef.current.setAttribute('preserveAspectRatio', 'xMidYMid meet');
                     } catch { /* valor inválido */ }
                 }
@@ -185,8 +185,8 @@ export default function BarcodePrintModal({ products, onClose }: BarcodePrintMod
                     const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                     try {
                         JsBarcode(svgEl, row.barcodeValue, { format: 'CODE128', width: 2, height: 50, displayValue: false, margin: 0, background: 'transparent' });
-                        svgEl.removeAttribute('width');
-                        svgEl.removeAttribute('height');
+                        svgEl.setAttribute('width', '100%');
+                        svgEl.setAttribute('height', 'auto');
                         svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
                     } catch { /* skip */ }
                     // Code128: barras + SKU arriba, info abajo
