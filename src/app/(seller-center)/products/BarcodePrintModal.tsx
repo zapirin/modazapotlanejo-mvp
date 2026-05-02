@@ -108,18 +108,18 @@ function LabelPreview({ row, codeType, showName, showPrice, showColor, showSize 
     /* ── Code 128: barras arriba, info abajo ── */
     if (codeType === 'code128') {
         return (
-            <div className="flex flex-col border border-gray-300 bg-white overflow-hidden rounded" style={{ width: 192, height: 96 }}>
-                {/* Barras — ocupa todo el ancho, margen mínimo */}
-                <div className="flex items-center justify-center" style={{ paddingTop: 3, paddingLeft: 4, paddingRight: 4, maxHeight: hasInfo ? 46 : 72 }}>
-                    <svg ref={svgRef} style={{ maxWidth: '100%', maxHeight: hasInfo ? 46 : 72, display: 'block' }} />
+            <div className="flex flex-col items-center justify-center border border-gray-300 bg-white overflow-hidden rounded" style={{ width: 192, height: 96, padding: '6px 10px' }}>
+                {/* Barras centradas con margen */}
+                <div className="flex items-center justify-center" style={{ flex: '0 1 auto', maxHeight: hasInfo ? 40 : 58 }}>
+                    <svg ref={svgRef} style={{ maxWidth: '100%', maxHeight: hasInfo ? 40 : 58, display: 'block' }} />
                 </div>
                 {/* SKU siempre visible bajo las barras */}
-                <p style={{ fontSize: 6, fontFamily: 'monospace', color: '#333', textAlign: 'center', lineHeight: 1, paddingBottom: hasInfo ? 0 : 3 }}>
+                <p style={{ fontSize: 6, fontFamily: 'monospace', color: '#333', textAlign: 'center', lineHeight: 1, marginTop: 2 }}>
                     {row.barcodeValue}
                 </p>
                 {/* Info opcional */}
                 {hasInfo && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '1px 5px 3px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
                         {showName  && <span style={{ fontSize: Math.max(5, Math.min(7, Math.floor(60 / (row.productName.length || 1) * 2))), fontWeight: 700, color: '#000', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{row.productName}</span>}
                         {(showColor || showSize) && <span style={{ fontSize: 6, color: '#555', lineHeight: 1.1, whiteSpace: 'nowrap' }}>{[showColor && row.color, showSize && row.size].filter(Boolean).join(' / ')}</span>}
                         {showPrice && <span style={{ fontSize: 8, fontWeight: 900, color: '#000', lineHeight: 1.1, whiteSpace: 'nowrap' }}>{row.price}</span>}
@@ -223,14 +223,14 @@ body{background:white}
 /* ── Común ── */
 .label{width:2in;height:1in;overflow:hidden;page-break-after:always;break-after:page}
 
-/* ── Code 128: columna — barras arriba, info abajo ── */
-.label.code128{display:flex;flex-direction:column}
-.label.code128 .code128{display:flex;flex-direction:column;align-items:center;padding:3px 4px 0}
+/* ── Code 128: columna — barras centradas con margen ── */
+.label.code128{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 10px}
+.label.code128 .code128{display:flex;flex-direction:column;align-items:center}
 .label.code128 .code128 svg{max-width:100%;height:auto;display:block}
-.label.code128.has-info .code128 svg{max-height:0.46in}
-.label.code128.no-info  .code128 svg{max-height:0.76in}
-.label.code128 .sku{text-align:center;font-family:monospace;font-size:5.5pt;color:#333;line-height:1;padding:0 4px}
-.label.code128 .info{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px;padding:1px 5px 3px}
+.label.code128.has-info .code128 svg{max-height:0.38in}
+.label.code128.no-info  .code128 svg{max-height:0.6in}
+.label.code128 .sku{text-align:center;font-family:monospace;font-size:5.5pt;color:#333;line-height:1;margin-top:2px}
+.label.code128 .info{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px;margin-top:2px}
 
 /* ── QR: fila — QR izquierda, info derecha ── */
 .label.qr{display:flex;align-items:center}
