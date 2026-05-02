@@ -37,6 +37,7 @@ export default function ApplicationsClient({ initialApplications }: { initialApp
                         <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
                             <th className="px-8 py-6">Fábrica / Contacto</th>
                             <th className="px-8 py-6">Contacto</th>
+                            <th className="px-8 py-6">Plan</th>
                             <th className="px-8 py-6">Categorías</th>
                             <th className="px-8 py-6">Estado</th>
                             <th className="px-8 py-6 text-right">Acciones</th>
@@ -45,7 +46,7 @@ export default function ApplicationsClient({ initialApplications }: { initialApp
                     <tbody className="divide-y divide-border">
                         {applications.length === 0 ? (
                             <tr>
-                                <td colSpan={5} className="px-8 py-12 text-center text-gray-400 font-bold uppercase tracking-widest text-xs">
+                                <td colSpan={6} className="px-8 py-12 text-center text-gray-400 font-bold uppercase tracking-widest text-xs">
                                     No hay solicitudes pendientes.
                                 </td>
                             </tr>
@@ -64,6 +65,15 @@ export default function ApplicationsClient({ initialApplications }: { initialApp
                                                 <span>📍</span>
                                                 {(app as any).storeAddress.replace('|', ' — ')}
                                             </div>
+                                        )}
+                                    </td>
+                                    <td className="px-8 py-6">
+                                        {(app as any).planName ? (
+                                            <span className="px-3 py-1 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 text-[10px] font-black uppercase tracking-widest rounded-full border border-purple-100 dark:border-purple-800">
+                                                {(app as any).planName}
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-300 font-bold">—</span>
                                         )}
                                     </td>
                                     <td className="px-8 py-6">

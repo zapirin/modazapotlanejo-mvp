@@ -91,7 +91,7 @@ export default function SellerRegistrationForm({ plans, domain }: { plans: any[]
                         <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Todos incluyen POS · Inventario · Catálogo online · Analítica</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {(plans || []).map((plan: any) => (
+                        {(plans || []).filter((plan: any) => !plan.hidden).map((plan: any) => (
                             <div key={plan.name}
                                 onClick={() => setSelectedPlan(plan.name)}
                                 className={`relative p-6 rounded-3xl text-white bg-gradient-to-br ${plan.color} cursor-pointer transition-all ${selectedPlan === plan.name ? 'ring-4 ring-white ring-offset-4 ring-offset-gray-100 scale-[1.02]' : plan.highlight ? 'ring-4 ring-blue-400 ring-offset-2' : 'opacity-90 hover:opacity-100'} space-y-3`}>

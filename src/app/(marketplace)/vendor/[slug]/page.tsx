@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import SellerReviews from '@/components/SellerReviews';
 import { headers } from 'next/headers';
-import { getBrandConfig } from '@/lib/brand';
+import { getBrandConfig, getCanonicalBase } from '@/lib/brand';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -46,7 +46,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
             description,
             images: logo ? [logo] : [],
         },
-        alternates: { canonical: `${baseUrl}/vendor/${slug}` },
+        alternates: { canonical: `${getCanonicalBase(host, brand)}/vendor/${slug}` },
     };
 }
 

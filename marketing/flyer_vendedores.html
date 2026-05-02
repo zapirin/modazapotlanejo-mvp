@@ -1,13 +1,46 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Únete — Moda Zapotlanejo</title>
   <style>
+    @media print {
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+
+      /* Ocultar todo excepto el rectángulo del flyer */
+      body>*:not(.flyer):not(.container):not(#flyer) {
+        display: none !important;
+      }
+
+      .flyer,
+      .container,
+      #flyer {
+        margin: 0 !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+      }
+
+      @page {
+        margin: 0;
+        size: auto;
+      }
+    }
+
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
       font-family: 'Inter', Arial, sans-serif;
@@ -21,11 +54,12 @@
 
     /* ── FLYER WRAPPER ── */
     .flyer {
-      width: 794px;           /* A4 landscape ~96dpi */
+      width: 794px;
+      /* A4 landscape ~96dpi */
       background: #ffffff;
       border-radius: 28px;
       overflow: hidden;
-      box-shadow: 0 24px 80px rgba(0,0,0,.18);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, .18);
     }
 
     /* ── HERO BAND ── */
@@ -35,25 +69,32 @@
       position: relative;
       overflow: hidden;
     }
+
     .hero::before {
       content: '';
       position: absolute;
-      top: -80px; right: -80px;
-      width: 360px; height: 360px;
-      background: rgba(255,255,255,.06);
+      top: -80px;
+      right: -80px;
+      width: 360px;
+      height: 360px;
+      background: rgba(255, 255, 255, .06);
       border-radius: 50%;
     }
+
     .hero::after {
       content: '';
       position: absolute;
-      bottom: -120px; left: 40%;
-      width: 480px; height: 280px;
-      background: rgba(255,255,255,.04);
+      bottom: -120px;
+      left: 40%;
+      width: 480px;
+      height: 280px;
+      background: rgba(255, 255, 255, .04);
       border-radius: 50%;
     }
+
     .hero-label {
       display: inline-block;
-      background: rgba(255,255,255,.18);
+      background: rgba(255, 255, 255, .18);
       color: #fff;
       font-size: 11px;
       font-weight: 700;
@@ -61,9 +102,10 @@
       text-transform: uppercase;
       padding: 6px 16px;
       border-radius: 100px;
-      border: 1px solid rgba(255,255,255,.25);
+      border: 1px solid rgba(255, 255, 255, .25);
       margin-bottom: 20px;
     }
+
     .hero h1 {
       color: #fff;
       font-size: 46px;
@@ -72,16 +114,19 @@
       max-width: 560px;
       letter-spacing: -1.5px;
     }
+
     .hero h1 span {
       color: #7DD3FC;
     }
+
     .hero p {
-      color: rgba(255,255,255,.82);
+      color: rgba(255, 255, 255, .82);
       font-size: 17px;
       margin-top: 18px;
       max-width: 520px;
       line-height: 1.6;
     }
+
     .hero-cta {
       display: inline-block;
       margin-top: 32px;
@@ -93,13 +138,14 @@
       padding: 14px 32px;
       border-radius: 100px;
       text-decoration: none;
-      box-shadow: 0 8px 24px rgba(0,0,0,.18);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
     }
+
     .hero-url {
       display: inline-block;
       margin-top: 12px;
       margin-left: 20px;
-      color: rgba(255,255,255,.65);
+      color: rgba(255, 255, 255, .65);
       font-size: 13px;
       font-weight: 600;
       letter-spacing: .3px;
@@ -111,23 +157,29 @@
       background: #1B3A8C;
       padding: 0;
     }
+
     .stat {
       flex: 1;
       padding: 20px 0;
       text-align: center;
-      border-right: 1px solid rgba(255,255,255,.1);
+      border-right: 1px solid rgba(255, 255, 255, .1);
     }
-    .stat:last-child { border-right: none; }
+
+    .stat:last-child {
+      border-right: none;
+    }
+
     .stat-number {
       font-size: 26px;
       font-weight: 900;
       color: #7DD3FC;
       line-height: 1;
     }
+
     .stat-label {
       font-size: 10px;
       font-weight: 600;
-      color: rgba(255,255,255,.55);
+      color: rgba(255, 255, 255, .55);
       letter-spacing: 1.5px;
       text-transform: uppercase;
       margin-top: 4px;
@@ -137,6 +189,7 @@
     .benefits {
       padding: 52px 64px;
     }
+
     .benefits h2 {
       font-size: 13px;
       font-weight: 800;
@@ -145,28 +198,33 @@
       color: #2563EB;
       margin-bottom: 32px;
     }
+
     .grid {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
       gap: 20px;
     }
+
     .card {
       background: #F8FAFF;
       border: 1.5px solid #E0E8FF;
       border-radius: 18px;
       padding: 24px 22px;
     }
+
     .card-icon {
       font-size: 32px;
       margin-bottom: 12px;
       display: block;
     }
+
     .card h3 {
       font-size: 15px;
       font-weight: 800;
       color: #1e293b;
       margin-bottom: 7px;
     }
+
     .card p {
       font-size: 12.5px;
       color: #64748b;
@@ -184,6 +242,7 @@
     .how {
       padding: 44px 64px;
     }
+
     .how h2 {
       font-size: 13px;
       font-weight: 800;
@@ -192,42 +251,53 @@
       color: #2563EB;
       margin-bottom: 30px;
     }
+
     .steps {
       display: flex;
       gap: 0;
       position: relative;
     }
+
     .steps::before {
       content: '';
       position: absolute;
-      top: 20px; left: 44px; right: 44px;
+      top: 20px;
+      left: 44px;
+      right: 44px;
       height: 2px;
       background: linear-gradient(to right, #2563EB, #0EA5E9);
       z-index: 0;
     }
+
     .step {
       flex: 1;
       text-align: center;
       position: relative;
       z-index: 1;
     }
+
     .step-num {
-      width: 40px; height: 40px;
+      width: 40px;
+      height: 40px;
       background: linear-gradient(135deg, #2563EB, #0EA5E9);
       color: #fff;
       font-size: 15px;
       font-weight: 900;
       border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       margin: 0 auto 12px;
-      box-shadow: 0 4px 14px rgba(37,99,235,.4);
+      box-shadow: 0 4px 14px rgba(37, 99, 235, .4);
     }
+
     .step h3 {
       font-size: 13px;
       font-weight: 800;
       color: #1e293b;
       margin-bottom: 5px;
     }
+
     .step p {
       font-size: 11.5px;
       color: #64748b;
@@ -246,10 +316,12 @@
       align-items: center;
       gap: 28px;
     }
+
     .quote-icon {
       font-size: 48px;
       flex-shrink: 0;
     }
+
     .quote-text {
       font-size: 15px;
       font-style: italic;
@@ -257,6 +329,7 @@
       line-height: 1.65;
       font-weight: 500;
     }
+
     .quote-text strong {
       color: #1B3A8C;
       font-style: normal;
@@ -272,35 +345,44 @@
       justify-content: space-between;
       gap: 32px;
     }
+
     .footer-left h3 {
       font-size: 22px;
       font-weight: 900;
       color: #fff;
       letter-spacing: -.5px;
     }
+
     .footer-left p {
-      color: rgba(255,255,255,.7);
+      color: rgba(255, 255, 255, .7);
       font-size: 13.5px;
       margin-top: 6px;
     }
+
     .footer-contacts {
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
+
     .contact-item {
       display: flex;
       align-items: center;
       gap: 10px;
     }
+
     .contact-item .icon {
-      width: 32px; height: 32px;
-      background: rgba(255,255,255,.15);
+      width: 32px;
+      height: 32px;
+      background: rgba(255, 255, 255, .15);
       border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       font-size: 15px;
       flex-shrink: 0;
     }
+
     .contact-item span {
       color: #fff;
       font-size: 13px;
@@ -309,154 +391,168 @@
 
     /* ── PRINT ── */
     @media print {
-      body { background: white; padding: 0; }
-      .flyer { box-shadow: none; border-radius: 0; width: 100%; }
+      body {
+        background: white;
+        padding: 0;
+      }
+
+      .flyer {
+        box-shadow: none;
+        border-radius: 0;
+        width: 100%;
+      }
     }
   </style>
 </head>
+
 <body>
-<div class="flyer">
+  <div class="flyer">
 
-  <!-- HERO -->
-  <div class="hero">
-    <div class="hero-label">Zapotlanejo · Zona Textil de Jalisco</div>
-    <h1>Tu fábrica o boutique,<br>visible en <span>todo México</span></h1>
-    <p>
-      Únete al marketplace digital de la región textil de Zapotlanejo.<br>
-      Vende mayoreo y menudeo en línea — con las mismas herramientas de un negocio grande, sin complicaciones.
-    </p>
-    <a href="modazapotlanejo.com/register/seller" class="hero-cta">Registra tu negocio gratis →</a>
-    <span class="hero-url">modazapotlanejo.com</span>
+    <!-- HERO -->
+    <div class="hero">
+      <div class="hero-label">Zapotlanejo · Zona Textil de Jalisco</div>
+      <h1>Tu fábrica o boutique,<br>visible en <span>todo México</span></h1>
+      <p>
+        Únete al marketplace digital de la región textil de Zapotlanejo.<br>
+        Vende mayoreo y menudeo en línea — con las mismas herramientas de un negocio grande, sin complicaciones.
+      </p>
+      <a href="modazapotlanejo.com/register/seller" class="hero-cta">Registra tu negocio gratis →</a>
+      <span class="hero-url">modazapotlanejo.com</span>
+    </div>
+
+    <!-- STATS STRIP -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-number">24/7</div>
+        <div class="stat-label">Tu catálogo siempre activo</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">$0</div>
+        <div class="stat-label">Costo de registro</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">POS</div>
+        <div class="stat-label">Punto de venta incluido</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">2</div>
+        <div class="stat-label">Marketplaces en una cuenta</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">100%</div>
+        <div class="stat-label">Hecho para fabricantes y boutiques</div>
+      </div>
+    </div>
+
+    <!-- BENEFITS -->
+    <div class="benefits">
+      <h2>¿Qué incluye tu cuenta de vendedor?</h2>
+      <div class="grid">
+
+        <div class="card">
+          <span class="card-icon">🛍️</span>
+          <h3>Catálogo digital profesional</h3>
+          <p>Sube tus prendas con fotos, tallas, colores y precios. Visible para compradores de toda la república.</p>
+        </div>
+
+        <div class="card">
+          <span class="card-icon">📦</span>
+          <h3>Mayoreo automático</h3>
+          <p>Define precios por corrida, paquete o caja. El sistema aplica el descuento solo según la cantidad en el
+            carrito.</p>
+        </div>
+
+        <div class="card">
+          <span class="card-icon">🖥️</span>
+          <h3>Punto de Venta (POS)</h3>
+          <p>Vende también en tu local con el mismo inventario. Imprime tickets, abre caja y lleva el corte Z del día.
+          </p>
+        </div>
+
+        <div class="card">
+          <span class="card-icon">📊</span>
+          <h3>Reportes y cortes Z</h3>
+          <p>Ve tus ventas del día, semana o mes. Controla comisiones de tu equipo y cierres de caja por sucursal.</p>
+        </div>
+
+        <div class="card">
+          <span class="card-icon">🏪</span>
+          <h3>Multi-sucursal</h3>
+          <p>¿Tienes más de un local? Maneja el inventario, el equipo y los reportes de cada sucursal desde un solo
+            panel.</p>
+        </div>
+
+        <div class="card">
+          <span class="card-icon">👥</span>
+          <h3>Agrega a tu equipo</h3>
+          <p>Crea accesos para tus cajeros con permisos específicos. Ellos solo ven lo que necesitan ver.</p>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- HOW IT WORKS -->
+    <div class="how">
+      <h2>¿Cómo empiezo?</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Regístrate</h3>
+          <p>Llena el formulario con los datos de tu negocio. Sin costos.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Sube tus productos</h3>
+          <p>Fotos, tallas, colores y precios de mayoreo en minutos.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Recibe pedidos</h3>
+          <p>Te avisamos por correo. Tú acepta, prepara y listo.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <h3>Cobra y crece</h3>
+          <p>Atiende clientes de todo México desde Zapotlanejo.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUOTE -->
+    <div class="quote-band">
+      <div class="quote-icon">💬</div>
+      <p class="quote-text">
+        "El comprador que antes tenía que venir hasta Zapotlanejo a verte, ahora puede hacer su pedido desde Monterrey,
+        Tijuana, la CDMX o en cualquier lugar a las 11 de la noche.
+        <strong>Tu fábrica o boutique nunca cierra.</strong>"
+      </p>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="footer-left">
+        <h3>¿Listo para crecer?</h3>
+        <p>El registro es gratuito y te activamos en menos de 24 horas.</p>
+      </div>
+      <div class="footer-contacts">
+        <div class="contact-item">
+          <div class="icon">🌐</div>
+          <span>modazapotlanejo.com</span>
+        </div>
+        <div class="contact-item">
+          <div class="icon">📱</div>
+          <span>WhatsApp 33 4958 7293 </span>
+        </div>
+        <div class="contact-item">
+          <div class="icon">✉️</div>
+          <span>gestion@modazapotlanejo.com</span>
+        </div>
+      </div>
+    </div>
+
   </div>
-
-  <!-- STATS STRIP -->
-  <div class="stats">
-    <div class="stat">
-      <div class="stat-number">24/7</div>
-      <div class="stat-label">Tu catálogo siempre activo</div>
-    </div>
-    <div class="stat">
-      <div class="stat-number">$0</div>
-      <div class="stat-label">Costo de registro</div>
-    </div>
-    <div class="stat">
-      <div class="stat-number">POS</div>
-      <div class="stat-label">Punto de venta incluido</div>
-    </div>
-    <div class="stat">
-      <div class="stat-number">2</div>
-      <div class="stat-label">Marketplaces en una cuenta</div>
-    </div>
-    <div class="stat">
-      <div class="stat-number">100%</div>
-      <div class="stat-label">Hecho para fabricantes y boutiques</div>
-    </div>
-  </div>
-
-  <!-- BENEFITS -->
-  <div class="benefits">
-    <h2>¿Qué incluye tu cuenta de vendedor?</h2>
-    <div class="grid">
-
-      <div class="card">
-        <span class="card-icon">🛍️</span>
-        <h3>Catálogo digital profesional</h3>
-        <p>Sube tus prendas con fotos, tallas, colores y precios. Visible para compradores de toda la república.</p>
-      </div>
-
-      <div class="card">
-        <span class="card-icon">📦</span>
-        <h3>Mayoreo automático</h3>
-        <p>Define precios por corrida, paquete o caja. El sistema aplica el descuento solo según la cantidad en el carrito.</p>
-      </div>
-
-      <div class="card">
-        <span class="card-icon">🖥️</span>
-        <h3>Punto de Venta (POS)</h3>
-        <p>Vende también en tu local con el mismo inventario. Imprime tickets, abre caja y lleva el corte Z del día.</p>
-      </div>
-
-      <div class="card">
-        <span class="card-icon">📊</span>
-        <h3>Reportes y cortes Z</h3>
-        <p>Ve tus ventas del día, semana o mes. Controla comisiones de tu equipo y cierres de caja por sucursal.</p>
-      </div>
-
-      <div class="card">
-        <span class="card-icon">🏪</span>
-        <h3>Multi-sucursal</h3>
-        <p>¿Tienes más de un local? Maneja el inventario, el equipo y los reportes de cada sucursal desde un solo panel.</p>
-      </div>
-
-      <div class="card">
-        <span class="card-icon">👥</span>
-        <h3>Agrega a tu equipo</h3>
-        <p>Crea accesos para tus cajeros con permisos específicos. Ellos solo ven lo que necesitan ver.</p>
-      </div>
-
-    </div>
-  </div>
-
-  <div class="divider"></div>
-
-  <!-- HOW IT WORKS -->
-  <div class="how">
-    <h2>¿Cómo empiezo?</h2>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <h3>Regístrate</h3>
-        <p>Llena el formulario con los datos de tu negocio. Sin costos.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <h3>Sube tus productos</h3>
-        <p>Fotos, tallas, colores y precios de mayoreo en minutos.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <h3>Recibe pedidos</h3>
-        <p>Te avisamos por correo. Tú acepta, prepara y listo.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">4</div>
-        <h3>Cobra y crece</h3>
-        <p>Atiende clientes de todo México desde Zapotlanejo.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- QUOTE -->
-  <div class="quote-band">
-    <div class="quote-icon">💬</div>
-    <p class="quote-text">
-      "El comprador que antes tenía que venir hasta Zapotlanejo a verte, ahora puede hacer su pedido desde Monterrey, Tijuana, la CDMX o en cualquier lugar a las 11 de la noche.
-      <strong>Tu fábrica o boutique nunca cierra.</strong>"
-    </p>
-  </div>
-
-  <!-- FOOTER -->
-  <div class="footer">
-    <div class="footer-left">
-      <h3>¿Listo para crecer?</h3>
-      <p>El registro es gratuito y te activamos en menos de 24 horas.</p>
-    </div>
-    <div class="footer-contacts">
-      <div class="contact-item">
-        <div class="icon">🌐</div>
-        <span>modazapotlanejo.com</span>
-      </div>
-      <div class="contact-item">
-        <div class="icon">📱</div>
-        <span>WhatsApp: </span>
-      </div>
-      <div class="contact-item">
-        <div class="icon">✉️</div>
-        <span>gestion@modazapotlanejo.com</span>
-      </div>
-    </div>
-  </div>
-
-</div>
 </body>
+
 </html>

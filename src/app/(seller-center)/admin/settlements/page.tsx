@@ -1,6 +1,8 @@
 import { getPendingSettlements } from "@/app/actions/settlements";
 import SettlementsClient from "./SettlementsClient";
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminSettlementsPage() {
     const pendingSettlements = await getPendingSettlements();
 

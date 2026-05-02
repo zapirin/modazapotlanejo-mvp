@@ -89,9 +89,46 @@ export default function SidebarLayout({
   // Cajero: interfaz mínima — solo POS y cerrar sesión, colapsable
   if (user?.role === 'CASHIER') {
     return (
-      <div className="flex h-screen overflow-hidden bg-background">
-        {/* Sidebar cajero — colapsable */}
-        <aside className={`shrink-0 h-full bg-gray-950 text-white flex flex-col border-r border-white/10 transition-all duration-300 ${isSidebarOpen ? 'w-56' : 'w-12'}`}>
+      <div className="flex flex-col lg:flex-row h-screen overflow-hidden bg-background">
+        {/* Header móvil — hamburguesa + marca + salir (solo lg:hidden) */}
+        <header className="lg:hidden flex items-center justify-between px-3 h-14 bg-gray-950 text-white border-b border-white/10 shrink-0">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="w-10 h-10 flex flex-col justify-center items-center gap-1 hover:bg-white/10 rounded-lg p-1"
+            aria-label="Abrir menú"
+          >
+            <span className="block w-5 h-0.5 bg-gray-300"/>
+            <span className="block w-5 h-0.5 bg-gray-300"/>
+            <span className="block w-5 h-0.5 bg-gray-300"/>
+          </button>
+          <div className="min-w-0 flex-1 px-3 text-center">
+            <p className="font-black text-white text-sm truncate">{sellerInfo?.businessName || sellerInfo?.name || user.name}</p>
+            <p className="text-[9px] text-gray-400 font-bold truncate uppercase tracking-widest">{user.name} · Cajero</p>
+          </div>
+          <button
+            onClick={async () => { await logout(); window.location.href = '/login'; }}
+            className="px-3 h-10 text-red-400 hover:bg-red-500/10 rounded-lg font-black text-xs flex items-center gap-1.5"
+          >
+            <span className="text-base">🚪</span>
+            <span className="uppercase tracking-wider">Salir</span>
+          </button>
+        </header>
+
+        {/* Drawer overlay móvil */}
+        {isSidebarOpen && (
+          <div
+            className="lg:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Sidebar cajero — desktop estático, móvil drawer */}
+        <aside className={`
+          lg:shrink-0 lg:h-full bg-gray-950 text-white flex flex-col border-r border-white/10 transition-all duration-300
+          fixed lg:static inset-y-0 left-0 z-50 w-56
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          ${isSidebarOpen ? 'lg:w-56' : 'lg:w-12'}
+        `}>
           {/* Toggle */}
           <div className="flex items-center justify-between px-3 py-4 border-b border-white/10">
             {isSidebarOpen && (
@@ -101,7 +138,7 @@ export default function SidebarLayout({
                 )}
                 <p className="font-black text-white text-sm truncate">{sellerInfo?.businessName || sellerInfo?.name || user.name}</p>
                 <p className="text-[9px] text-gray-400 font-bold truncate">
-                  Por {sellerInfo?.registeredDomain?.includes('zonadelvestir') ? 'Zona del Vestir' : 'Moda Zapotlanejo'}
+                  Por {activeBrand.name}
                 </p>
                 <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">{user.name} · Cajero</p>
               </div>
@@ -114,14 +151,14 @@ export default function SidebarLayout({
             </button>
           </div>
           <nav className="flex-1 p-2 space-y-1">
-            <Link href="/pos"
+            <Link href="/pos" onClick={() => setSidebarOpen(false)}
               className={`flex items-center gap-2 px-2 py-3 rounded-xl font-black text-xs transition-all ${pathname === '/pos' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}>
               <span className="text-base shrink-0">🖥️</span>
               {isSidebarOpen && <span className="uppercase tracking-wider truncate">Punto de Venta</span>}
             </Link>
 
             {(user as any).canViewReports && (
-              <Link href="/reports"
+              <Link href="/reports" onClick={() => setSidebarOpen(false)}
                 className={`flex items-center gap-2 px-2 py-3 rounded-xl font-black text-xs transition-all ${pathname === '/reports' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}>
                 <span className="text-base shrink-0">📊</span>
                 {isSidebarOpen && <span className="uppercase tracking-wider truncate">Reportes</span>}
@@ -268,6 +305,15 @@ export default function SidebarLayout({
                     <span className="text-lg group-hover:scale-110 transition-transform shrink-0">🏷️</span>
                     <span className={`whitespace-nowrap ${isDesktopCollapsed ? 'hidden' : 'block'}`}>Cupones</span>
                 </Link>
+
+                <Link
+                    href="/loyalty"
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all duration-200 group ${pathname.startsWith('/loyalty') ? 'font-bold bg-gray-100 dark:bg-gray-800 text-foreground' : 'font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'}`}
+                >
+                    <span className="text-lg group-hover:scale-110 transition-transform shrink-0">⭐</span>
+                    <span className={`whitespace-nowrap ${isDesktopCollapsed ? 'hidden' : 'block'}`}>Programa de Puntos</span>
+                </Link>
               </>
             )}
 
@@ -302,6 +348,15 @@ export default function SidebarLayout({
                 >
                     <span className="text-lg group-hover:scale-110 transition-transform shrink-0">🖼️</span>
                     <span className={`whitespace-nowrap ${isDesktopCollapsed ? 'hidden' : 'block'}`}>Configuración Web</span>
+                </Link>
+
+                <Link
+                    href="/settings/profile"
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all duration-200 group ${pathname.startsWith('/settings/profile') ? 'font-bold bg-blue-50 text-blue-600 dark:bg-blue-900/20' : 'font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'}`}
+                >
+                    <span className="text-lg group-hover:scale-110 transition-transform shrink-0">👤</span>
+                    <span className={`whitespace-nowrap ${isDesktopCollapsed ? 'hidden' : 'block'}`}>Mi Perfil</span>
                 </Link>
               </>
             )}
@@ -375,12 +430,13 @@ export default function SidebarLayout({
             )}
           </div>
 
+          {user?.role !== 'ADMIN' && (
           <div className="space-y-1">
             <p className={`px-3 text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 mt-4 ${isDesktopCollapsed ? 'hidden' : 'block'}`}>Ajustes</p>
-            
+
             {/* Settings Accordion Container */}
             <div className="bg-gray-50/50 dark:bg-gray-800/20 rounded-xl overflow-hidden">
-              <button 
+              <button
                   onClick={() => setIsSettingsExpanded(!isSettingsExpanded)}
                   className={`w-full flex items-center justify-between px-3 py-3 text-sm transition-all duration-200 group hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none ${isSettingsExpanded ? 'bg-gray-100 dark:bg-gray-800' : ''}`}
               >
@@ -426,6 +482,7 @@ export default function SidebarLayout({
               </div>
             </div>
           </div>
+          )}
         </nav>
 
         <div className="p-4 border-t border-border mt-auto space-y-3">

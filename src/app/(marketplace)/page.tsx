@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { getLatestProducts, getFeaturedCategories, getBestSellers, getNewArrivals, getLandingStats, getActiveBrandConfig } from './actions';
 import { getMarketplaceSettings, getFeaturedContent } from '@/app/actions/marketplace';
 import { headers } from 'next/headers';
-import { getBrandConfig } from '@/lib/brand';
+import { getBrandConfig, getCanonicalBase } from '@/lib/brand';
 import { unstable_noStore as noStore } from 'next/cache';
 import { getSessionUser } from '@/app/actions/auth';
 import RecentlyViewed from '@/components/RecentlyViewed';
@@ -68,7 +68,7 @@ export async function generateMetadata(): Promise<Metadata> {
             description,
             images: [`${baseUrl}${brand.logo.url}`],
         },
-        alternates: { canonical: baseUrl },
+        alternates: { canonical: getCanonicalBase(host, brand) },
     };
 }
 
@@ -396,7 +396,6 @@ export default async function LandingPage() {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs font-black uppercase tracking-[0.3em] text-amber-500">⭐ Vendedores Destacados</p>
-                                    <h2 className="text-3xl font-black tracking-tight uppercase">Fabricantes Verificados</h2>
                                 </div>
                                 <Link href="/vendors" className="text-xs font-black uppercase tracking-widest hover:underline" style={{ color: "var(--brand-600)" }}>Ver todos →</Link>
                             </div>
@@ -434,7 +433,6 @@ export default async function LandingPage() {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs font-black uppercase tracking-[0.3em]" style={{ color: "var(--brand-600)" }}>⭐ Productos Destacados</p>
-                                    <h2 className="text-3xl font-black tracking-tight uppercase">Selección del Editor</h2>
                                 </div>
                                 <Link href="/catalog" className="text-xs font-black uppercase tracking-widest hover:underline" style={{ color: "var(--brand-600)" }}>Ver catálogo →</Link>
                             </div>

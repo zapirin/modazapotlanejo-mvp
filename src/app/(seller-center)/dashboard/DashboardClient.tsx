@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { addLayawayPayment, deleteSale, updateSaleNotes, updateSaleDashboard } from '../products/new/actions';
@@ -63,6 +63,19 @@ export default function DashboardClient({
     const [editSaving, setEditSaving] = useState(false);
     const [layawayAbono, setLayawayAbono] = useState<string>('');
     const [isProcessing, setIsProcessing] = useState(false);
+
+    // ESC para cerrar modal de reimpresión de ticket
+    useEffect(() => {
+        if (!selectedSale) return;
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setSelectedSale(null);
+            }
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, [selectedSale]);
 
     // Filtro de últimas ventas por sucursal y fecha
     const [salesLocationFilter, setSalesLocationFilter] = useState<string>('all');

@@ -143,68 +143,158 @@ export async function closeCashSession(sessionId: string, closingBalance: number
     }
 }
 
+async function resolveSellerId(user: any): Promise<string | null> {
+    if (!user) return null;
+    if (user.role === 'SELLER') return user.id;
+    if (user.role === 'CASHIER') {
+        const cashier = await (prisma.user as any).findUnique({
+            where: { id: user.id },
+            select: { managedBySellerId: true }
+        });
+        return cashier?.managedBySellerId || null;
+    }
+    return null;
+}
+
 export async function createTransfer(cart: any[], sourceId: string, destId: string) {
     if (!sourceId || !destId || sourceId === destId) {
         return { success: false, error: 'Sucursales no válidas.' };
     }
-    
+
     try {
         const user = await getSessionUser();
-        
-        await prisma.$transaction(async (tx) => {
+        const sellerId = await resolveSellerId(user);
+        if (!sellerId) {
+            return { success: false, error: 'No se pudo determinar el vendedor para este traspaso.' };
+        }
+
+        const transferId = await prisma.$transaction(async (tx) => {
+            // 1. Calcular siguiente folio para este seller
+            const last = await (tx as any).stockTransfer.findFirst({
+                where: { sellerId },
+                orderBy: { folio: 'desc' },
+                select: { folio: true },
+            });
+            const nextFolio = (last?.folio ?? 0) + 1;
+
+            const totalItems = cart.reduce((s, it) => s + (it.quantity || 0), 0);
+
+            // 2. Crear el StockTransfer
+            const transfer = await (tx as any).stockTransfer.create({
+                data: {
+                    sellerId,
+                    sourceLocationId: sourceId,
+                    destLocationId: destId,
+                    userId: user?.id || null,
+                    folio: nextFolio,
+                    totalItems,
+                },
+            });
+
+            // 3. Por cada item: validar stock, mover inventario, registrar movimientos y crear item
             for (const item of cart) {
                 const qty = item.quantity;
                 const variantId = item.variantId || item.variant?.id;
-                
-                // 1. Origen: Descontar y Registrar Movimiento
+
                 const sourceLevel = await tx.inventoryLevel.findUnique({
                     where: { variantId_locationId: { variantId, locationId: sourceId } }
                 });
-                
+
                 if (!sourceLevel || sourceLevel.stock < qty) {
                     throw new Error(`Inventario insuficiente para ${item.name || item.variant?.product?.name} en la sucursal de origen.`);
                 }
-                
+
                 await tx.inventoryLevel.update({
                     where: { id: sourceLevel.id },
                     data: { stock: { decrement: qty } }
                 });
-                
+
                 await tx.inventoryMovement.create({
                     data: {
                         variantId,
                         locationId: sourceId,
                         type: 'TRANSFER_OUT',
                         quantity: -qty,
-                        reason: `Traspaso hacia sucursal destino. Usuario: ${user?.name || 'Sistema'}`
+                        reason: `Traspaso T-${String(nextFolio).padStart(6, '0')}. Usuario: ${user?.name || 'Sistema'}`
                     }
                 });
-                
-                // 2. Destino: Aumentar y Registrar Movimiento
+
                 await tx.inventoryLevel.upsert({
                     where: { variantId_locationId: { variantId, locationId: destId } },
                     create: { variantId, locationId: destId, stock: qty },
                     update: { stock: { increment: qty } }
                 });
-                
+
                 await tx.inventoryMovement.create({
                     data: {
                         variantId,
                         locationId: destId,
                         type: 'TRANSFER_IN',
                         quantity: qty,
-                        reason: `Traspaso desde sucursal origen. Usuario: ${user?.name || 'Sistema'}`
+                        reason: `Traspaso T-${String(nextFolio).padStart(6, '0')}. Usuario: ${user?.name || 'Sistema'}`
                     }
                 });
+
+                // Snapshot del producto/variante para preservar histórico
+                const productName = item.name || item.variant?.product?.name || 'Producto';
+                const variantInfo = [item.variant?.color || item.color, item.variant?.size || item.size]
+                    .filter(Boolean).join(' / ') || null;
+
+                await (tx as any).stockTransferItem.create({
+                    data: {
+                        transferId: transfer.id,
+                        variantId,
+                        quantity: qty,
+                        productName,
+                        variantInfo,
+                    },
+                });
             }
+
+            return transfer.id;
         });
-        
+
         revalidatePath('/pos');
         revalidatePath('/inventory');
-        return { success: true };
+        return { success: true, transferId };
     } catch (error: any) {
         console.error("Error creating transfer:", error);
         return { success: false, error: error.message || 'Error desconocido al traspasar inventario' };
+    }
+}
+
+export async function getTransferById(id: string) {
+    try {
+        const user = await getSessionUser();
+        if (!user) return null;
+        const sellerId = await resolveSellerId(user);
+        if (!sellerId) return null;
+
+        const transfer = await (prisma as any).stockTransfer.findUnique({
+            where: { id },
+            include: {
+                sourceLocation: { select: { id: true, name: true, address: true, ticketHeader: true, ticketFooter: true } },
+                destLocation: { select: { id: true, name: true, address: true } },
+                user: { select: { id: true, name: true } },
+                seller: { select: { id: true, name: true, businessName: true, logoUrl: true } },
+                items: {
+                    include: {
+                        variant: {
+                            include: {
+                                product: { select: { id: true, name: true, images: true } }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        if (!transfer) return null;
+        if (transfer.sellerId !== sellerId) return null;
+        return transfer;
+    } catch (error) {
+        console.error("Error fetching transfer:", error);
+        return null;
     }
 }
 

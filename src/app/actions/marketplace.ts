@@ -219,7 +219,7 @@ export async function getSellersWithPermissions() {
                 isActive: true, adminNotes: true, commission: true, fixedFee: true,
                 posEnabled: true, maxProducts: true, posRequested: true, logoUrl: true,
                 planName: true, maxLocations: true, maxCashiers: true,
-                sellerSlug: true, createdAt: true,
+                sellerSlug: true, createdAt: true, updatedAt: true, registeredDomain: true,
                 _count: { select: { ownedProducts: true, cashiers: true, ownedLocations: true } }
             },
             orderBy: { createdAt: 'desc' }
@@ -227,6 +227,43 @@ export async function getSellersWithPermissions() {
     } catch (error: any) {
         return [];
     }
+}
+
+export async function getSellerMetrics() {
+    try {
+        await checkAdmin();
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+
+        // Get monthly sales grouped by seller (POS sales)
+        const posSales = await prisma.sale.groupBy({
+            by: ['sellerId'],
+            where: { createdAt: { gte: startOfMonth }, status: 'COMPLETED' },
+            _sum: { total: true },
+            _count: true
+        });
+
+        // Get monthly orders grouped by seller (marketplace)
+        const orders = await prisma.order.groupBy({
+            by: ['sellerId'],
+            where: { createdAt: { gte: startOfMonth }, status: { not: 'CANCELLED' } },
+            _sum: { total: true },
+            _count: true
+        });
+
+        const metrics: Record<string, { salesTotal: number; salesCount: number; ordersTotal: number; ordersCount: number }> = {};
+        for (const s of posSales) {
+            if (!s.sellerId) continue;
+            metrics[s.sellerId] = { salesTotal: s._sum.total || 0, salesCount: s._count, ordersTotal: 0, ordersCount: 0 };
+        }
+        for (const o of orders) {
+            if (!metrics[o.sellerId]) metrics[o.sellerId] = { salesTotal: 0, salesCount: 0, ordersTotal: 0, ordersCount: 0 };
+            metrics[o.sellerId].ordersTotal = o._sum.total || 0;
+            metrics[o.sellerId].ordersCount = o._count;
+        }
+        return metrics;
+    } catch { return {}; }
 }
 
 export async function getPhotographyRequests() {
@@ -374,11 +411,12 @@ export async function getFeaturedContent() {
 }
 
 
-export async function getPlans() {
+export async function getPlans(includeHidden = false) {
     try {
         const settings = await prisma.marketplaceSettings.findFirst();
         if (settings && (settings as any).plans) {
-            return (settings as any).plans as typeof DEFAULT_PLANS;
+            const all = (settings as any).plans as typeof DEFAULT_PLANS;
+            return includeHidden ? all : (all as any[]).filter((p: any) => !p.hidden);
         }
         return DEFAULT_PLANS;
     } catch { return DEFAULT_PLANS; }
@@ -395,6 +433,7 @@ export async function savePlans(plans: any[]) {
         } else {
             await prisma.marketplaceSettings.create({ data: { plans } as any });
         }
+        revalidatePath('/register/seller');
         return { success: true };
     } catch (e: any) { return { success: false, error: e.message }; }
 }
@@ -452,6 +491,117 @@ export async function updateBrandConfig(domain: string, data: {
         revalidatePath('/', 'layout');
         revalidatePath('/catalog');
         return { success: true, data: result };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getBrandMetrics() {
+    try {
+        await checkAdmin();
+        const brands = await prisma.brandConfig.findMany({ select: { domain: true } });
+        const metrics: Record<string, { sellers: number; products: number }> = {};
+
+        for (const b of brands) {
+            const sellers = await prisma.user.count({
+                where: { registeredDomain: b.domain, role: 'SELLER', isActive: true }
+            });
+            const sellerIds = await prisma.user.findMany({
+                where: { registeredDomain: b.domain, role: 'SELLER', isActive: true },
+                select: { id: true }
+            });
+            const products = sellerIds.length > 0
+                ? await prisma.product.count({
+                    where: { sellerId: { in: sellerIds.map(s => s.id) }, isActive: true, isOnline: true }
+                })
+                : 0;
+            metrics[b.domain] = { sellers, products };
+        }
+        return metrics;
+    } catch { return {}; }
+}
+
+// ─── Suscripciones ─────────────────────────────────────────────────────────
+function computeSubscriptionStatus(start: Date | null, lastPaid: Date | null): { nextPaymentAt: Date | null; status: 'unset' | 'ok' | 'soon' | 'overdue'; daysToNext: number | null } {
+    const anchor = lastPaid ?? start;
+    if (!anchor) return { nextPaymentAt: null, status: 'unset', daysToNext: null };
+    const next = new Date(anchor);
+    next.setMonth(next.getMonth() + 1);
+    const now = new Date();
+    const diffMs = next.getTime() - now.getTime();
+    const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    let status: 'ok' | 'soon' | 'overdue';
+    if (days < 0) status = 'overdue';
+    else if (days <= 7) status = 'soon';
+    else status = 'ok';
+    return { nextPaymentAt: next, status, daysToNext: days };
+}
+
+export async function getSubscriptions() {
+    try {
+        await checkAdmin();
+        const sellers = await (prisma.user as any).findMany({
+            where: { role: 'SELLER', isActive: true },
+            select: {
+                id: true,
+                name: true,
+                businessName: true,
+                email: true,
+                planName: true,
+                createdAt: true,
+                subscriptionStartedAt: true,
+                lastPaidAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        const rows = sellers.map((s: any) => {
+            const calc = computeSubscriptionStatus(s.subscriptionStartedAt, s.lastPaidAt);
+            return { ...s, ...calc };
+        });
+
+        const counters = {
+            overdue: rows.filter((r: any) => r.status === 'overdue').length,
+            soon: rows.filter((r: any) => r.status === 'soon').length,
+            unset: rows.filter((r: any) => r.status === 'unset').length,
+        };
+
+        return { success: true, rows, counters };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function markSellerPaid(sellerId: string) {
+    try {
+        await checkAdmin();
+        const now = new Date();
+        const seller = await (prisma.user as any).findUnique({ where: { id: sellerId }, select: { subscriptionStartedAt: true } });
+        await (prisma.user as any).update({
+            where: { id: sellerId },
+            data: {
+                lastPaidAt: now,
+                subscriptionStartedAt: seller?.subscriptionStartedAt ?? now,
+            },
+        });
+        revalidatePath('/admin/marketplace');
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function setSubscriptionStartDate(sellerId: string, isoDate: string) {
+    try {
+        await checkAdmin();
+        const start = new Date(isoDate);
+        if (isNaN(start.getTime())) throw new Error('Fecha inválida');
+        await (prisma.user as any).update({
+            where: { id: sellerId },
+            data: { subscriptionStartedAt: start },
+        });
+        revalidatePath('/admin/marketplace');
+        return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

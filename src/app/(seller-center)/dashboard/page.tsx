@@ -1,11 +1,12 @@
 import { getSessionUser } from '@/app/actions/auth';
 import { prisma } from '@/lib/prisma';
 import DashboardClient from './DashboardClient';
+import AdminDashboard from './AdminDashboard';
 
 export const dynamic = 'force-dynamic';
 export default async function SellerDashboardPage({ searchParams = {} }: { searchParams?: any }) {
     const user = await getSessionUser();
-    
+
     // REDIRECT BUYERS TO ORDERS
     if ((user?.role as string) === 'BUYER') {
         const { redirect } = await import('next/navigation');
@@ -21,6 +22,61 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
     const isSeller = (user?.role as string) === 'SELLER';
     const isAdmin = (user?.role as string) === 'ADMIN';
     const posDisabled = (searchParams as any)?.error === 'pos_disabled';
+
+    // ADMIN del marketplace: dashboard dedicado, sin datos cruzados de vendedores
+    if (isAdmin) {
+        const [activeSellers, pendingApplications, sellersForSubs, marketplaceMetrics, pendingSettlements, recentOrders] = await Promise.all([
+            prisma.user.count({ where: { role: 'SELLER', isActive: true } }),
+            (prisma as any).sellerApplication.count({ where: { status: 'PENDING' } }),
+            (prisma.user as any).findMany({
+                where: { role: 'SELLER', isActive: true },
+                select: { subscriptionStartedAt: true, lastPaidAt: true },
+            }),
+            prisma.order.aggregate({
+                _count: { id: true },
+                _sum: { total: true, commissionAmount: true, sellerEarnings: true },
+                where: { status: { in: ['ACCEPTED', 'COMPLETED', 'PENDING'] } },
+            }),
+            prisma.order.count({ where: { status: 'COMPLETED', isSettled: false } as any }),
+            prisma.order.findMany({
+                orderBy: { createdAt: 'desc' },
+                take: 8,
+                include: {
+                    items: true,
+                    buyer: { select: { name: true, businessName: true } },
+                },
+            }),
+        ]);
+
+        // Compute subscription alerts
+        let subsOverdue = 0, subsSoon = 0;
+        const now = new Date();
+        sellersForSubs.forEach((s: any) => {
+            const anchor = s.lastPaidAt ?? s.subscriptionStartedAt;
+            if (!anchor) return;
+            const next = new Date(anchor);
+            next.setMonth(next.getMonth() + 1);
+            const diffDays = Math.ceil((next.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            if (diffDays < 0) subsOverdue++;
+            else if (diffDays <= 7) subsSoon++;
+        });
+
+        return (
+            <AdminDashboard
+                userName={user?.name || 'Administrador'}
+                activeSellers={activeSellers}
+                pendingApplications={pendingApplications}
+                subsOverdue={subsOverdue}
+                subsSoon={subsSoon}
+                marketplaceOrdersCount={marketplaceMetrics?._count?.id || 0}
+                marketplaceRevenue={marketplaceMetrics?._sum?.total || 0}
+                marketplaceCommission={marketplaceMetrics?._sum?.commissionAmount || 0}
+                marketplaceNet={marketplaceMetrics?._sum?.sellerEarnings || 0}
+                pendingSettlements={pendingSettlements}
+                recentOrders={recentOrders}
+            />
+        );
+    }
 
     // Timezone helpers — all date ranges use America/Mexico_City midnight
     // toLocaleString trick: parse UTC timestamp as MX wall-clock time

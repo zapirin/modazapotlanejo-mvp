@@ -22,6 +22,11 @@ import {
     updateBrandConfig,
     toggleBrandActive,
     deleteBrandConfig,
+    getSellerMetrics,
+    getBrandMetrics,
+    getSubscriptions,
+    markSellerPaid,
+    setSubscriptionStartDate,
 } from '@/app/actions/marketplace';
 import { updateApplicationStatus, createSellerManually } from '@/app/(seller-center)/admin/applications/actions';
 import { getSellerApplications } from '@/app/actions/admin';
@@ -36,6 +41,7 @@ const TABS = [
     { key: 'featured', label: '⭐ Destacados', icon: '⭐' },
     { key: 'photos', label: '📸 Fotografía', icon: '📸' },
     { key: 'plans', label: '💼 Planes', icon: '💼' },
+    { key: 'subscriptions', label: '💳 Suscripciones', icon: '💳' },
     { key: 'brands', label: '🌐 Marcas', icon: '🌐' },
     { key: 'admin', label: '⚙️ Mi Cuenta', icon: '⚙️' },
 ];
@@ -74,6 +80,8 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
 
     // Tab: Sellers
     const [sellers, setSellers] = useState<any[]>([]);
+    const [sellerSearch, setSellerSearch] = useState('');
+    const [sellerMetrics, setSellerMetrics] = useState<Record<string, { salesTotal: number; salesCount: number; ordersTotal: number; ordersCount: number }>>({});
     const [loadingSellers, setLoadingSellers] = useState(false);
     const [orphanScan, setOrphanScan] = useState<{ count: number; totalMB: string } | null>(null);
     const [orphanDeleting, setOrphanDeleting] = useState(false);
@@ -91,6 +99,39 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     const [loadingInactive, setLoadingInactive] = useState(false);
     const [plans, setPlans] = useState<any[]>([]);
     const [savingPlans, setSavingPlans] = useState(false);
+
+    // Tab: Subscriptions
+    const [subscriptions, setSubscriptions] = useState<any[]>([]);
+    const [subsCounters, setSubsCounters] = useState<{ overdue: number; soon: number; unset: number }>({ overdue: 0, soon: 0, unset: 0 });
+    const [subsLoading, setSubsLoading] = useState(false);
+    const [subsActionId, setSubsActionId] = useState<string | null>(null);
+
+    const loadSubscriptions = async () => {
+        setSubsLoading(true);
+        const res = await getSubscriptions();
+        if (res.success) {
+            const order: Record<string, number> = { overdue: 0, soon: 1, unset: 2, ok: 3 };
+            const sorted = [...(res.rows || [])].sort((a: any, b: any) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+            setSubscriptions(sorted);
+            setSubsCounters(res.counters || { overdue: 0, soon: 0, unset: 0 });
+        }
+        setSubsLoading(false);
+    };
+
+    const handleMarkPaid = async (sellerId: string) => {
+        setSubsActionId(sellerId);
+        const res = await markSellerPaid(sellerId);
+        if (res.success) { toast.success('Pago registrado'); await loadSubscriptions(); }
+        else toast.error(res.error || 'No se pudo marcar como pagado');
+        setSubsActionId(null);
+    };
+
+    const handleSetStartDate = async (sellerId: string, isoDate: string) => {
+        if (!isoDate) return;
+        const res = await setSubscriptionStartDate(sellerId, isoDate);
+        if (res.success) { toast.success('Fecha de inicio actualizada'); await loadSubscriptions(); }
+        else toast.error(res.error || 'No se pudo actualizar');
+    };
 
     // Tab: Featured
     const [productQuery, setProductQuery] = useState('');
@@ -133,6 +174,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
         'zonadelvestir.com': (initialSettings?.brandColors as any)?.['zonadelvestir.com'] || 'violet',
     });
     const [brands, setBrands] = useState<any[]>(initialSettings?.brandsConfig || []);
+    const [brandMetrics, setBrandMetrics] = useState<Record<string, { sellers: number; products: number }>>({});
     const [editingBrand, setEditingBrand] = useState<any>(null);
     const [showPricesPublicly, setShowPricesPublicly] = useState<boolean>(initialSettings?.showPricesPublicly !== false);
     const _kalexaCfg = initialSettings?.brandsConfig?.find((b: any) => b.domain.includes('kalexa'));
@@ -195,6 +237,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     useEffect(() => {
         if (activeTab === 'sellers') {
             loadSellers();
+            getSellerMetrics().then(m => setSellerMetrics(m || {})).catch(() => {});
             setLoadingApps(true);
             getSellerApplications().then(apps => { setApplications(apps || []); setLoadingApps(false); }).catch(() => setLoadingApps(false));
             setLoadingInactive(true);
@@ -204,9 +247,16 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
         if (activeTab === 'photos') loadPhotos();
 
         if (activeTab === 'plans') {
-            getPlans().then(p => setPlans(p || [])).catch(() => setPlans([]));
+            getPlans(true).then(p => setPlans(p || [])).catch(() => setPlans([]));
         }
+        if (activeTab === 'brands') {
+            getBrandMetrics().then(m => setBrandMetrics(m || {})).catch(() => {});
+        }
+        if (activeTab === 'subscriptions') loadSubscriptions();
     }, [activeTab]);
+
+    // Cargar contadores de suscripciones al montar para que el badge sea visible siempre
+    useEffect(() => { loadSubscriptions(); }, []);
 
     const loadAllSellers = async () => {
         const res = await getSellersList();
@@ -442,12 +492,20 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
 
             {/* Tabs */}
             <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-2xl w-fit flex-wrap">
-                {TABS.map(tab => (
-                    <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-                        className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${activeTab === tab.key ? 'bg-white dark:bg-gray-700 text-blue-600 shadow-sm' : 'text-gray-500 hover:text-foreground'}`}>
-                        {tab.label}
-                    </button>
-                ))}
+                {TABS.map(tab => {
+                    const subsAlerts = tab.key === 'subscriptions' ? (subsCounters.overdue + subsCounters.soon) : 0;
+                    return (
+                        <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                            className={`relative px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${activeTab === tab.key ? 'bg-white dark:bg-gray-700 text-blue-600 shadow-sm' : 'text-gray-500 hover:text-foreground'}`}>
+                            {tab.label}
+                            {subsAlerts > 0 && (
+                                <span className={`ml-2 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[10px] font-black ${subsCounters.overdue > 0 ? 'bg-red-500 text-white' : 'bg-amber-400 text-amber-900'}`}>
+                                    {subsAlerts}
+                                </span>
+                            )}
+                        </button>
+                    );
+                })}
             </div>
 
             {/* ── TAB: SITIO ── */}
@@ -773,37 +831,22 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                         + Crear Vendedor
                                     </button>
                                     <span className="text-xs text-gray-400 font-bold">{sellers.length} vendedores</span>
-                                    {!orphanScan && !orphanResult && (
-                                        <button onClick={handleScanOrphans}
-                                            className="px-4 py-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 text-orange-700 rounded-xl text-xs font-black hover:bg-orange-100 transition flex items-center gap-2">
-                                            🔍 Escanear Archivos Huérfanos
-                                        </button>
-                                    )}
-                                    {orphanScan && (
-                                        <div className="flex items-center gap-2">
-                                            {orphanScan.count === 0 ? (
-                                                <span className="text-xs font-bold text-emerald-600">✅ Sin huérfanos — disco limpio</span>
-                                            ) : (
-                                                <>
-                                                    <span className="text-xs font-bold text-orange-600">{orphanScan.count} archivos · {orphanScan.totalMB} MB</span>
-                                                    <button onClick={handleDeleteOrphans} disabled={orphanDeleting}
-                                                        className="px-3 py-1.5 bg-red-50 dark:bg-red-900/20 border border-red-200 text-red-700 rounded-xl text-xs font-black hover:bg-red-100 transition disabled:opacity-50">
-                                                        {orphanDeleting ? '⏳ Eliminando...' : '🗑️ Eliminar'}
-                                                    </button>
-                                                </>
-                                            )}
-                                            <button onClick={() => setOrphanScan(null)}
-                                                className="text-xs text-gray-400 hover:text-gray-600 font-bold">✕</button>
-                                        </div>
-                                    )}
-                                    {orphanResult && (
-                                        <span className="text-xs font-bold text-emerald-600">✅ {orphanResult.deleted} archivos eliminados · {orphanResult.freedMB} MB liberados</span>
-                                    )}
                                 </div>
                             </div>
+                            <input
+                                type="text"
+                                value={sellerSearch}
+                                onChange={e => setSellerSearch(e.target.value)}
+                                placeholder="🔍 Buscar por nombre, correo o negocio..."
+                                className="w-full px-4 py-3 bg-input border border-border rounded-xl font-bold text-sm focus:ring-2 focus:ring-blue-500/50 outline-none"
+                            />
                             {loadingSellers ? (
                                 <div className="flex justify-center p-10"><div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" /></div>
-                            ) : sellers.map((seller: any) => (
+                            ) : sellers.filter((s: any) => {
+                                if (!sellerSearch.trim()) return true;
+                                const q = sellerSearch.toLowerCase();
+                                return (s.businessName || '').toLowerCase().includes(q) || (s.name || '').toLowerCase().includes(q) || (s.email || '').toLowerCase().includes(q);
+                            }).map((seller: any) => (
                                 <div key={seller.id} className="bg-card border border-border rounded-2xl overflow-hidden">
                                     <div className="flex items-start justify-between gap-4 p-5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                                          onClick={() => toggleSeller(seller.id)}>
@@ -818,8 +861,32 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                                 {(seller.phone || seller.whatsapp) && (
                                                     <p className="text-xs text-emerald-600 font-bold">📱 {seller.whatsapp || seller.phone}</p>
                                                 )}
+                                                <div className="flex flex-wrap gap-2 mt-1">
+                                                    {seller.registeredDomain && (
+                                                        <span className="px-2 py-0.5 bg-violet-100 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 rounded-full text-[9px] font-black">
+                                                            🌐 {seller.registeredDomain}
+                                                        </span>
+                                                    )}
+                                                    {(() => {
+                                                        const m = sellerMetrics[seller.id];
+                                                        // Solo mostramos el agregado de pedidos del marketplace
+                                                        // (las ventas del POS son del vendedor, no del admin)
+                                                        const ordersTotal = m?.ordersTotal || 0;
+                                                        const ordersCount = m?.ordersCount || 0;
+                                                        return ordersCount > 0 ? (
+                                                            <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-full text-[9px] font-black">
+                                                                🛒 ${ordersTotal.toLocaleString('es-MX', { minimumFractionDigits: 0 })} · {ordersCount} pedido{ordersCount !== 1 ? 's' : ''} marketplace
+                                                            </span>
+                                                        ) : (
+                                                            <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-400 rounded-full text-[9px] font-black">
+                                                                Sin pedidos marketplace
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                </div>
                                                 <p className="text-[10px] text-gray-400">
                                                     Miembro desde {new Date((seller as any).createdAt).toLocaleDateString('es-MX', {month:'short', year:'numeric'})}
+                                                    {seller.updatedAt && ` · Última actividad: ${new Date(seller.updatedAt).toLocaleDateString('es-MX', {day:'numeric', month:'short'})}`}
                                                 </p>
                                                 {seller.sellerSlug ? (
                                                     <div className="flex items-center gap-2 mt-1">
@@ -1025,6 +1092,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                 <div className="space-y-8">
                     <div className="bg-card border border-border rounded-3xl p-8 space-y-6 shadow-sm">
                         <h2 className="text-xl font-black">⭐ Vendedores Destacados</h2>
+                        <p className="text-xs text-gray-400">Selecciona los vendedores que aparecerán en la landing. Usa las flechas para ordenarlos.</p>
                         <div className="flex flex-wrap gap-2">
                             {allSellers.map((s: any) => (
                                 <button key={s.id}
@@ -1034,6 +1102,28 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                 </button>
                             ))}
                         </div>
+                        {selectedSellers.length > 0 && (
+                            <div className="space-y-2">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Orden de aparición</p>
+                                {selectedSellers.map((id, idx) => {
+                                    const s = allSellers.find((x: any) => x.id === id);
+                                    return (
+                                        <div key={id} className="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl px-4 py-2">
+                                            <span className="text-xs font-black text-blue-600 w-6">{idx + 1}.</span>
+                                            <span className="text-sm font-bold flex-1">{s?.businessName || s?.name || id}</span>
+                                            <button disabled={idx === 0}
+                                                onClick={() => setSelectedSellers(prev => { const n = [...prev]; [n[idx-1], n[idx]] = [n[idx], n[idx-1]]; return n; })}
+                                                className="w-7 h-7 flex items-center justify-center rounded-lg bg-white dark:bg-gray-800 border border-border text-xs font-black disabled:opacity-30 hover:bg-gray-100 transition">↑</button>
+                                            <button disabled={idx === selectedSellers.length - 1}
+                                                onClick={() => setSelectedSellers(prev => { const n = [...prev]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; return n; })}
+                                                className="w-7 h-7 flex items-center justify-center rounded-lg bg-white dark:bg-gray-800 border border-border text-xs font-black disabled:opacity-30 hover:bg-gray-100 transition">↓</button>
+                                            <button onClick={() => setSelectedSellers(prev => prev.filter(x => x !== id))}
+                                                className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 text-red-500 text-xs font-black hover:bg-red-100 transition">✕</button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
 
                     <div className="bg-card border border-border rounded-3xl p-8 space-y-6 shadow-sm">
@@ -1053,13 +1143,75 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                             </div>
                         )}
                         {selectedProducts.length > 0 && (
-                            <p className="text-xs text-gray-400 font-bold">{selectedProducts.length} producto(s) destacado(s)</p>
+                            <div className="space-y-2">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Orden de productos ({selectedProducts.length})</p>
+                                {selectedProducts.map((id, idx) => {
+                                    const p = searchResults.find((x: any) => x.id === id);
+                                    return (
+                                        <div key={id} className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-2">
+                                            <span className="text-xs font-black text-amber-600 w-6">{idx + 1}.</span>
+                                            <span className="text-sm font-bold flex-1">{p?.name || `Producto ${id.slice(0,8)}...`}</span>
+                                            <button disabled={idx === 0}
+                                                onClick={() => setSelectedProducts(prev => { const n = [...prev]; [n[idx-1], n[idx]] = [n[idx], n[idx-1]]; return n; })}
+                                                className="w-7 h-7 flex items-center justify-center rounded-lg bg-white dark:bg-gray-800 border border-border text-xs font-black disabled:opacity-30 hover:bg-gray-100 transition">↑</button>
+                                            <button disabled={idx === selectedProducts.length - 1}
+                                                onClick={() => setSelectedProducts(prev => { const n = [...prev]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; return n; })}
+                                                className="w-7 h-7 flex items-center justify-center rounded-lg bg-white dark:bg-gray-800 border border-border text-xs font-black disabled:opacity-30 hover:bg-gray-100 transition">↓</button>
+                                            <button onClick={() => setSelectedProducts(prev => prev.filter(x => x !== id))}
+                                                className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 text-red-500 text-xs font-black hover:bg-red-100 transition">✕</button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         )}
                         <button onClick={handleSaveFeatured} disabled={loading}
                             className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black uppercase tracking-widest text-xs hover:bg-blue-700 transition shadow-lg shadow-blue-500/20 disabled:opacity-50">
                             {loading ? 'Guardando...' : 'Guardar Destacados'}
                         </button>
                     </div>
+
+                    {/* Preview */}
+                    {(selectedSellers.length > 0 || selectedProducts.length > 0) && (
+                        <div className="bg-card border border-border rounded-3xl p-8 space-y-6 shadow-sm">
+                            <h2 className="text-xl font-black">👁️ Vista Previa de la Landing</h2>
+                            <p className="text-xs text-gray-400">Así se verá la sección de destacados en la página principal.</p>
+                            {selectedSellers.length > 0 && (
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">Vendedores Destacados</p>
+                                    <div className="flex flex-wrap gap-3">
+                                        {selectedSellers.map((id, idx) => {
+                                            const s = allSellers.find((x: any) => x.id === id);
+                                            return (
+                                                <div key={id} className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-900/20 dark:to-violet-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl px-4 py-3 shadow-sm">
+                                                    <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-sm">{(s?.businessName || s?.name || '?').charAt(0)}</div>
+                                                    <div>
+                                                        <p className="text-sm font-black">{s?.businessName || s?.name}</p>
+                                                        <p className="text-[9px] text-gray-400">Posición #{idx + 1}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                            {selectedProducts.length > 0 && (
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">Productos Destacados</p>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                        {selectedProducts.slice(0, 8).map((id, idx) => {
+                                            const p = searchResults.find((x: any) => x.id === id);
+                                            return (
+                                                <div key={id} className="bg-gray-50 dark:bg-gray-800/50 border border-border rounded-xl p-3 text-center">
+                                                    <div className="w-full aspect-square bg-gray-200 dark:bg-gray-700 rounded-lg mb-2 flex items-center justify-center text-2xl">📦</div>
+                                                    <p className="text-xs font-bold truncate">{p?.name || `#${idx + 1}`}</p>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -1174,15 +1326,32 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
             {/* ── TAB: PLANES ── */}
             {activeTab === 'plans' && (
                 <div className="space-y-6">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-3">
                         <div>
                             <h2 className="text-xl font-black">💼 Planes de Suscripción</h2>
                             <p className="text-xs text-gray-400 mt-1">Edita los precios y características de cada plan. Se reflejan en la página de registro.</p>
                         </div>
-                        <button onClick={handleSavePlans} disabled={savingPlans}
-                            className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition disabled:opacity-50">
-                            {savingPlans ? 'Guardando...' : '💾 Guardar Planes'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setPlans(prev => [...prev, {
+                                id: `plan_${Date.now()}`,
+                                name: 'Nuevo Plan',
+                                price: '$0/mes',
+                                locations: 1,
+                                cashiers: 1,
+                                products: 0,
+                                features: ['POS + Inventario'],
+                                badge: '',
+                                highlight: false,
+                                color: 'from-gray-700 to-gray-900'
+                            }])}
+                                className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black hover:bg-emerald-700 transition">
+                                + Nuevo Plan
+                            </button>
+                            <button onClick={handleSavePlans} disabled={savingPlans}
+                                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition disabled:opacity-50">
+                                {savingPlans ? 'Guardando...' : '💾 Guardar Planes'}
+                            </button>
+                        </div>
                     </div>
 
                     {plans.length === 0 ? (
@@ -1192,14 +1361,34 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {plans.map((plan, idx) => (
-                                <div key={plan.id} className="bg-card border border-border rounded-2xl p-6 space-y-4">
+                                <div key={plan.id || idx} className={`bg-card border rounded-2xl p-6 space-y-4 transition-all ${plan.hidden ? 'border-dashed border-gray-300 dark:border-gray-600 opacity-60' : 'border-border'}`}>
                                     {/* Preview del plan */}
-                                    <div className={`p-4 rounded-2xl text-white bg-gradient-to-br ${plan.color} space-y-1`}>
+                                    <div className={`p-4 rounded-2xl text-white bg-gradient-to-br ${plan.color || 'from-gray-700 to-gray-900'} space-y-1`}>
                                         <div className="flex justify-between items-center">
                                             <span className="font-black uppercase text-lg">{plan.name}</span>
                                             <span className="font-black text-xl">{plan.price}</span>
                                         </div>
                                         {plan.badge && <span className="text-[9px] font-black bg-white/20 px-2 py-0.5 rounded-full">{plan.badge}</span>}
+                                        {plan.hidden && <span className="text-[9px] font-black bg-red-500/80 px-2 py-0.5 rounded-full">👁‍🗨 OCULTO</span>}
+                                    </div>
+
+                                    {/* Reorder + Delete */}
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex-1">Posición #{idx + 1}</span>
+                                        <button disabled={idx === 0}
+                                            onClick={() => setPlans(prev => { const n = [...prev]; [n[idx-1], n[idx]] = [n[idx], n[idx-1]]; return n; })}
+                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800 border border-border text-xs font-black disabled:opacity-30 hover:bg-gray-200 transition">↑</button>
+                                        <button disabled={idx === plans.length - 1}
+                                            onClick={() => setPlans(prev => { const n = [...prev]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; return n; })}
+                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800 border border-border text-xs font-black disabled:opacity-30 hover:bg-gray-200 transition">↓</button>
+                                        <button onClick={() => setPlans(prev => prev.map((p, i) => i === idx ? {...p, hidden: !p.hidden} : p))}
+                                            className={`w-7 h-7 flex items-center justify-center rounded-lg border text-xs font-black transition ${plan.hidden ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 text-emerald-600 hover:bg-emerald-100' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 text-amber-600 hover:bg-amber-100'}`}
+                                            title={plan.hidden ? 'Mostrar plan' : 'Ocultar plan'}>{plan.hidden ? '👁' : '🙈'}</button>
+                                        <button onClick={() => {
+                                            if (!confirm(`¿Eliminar el plan "${plan.name}"? Esta acción no se puede deshacer.`)) return;
+                                            setPlans(prev => prev.filter((_, i) => i !== idx));
+                                        }}
+                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 text-red-500 text-xs font-black hover:bg-red-100 transition">🗑</button>
                                     </div>
 
                                     {/* Campos editables */}
@@ -1263,6 +1452,119 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                 </div>
             )}
 
+            {/* ── TAB: SUSCRIPCIONES ── */}
+            {activeTab === 'subscriptions' && (
+                <div className="space-y-6">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h2 className="text-xl font-black">💳 Suscripciones</h2>
+                            <p className="text-xs text-gray-400 mt-1">Fechas de pago mensual de cada vendedor activo. Marca como pagado cuando recibas el pago para mover el siguiente vencimiento.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-card border border-border rounded-3xl p-6 shadow-sm">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Vencidos</p>
+                            <h3 className={`text-4xl font-black mt-2 tabular-nums ${subsCounters.overdue > 0 ? 'text-red-500' : 'text-foreground'}`}>{subsCounters.overdue}</h3>
+                            <p className="text-xs text-gray-400 font-medium mt-1">Pago pasado de fecha</p>
+                        </div>
+                        <div className="bg-card border border-border rounded-3xl p-6 shadow-sm">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Por vencer (≤7 días)</p>
+                            <h3 className={`text-4xl font-black mt-2 tabular-nums ${subsCounters.soon > 0 ? 'text-amber-500' : 'text-foreground'}`}>{subsCounters.soon}</h3>
+                            <p className="text-xs text-gray-400 font-medium mt-1">Próximo cobro pronto</p>
+                        </div>
+                        <div className="bg-card border border-border rounded-3xl p-6 shadow-sm">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Sin fecha</p>
+                            <h3 className="text-4xl font-black text-foreground mt-2 tabular-nums">{subsCounters.unset}</h3>
+                            <p className="text-xs text-gray-400 font-medium mt-1">Configura la fecha de inicio</p>
+                        </div>
+                    </div>
+
+                    <div className="bg-card border border-border rounded-3xl overflow-hidden shadow-sm">
+                        {subsLoading ? (
+                            <div className="p-12 text-center text-gray-400 text-sm">Cargando...</div>
+                        ) : subscriptions.length === 0 ? (
+                            <div className="p-12 text-center text-gray-400 text-sm">No hay vendedores activos.</div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-border text-[10px] uppercase tracking-widest text-gray-400 font-black bg-gray-50/50 dark:bg-gray-800/50">
+                                            <th className="text-left px-6 py-4">Vendedor</th>
+                                            <th className="text-left px-4 py-4">Plan</th>
+                                            <th className="text-left px-4 py-4">Fecha inicio</th>
+                                            <th className="text-left px-4 py-4">Último pago</th>
+                                            <th className="text-left px-4 py-4">Próximo pago</th>
+                                            <th className="text-center px-4 py-4">Estado</th>
+                                            <th className="text-right px-6 py-4">Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {subscriptions.map((s: any) => {
+                                            const start = s.subscriptionStartedAt ? new Date(s.subscriptionStartedAt) : null;
+                                            const startStr = start ? start.toISOString().slice(0, 10) : '';
+                                            const lastPaid = s.lastPaidAt ? new Date(s.lastPaidAt) : null;
+                                            const next = s.nextPaymentAt ? new Date(s.nextPaymentAt) : null;
+                                            const statusLabel =
+                                                s.status === 'overdue' ? `Vencido (${Math.abs(s.daysToNext ?? 0)} d)` :
+                                                s.status === 'soon' ? `En ${s.daysToNext} d` :
+                                                s.status === 'ok' ? `Al día` :
+                                                'Sin fecha';
+                                            const statusClass =
+                                                s.status === 'overdue' ? 'bg-red-50 text-red-600 border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800' :
+                                                s.status === 'soon' ? 'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800' :
+                                                s.status === 'ok' ? 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800' :
+                                                'bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700';
+                                            return (
+                                                <tr key={s.id} className="border-b border-border hover:bg-black/5 dark:hover:bg-white/5 transition">
+                                                    <td className="px-6 py-4">
+                                                        <p className="font-bold text-foreground">{s.businessName || s.name}</p>
+                                                        <p className="text-[10px] text-gray-400 font-medium">{s.email}</p>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <span className="px-3 py-1 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 text-[10px] font-black uppercase tracking-widest rounded-full border border-purple-100 dark:border-purple-800">
+                                                            {s.planName}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <input
+                                                            type="date"
+                                                            defaultValue={startStr}
+                                                            onBlur={(e) => { if (e.target.value && e.target.value !== startStr) handleSetStartDate(s.id, e.target.value); }}
+                                                            className="bg-input border border-border rounded-lg px-2 py-1 text-xs font-bold text-foreground outline-none"
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-4 text-xs text-gray-500 font-medium tabular-nums">
+                                                        {lastPaid ? lastPaid.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                                                    </td>
+                                                    <td className="px-4 py-4 text-xs font-bold text-foreground tabular-nums">
+                                                        {next ? next.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                                                    </td>
+                                                    <td className="px-4 py-4 text-center">
+                                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${statusClass}`}>
+                                                            {statusLabel}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <button
+                                                            disabled={subsActionId === s.id}
+                                                            onClick={() => handleMarkPaid(s.id)}
+                                                            className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition disabled:opacity-50 disabled:hover:scale-100 shadow-sm"
+                                                        >
+                                                            {subsActionId === s.id ? '...' : 'Marcar pagado'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* ── TAB: MARCAS ── */}
             {activeTab === 'brands' && (
                 <div className="space-y-6">
@@ -1286,6 +1588,12 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             <p className="font-black text-lg">{brand.name}</p>
                                             <p className="text-xs opacity-80">{brand.tagline}</p>
                                             <p className="text-[10px] opacity-60 mt-1">{brand.domain}</p>
+                                            {brandMetrics[brand.domain] && (
+                                                <div className="flex gap-2 mt-2">
+                                                    <span className="px-2 py-0.5 bg-white/20 rounded-full text-[9px] font-black">👥 {brandMetrics[brand.domain].sellers} vendedores</span>
+                                                    <span className="px-2 py-0.5 bg-white/20 rounded-full text-[9px] font-black">📦 {brandMetrics[brand.domain].products} productos</span>
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex gap-2 shrink-0">
                                             <button
@@ -1338,6 +1646,17 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             <input value={brand.tagline || ''}
                                                 onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? {...b, tagline: e.target.value} : b))}
                                                 className="w-full px-3 py-2 bg-input border border-border rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase text-gray-400">Dominio</label>
+                                        <div className="flex items-center gap-2">
+                                            <input value={brand.domain} disabled
+                                                className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-border rounded-xl text-sm font-mono font-bold text-gray-500 outline-none cursor-not-allowed" />
+                                            <a href={`https://${brand.domain}`} target="_blank" rel="noopener noreferrer"
+                                                className="px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 rounded-xl text-xs font-black text-blue-600 hover:bg-blue-100 transition">
+                                                🔗 Visitar
+                                            </a>
                                         </div>
                                     </div>
                                     <div className="space-y-1">

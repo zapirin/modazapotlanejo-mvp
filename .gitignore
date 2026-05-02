@@ -48,3 +48,18 @@ next-env.d.ts
 
 /prisma/generated-client
 /src/generated
+
+# Backups locales
+_backups/
+.backups-local/
+
+# Scripts temporales de limpieza
+fix_any.js
+fix_lint.js
+fix_pos.js
+finish_cleanup.js
+test_eslint.ts
+eslint-report.json
+
+# Agents
+.agents/

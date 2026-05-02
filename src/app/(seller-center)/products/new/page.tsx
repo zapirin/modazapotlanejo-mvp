@@ -46,6 +46,16 @@ export default function NewProductPage() {
     const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
     const [aiPrompt, setAiPrompt] = useState('');
 
+    // Combobox state for Marca
+    const [brandSearch, setBrandSearch] = useState('');
+    const [brandOpen, setBrandOpen] = useState(false);
+    const brandRef = useRef<HTMLDivElement>(null);
+
+    // Combobox state for Proveedor
+    const [supplierSearch, setSupplierSearch] = useState('');
+    const [supplierOpen, setSupplierOpen] = useState(false);
+    const supplierRef = useRef<HTMLDivElement>(null);
+
     const handleGenerateDescription = async () => {
         if (formData.images.length === 0) {
             alert('Sube al menos una foto del producto para generar la descripción.');
@@ -440,65 +450,139 @@ export default function NewProductPage() {
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-3">
+                                {/* Marca — Combobox */}
+                                <div className="space-y-3" ref={brandRef}>
                                     <label className="text-xs font-black uppercase tracking-widest text-gray-400">Marca</label>
-                                    <select
-                                        className="w-full px-5 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground"
-                                        value={formData.brandId}
-                                        onChange={async (e) => {
-                                            if (e.target.value === '__NEW__') {
-                                                const name = window.prompt("Ingrese el nombre de la nueva marca:");
-                                                if (name?.trim()) {
-                                                    const res = await createBrand(name);
-                                                    if (res.success && res.brand) {
-                                                        setBrands([...brands, res.brand]);
-                                                        setFormData(prev => ({ ...prev, brandId: res.brand.id }));
-                                                    } else {
-                                                        alert(res.error || "Error al crear la marca");
-                                                    }
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar o crear marca..."
+                                            className="w-full px-5 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground"
+                                            value={brandSearch}
+                                            onChange={(e) => {
+                                                setBrandSearch(e.target.value);
+                                                setBrandOpen(true);
+                                                // Si el usuario borra el texto, también limpia la selección
+                                                if (!e.target.value) setFormData(prev => ({ ...prev, brandId: '' }));
+                                            }}
+                                            onFocus={() => setBrandOpen(true)}
+                                            onBlur={() => setTimeout(() => setBrandOpen(false), 150)}
+                                        />
+                                        {formData.brandId && (
+                                            <span className="absolute right-3 top-3.5 text-blue-500 text-xs font-bold pointer-events-none">✓</span>
+                                        )}
+                                        {brandOpen && (
+                                            <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                                                {brands
+                                                    .filter(b => b.name.toLowerCase().includes(brandSearch.toLowerCase()))
+                                                    .map(brand => (
+                                                        <button
+                                                            key={brand.id}
+                                                            type="button"
+                                                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors font-medium text-foreground"
+                                                            onMouseDown={() => {
+                                                                const newSku = generateSKU(formData.category, formData.subcategoryId, brand.id, formData.name);
+                                                                setFormData(prev => ({ ...prev, brandId: brand.id, sku: newSku }));
+                                                                setBrandSearch(brand.name);
+                                                                setBrandOpen(false);
+                                                            }}
+                                                        >
+                                                            {brand.name}
+                                                        </button>
+                                                    ))
                                                 }
-                                            } else {
-                                                const newSku = generateSKU(formData.category, formData.subcategoryId, e.target.value, formData.name);
-                                                setFormData({ ...formData, brandId: e.target.value, sku: newSku });
-                                            }
-                                        }}
-                                    >
-                                        <option value="">Seleccionar Marca</option>
-                                        <option value="__NEW__" className="font-bold text-blue-600">(+) Crear Nueva Marca</option>
-                                        {brands.map(brand => (
-                                            <option key={brand.id} value={brand.id}>{brand.name}</option>
-                                        ))}
-                                    </select>
+                                                {brandSearch.trim() && !brands.some(b => b.name.toLowerCase() === brandSearch.toLowerCase()) && (
+                                                    <button
+                                                        type="button"
+                                                        className="w-full text-left px-4 py-2.5 text-sm text-blue-600 font-black hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-t border-border"
+                                                        onMouseDown={async () => {
+                                                            const res = await createBrand(brandSearch.trim());
+                                                            if (res.success && res.brand) {
+                                                                setBrands(prev => [...prev, res.brand]);
+                                                                const newSku = generateSKU(formData.category, formData.subcategoryId, res.brand.id, formData.name);
+                                                                setFormData(prev => ({ ...prev, brandId: res.brand.id, sku: newSku }));
+                                                                setBrandSearch(res.brand.name);
+                                                            } else {
+                                                                alert(res.error || 'Error al crear la marca');
+                                                            }
+                                                            setBrandOpen(false);
+                                                        }}
+                                                    >
+                                                        + Crear &ldquo;{brandSearch.trim()}&rdquo;
+                                                    </button>
+                                                )}
+                                                {brands.filter(b => b.name.toLowerCase().includes(brandSearch.toLowerCase())).length === 0 && !brandSearch.trim() && (
+                                                    <p className="px-4 py-3 text-xs text-gray-400">Escribe para buscar una marca</p>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="space-y-3">
+
+                                {/* Proveedor — Combobox */}
+                                <div className="space-y-3" ref={supplierRef}>
                                     <label className="text-xs font-black uppercase tracking-widest text-gray-400">Proveedor *</label>
-                                    <select
-                                        required
-                                        className="w-full px-5 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground"
-                                        value={formData.supplierId}
-                                        onChange={async (e) => {
-                                            if (e.target.value === '__NEW__') {
-                                                const name = window.prompt("Ingrese el nombre del nuevo proveedor:");
-                                                if (name?.trim()) {
-                                                    const res = await createSupplier(name);
-                                                    if (res.success && res.supplier) {
-                                                        setSuppliers([...suppliers, res.supplier]);
-                                                        setFormData(prev => ({ ...prev, supplierId: res.supplier.id }));
-                                                    } else {
-                                                        alert(res.error || "Error al crear el proveedor");
-                                                    }
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar o crear proveedor..."
+                                            className="w-full px-5 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground"
+                                            value={supplierSearch}
+                                            onChange={(e) => {
+                                                setSupplierSearch(e.target.value);
+                                                setSupplierOpen(true);
+                                                if (!e.target.value) setFormData(prev => ({ ...prev, supplierId: '' }));
+                                            }}
+                                            onFocus={() => setSupplierOpen(true)}
+                                            onBlur={() => setTimeout(() => setSupplierOpen(false), 150)}
+                                        />
+                                        {formData.supplierId && (
+                                            <span className="absolute right-3 top-3.5 text-blue-500 text-xs font-bold pointer-events-none">✓</span>
+                                        )}
+                                        {supplierOpen && (
+                                            <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                                                {suppliers
+                                                    .filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()))
+                                                    .map(sup => (
+                                                        <button
+                                                            key={sup.id}
+                                                            type="button"
+                                                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors font-medium text-foreground"
+                                                            onMouseDown={() => {
+                                                                setFormData(prev => ({ ...prev, supplierId: sup.id }));
+                                                                setSupplierSearch(sup.name);
+                                                                setSupplierOpen(false);
+                                                            }}
+                                                        >
+                                                            {sup.name}
+                                                        </button>
+                                                    ))
                                                 }
-                                            } else {
-                                                setFormData({ ...formData, supplierId: e.target.value });
-                                            }
-                                        }}
-                                    >
-                                        <option value="">Seleccionar Proveedor...</option>
-                                        <option value="__NEW__" className="font-bold text-blue-600">(+) Crear Nuevo Proveedor</option>
-                                        {suppliers.map(sup => (
-                                            <option key={sup.id} value={sup.id}>{sup.name}</option>
-                                        ))}
-                                    </select>
+                                                {supplierSearch.trim() && !suppliers.some(s => s.name.toLowerCase() === supplierSearch.toLowerCase()) && (
+                                                    <button
+                                                        type="button"
+                                                        className="w-full text-left px-4 py-2.5 text-sm text-blue-600 font-black hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-t border-border"
+                                                        onMouseDown={async () => {
+                                                            const res = await createSupplier(supplierSearch.trim());
+                                                            if (res.success && res.supplier) {
+                                                                setSuppliers(prev => [...prev, res.supplier]);
+                                                                setFormData(prev => ({ ...prev, supplierId: res.supplier.id }));
+                                                                setSupplierSearch(res.supplier.name);
+                                                            } else {
+                                                                alert(res.error || 'Error al crear el proveedor');
+                                                            }
+                                                            setSupplierOpen(false);
+                                                        }}
+                                                    >
+                                                        + Crear &ldquo;{supplierSearch.trim()}&rdquo;
+                                                    </button>
+                                                )}
+                                                {suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase())).length === 0 && !supplierSearch.trim() && (
+                                                    <p className="px-4 py-3 text-xs text-gray-400">Escribe para buscar un proveedor</p>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 

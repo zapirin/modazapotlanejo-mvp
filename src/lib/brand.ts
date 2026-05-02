@@ -130,6 +130,17 @@ interface DBBrandConfig {
     logoUrl?: string | null;
 }
 
+// Returns the canonical base URL for SEO.
+// Multi-vendor marketplaces consolidate to modazapotlanejo.com (primary domain).
+// Single-vendor stores keep their own canonical since they serve unique content.
+export function getCanonicalBase(host: string, brand: BrandConfig): string {
+    if (brand.isSingleVendor) {
+        const protocol = host.includes('localhost') ? 'http' : 'https';
+        return `${protocol}://${host}`;
+    }
+    return 'https://modazapotlanejo.com';
+}
+
 // Merge BD data into static brand config
 export function mergeBrandWithDB(base: BrandConfig, dbBrand: DBBrandConfig | null | undefined): BrandConfig {
     if (!dbBrand) return base;

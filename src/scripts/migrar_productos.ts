@@ -116,7 +116,7 @@ async function main() {
             // ¡FILTRO ESTRICTO DE STOCK PARA LA TALLA! (> 0)
             if (master && stock > 0) {
                 const variationStr = item['Variación'] || item['Nombre'];
-                let parsedSize = variationStr ? String(variationStr).replace(/talla/i, '').replace(':', '').trim() : "Única";
+                const parsedSize = variationStr ? String(variationStr).replace(/talla/i, '').replace(':', '').trim() : "Única";
                 
                 master._sizesSet.add(parsedSize);
                 master._totalStock += stock;
@@ -176,6 +176,13 @@ async function main() {
     }
 
     console.log("Desalojando datos transaccionales para evitar errores de integridad (Limpieza Total de Migración)...");
+    
+    // SAFEGUARD: Only run destructive operations if confirmed via environment variable
+    if (process.env.CONFIRM_DELETE_ALL_DATA !== "true") {
+        console.error("\x1b[31m%s\x1b[0m", "ERROR: Operaciones destructivas bloqueadas.");
+        console.error("Para ejecutar la limpieza total, establece la variable de entorno: CONFIRM_DELETE_ALL_DATA=true");
+        return;
+    }
     
     // El orden importa para evitar errores de FK
     await prisma.orderItem.deleteMany({});

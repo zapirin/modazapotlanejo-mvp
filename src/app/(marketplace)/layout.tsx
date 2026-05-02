@@ -4,7 +4,7 @@ import Providers from './Providers';
 import Image from 'next/image';
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { getBrandConfig } from '@/lib/brand';
+import { getBrandConfig, getCanonicalBase } from '@/lib/brand';
 import { getMarketplaceSettings } from '@/app/actions/marketplace';
 import { unstable_noStore as noStore } from 'next/cache';
 import type { Metadata } from 'next';
@@ -77,7 +77,7 @@ export async function generateMetadata(): Promise<Metadata> {
             images: [`${baseUrl}${brand.logo.url}`],
         },
         alternates: {
-            canonical: baseUrl,
+            canonical: getCanonicalBase(host, brand),
         },
     };
 }
@@ -121,7 +121,37 @@ export default async function MarketplaceLayout({
             <main className="pt-28">
                 {children}
             </main>
-            <footer className="bg-gray-50 dark:bg-gray-900 border-t border-border py-12 mt-20">
+            
+            {/* Global Trust Banner */}
+            <div className="bg-white dark:bg-card border-t border-border py-10 mt-12">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div className="flex flex-col items-center text-center space-y-3">
+                            <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 flex items-center justify-center mb-1">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                            </div>
+                            <h3 className="font-black text-foreground text-sm uppercase tracking-wider">Compra Protegida con {brand.name}</h3>
+                            <p className="text-sm text-gray-500 font-medium">Si pagas con tarjeta, retenemos el dinero hasta que recibas lo que esperabas.</p>
+                        </div>
+                        <div className="flex flex-col items-center text-center space-y-3 md:border-l md:border-border">
+                            <div className="w-12 h-12 rounded-full bg-green-50 dark:bg-green-900/20 text-green-600 flex items-center justify-center mb-1">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>
+                            </div>
+                            <h3 className="font-black text-foreground text-sm uppercase tracking-wider">Vendedores Verificados</h3>
+                            <p className="text-sm text-gray-500 font-medium">Revisamos estrictamente a cada fabricante para garantizar tu tranquilidad.</p>
+                        </div>
+                        <div className="flex flex-col items-center text-center space-y-3 md:border-l md:border-border">
+                            <div className="w-12 h-12 rounded-full bg-purple-50 dark:bg-purple-900/20 text-purple-600 flex items-center justify-center mb-1">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                            </div>
+                            <h3 className="font-black text-foreground text-sm uppercase tracking-wider">Pagos 100% Seguros</h3>
+                            <p className="text-sm text-gray-500 font-medium">Tus datos bancarios están encriptados y nunca son compartidos con el vendedor.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <footer className="bg-gray-50 dark:bg-gray-900 border-t border-border py-12">
                 <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-10">
                     <div className="space-y-4">
                         <div className="flex items-center gap-2">

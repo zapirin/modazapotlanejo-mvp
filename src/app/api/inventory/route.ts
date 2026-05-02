@@ -43,10 +43,15 @@ export async function GET(request: NextRequest) {
             const products = await (prisma.product as any).findMany({
                 where,
                 include: {
-                    variants: { include: { inventoryLevels: true } },
+                    variants: {
+                        include: {
+                            inventoryLevels: { include: { location: { select: { id: true, name: true } } } }
+                        }
+                    },
                     category: true,
                     subcategory: true,
                     brand: true,
+                    supplier: true,
                 },
                 orderBy: { createdAt: 'desc' }
             });
@@ -58,10 +63,15 @@ export async function GET(request: NextRequest) {
             (prisma.product as any).findMany({
                 where,
                 include: {
-                    variants: { include: { inventoryLevels: true } },
+                    variants: {
+                        include: {
+                            inventoryLevels: { include: { location: { select: { id: true, name: true } } } }
+                        }
+                    },
                     category: true,
                     subcategory: true,
                     brand: true,
+                    supplier: true,
                 },
                 orderBy: { createdAt: 'desc' },
                 skip,

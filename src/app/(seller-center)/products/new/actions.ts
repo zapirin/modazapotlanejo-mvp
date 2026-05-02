@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from '@/generated/client';
 import { getSessionUser } from '@/app/actions/auth';
 import { sendLowInventoryAlert } from "@/lib/email/templates";
+import { earnPoints, redeemPoints, pointsToMXN, getProgram } from "@/lib/loyalty";
 
 // ---------------------------------------------------------------------------
 // HELPER: Resolver el sellerId efectivo para cajeros
@@ -651,6 +652,7 @@ export async function processSale(data: {
     soldByUserId?: string | null;
     soldBySalespersonId?: string | null;
     partialPayments?: { method: string; amount: number }[] | null;
+    loyaltyRedeemPoints?: number;
 }) {
     try {
         const user = await getSessionUser();
@@ -712,11 +714,22 @@ export async function processSale(data: {
             if (data.isReturn) finalStatus = "REFUNDED";
             else if (isStoreCredit) finalStatus = "STORE_CREDIT";
 
+            // Loyalty discount calculation (POS: only for posClient registered by cashier)
+            let loyaltyDiscount = 0;
+            const requestedRedeemPoints = Math.floor(data.loyaltyRedeemPoints || 0);
+            if (requestedRedeemPoints > 0 && data.clientId && ownerId) {
+                const program = await getProgram(ownerId);
+                if (program?.isActive) {
+                    loyaltyDiscount = pointsToMXN(requestedRedeemPoints, program.redeemRate);
+                }
+            }
+
             const createdSale = await tx.sale.create({
                 data: {
                     total: data.total,
                     subtotal: data.subtotal,
                     discount: data.discount,
+                    loyaltyDiscount,
                     paymentMethodId: paymentMethodId,
                     clientId: data.clientId || null,
                     buyerId: matchedBuyerId,
@@ -783,6 +796,35 @@ export async function processSale(data: {
                 where: { id: createdSale.id }
             });
         });
+
+        // Loyalty: solo para clientes POS (Client model) registrados por el cajero, y no en devoluciones
+        const requestedRedeemPoints = Math.floor(data.loyaltyRedeemPoints || 0);
+        if (sale && data.clientId && ownerId && !data.isReturn) {
+            if (requestedRedeemPoints > 0) {
+                try {
+                    await redeemPoints({
+                        sellerId: ownerId,
+                        customer: { posClientId: data.clientId },
+                        points: requestedRedeemPoints,
+                        saleId: sale.id,
+                    });
+                } catch (e) {
+                    console.error("POS loyalty redeem failed:", e);
+                }
+            }
+            if (sale.total > 0) {
+                try {
+                    await earnPoints({
+                        sellerId: ownerId,
+                        customer: { posClientId: data.clientId },
+                        amountMXN: sale.total,
+                        saleId: sale.id,
+                    });
+                } catch (e) {
+                    console.error("POS loyalty earn failed:", e);
+                }
+            }
+        }
 
         revalidatePath("/pos");
         revalidatePath("/inventory");

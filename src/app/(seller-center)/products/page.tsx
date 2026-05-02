@@ -2,6 +2,8 @@ import React from 'react';
 import { getInventory, getCategories, getBrands, getSuppliers } from './new/actions';
 import ProductsGridClient from './ProductsGridClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ProductsPage({ searchParams = {} }: { searchParams?: any }) {
     const [products, categories, brands, suppliers] = await Promise.all([
         getInventory(),

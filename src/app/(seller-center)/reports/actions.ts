@@ -12,6 +12,7 @@ export interface ReportDateRange {
 export async function getSalesReports({ startDate, endDate, locationId }: ReportDateRange & { locationId?: string }) {
     try {
         const user = await getSessionUser();
+        if (user?.role === 'ADMIN') return { success: false, error: 'No autorizado.' };
 
         // Build seller/location isolation filter
         let sellerFilter: any = {};
@@ -67,6 +68,7 @@ export async function getSalesReports({ startDate, endDate, locationId }: Report
         // Maps to aggregate data
         const productMap = new Map<string, { id: string, name: string, quantity: number, revenue: number, image: string }>();
         const supplierMap = new Map<string, { id: string, name: string, quantity: number, revenue: number }>();
+        const supplierProductsMap = new Map<string, Map<string, { id: string, name: string, quantity: number, revenue: number, image: string }>>();
 
         // 3. Process each sale and its items
         sales.forEach((sale: any) => {
@@ -110,6 +112,25 @@ export async function getSalesReports({ startDate, endDate, locationId }: Report
                             revenue: lineRevenue
                         });
                     }
+
+                    // Aggregate products grouped by Supplier
+                    if (!supplierProductsMap.has(supplierId)) {
+                        supplierProductsMap.set(supplierId, new Map());
+                    }
+                    const prodMap = supplierProductsMap.get(supplierId)!;
+                    if (prodMap.has(product.id)) {
+                        const ep = prodMap.get(product.id)!;
+                        ep.quantity += item.quantity;
+                        ep.revenue += lineRevenue;
+                    } else {
+                        prodMap.set(product.id, {
+                            id: product.id,
+                            name: product.name,
+                            quantity: item.quantity,
+                            revenue: lineRevenue,
+                            image: product.images?.[0] || ''
+                        });
+                    }
                 }
             });
         });
@@ -118,7 +139,13 @@ export async function getSalesReports({ startDate, endDate, locationId }: Report
 
         // 4. Sort Rankings (Descending order by Revenue)
         const topProducts = Array.from(productMap.values()).sort((a, b) => b.revenue - a.revenue);
-        const topSuppliers = Array.from(supplierMap.values()).sort((a, b) => b.revenue - a.revenue);
+        const topSuppliers = Array.from(supplierMap.values())
+            .map(s => ({
+                ...s,
+                products: Array.from(supplierProductsMap.get(s.id)?.values() ?? [])
+                    .sort((a, b) => b.revenue - a.revenue)
+            }))
+            .sort((a, b) => b.revenue - a.revenue);
 
         return {
             success: true,
@@ -142,6 +169,7 @@ export async function getSalesReports({ startDate, endDate, locationId }: Report
 export async function getZCutsReport({ startDate, endDate, locationId }: ReportDateRange & { locationId?: string }) {
     try {
         const user = await getSessionUser();
+        if (user?.role === 'ADMIN') return { success: false, error: 'No autorizado.' };
 
         let locationFilter: any = {};
         if (user?.role === 'SELLER') {
@@ -171,9 +199,14 @@ export async function getZCutsReport({ startDate, endDate, locationId }: ReportD
                 openedBy: { select: { id: true, name: true } },
                 sales: {
                     where: { status: 'COMPLETED' },
-                    include: { paymentMethod: { select: { id: true, name: true } } }
+                    include: {
+                        paymentMethod: { select: { id: true, name: true } },
+                        client: { select: { name: true } },
+                        soldBy: { select: { name: true } },
+                    },
+                    orderBy: { createdAt: 'asc' },
                 },
-                movements: true,
+                movements: { orderBy: { createdAt: 'asc' } },
             },
             orderBy: { closedAt: 'desc' },
         });
@@ -182,12 +215,20 @@ export async function getZCutsReport({ startDate, endDate, locationId }: ReportD
             const totalSales = session.sales.reduce((sum, s) => sum + s.total, 0);
             const totalTickets = session.sales.length;
 
-            const byPayment: Record<string, { name: string; amount: number; count: number }> = {};
-            session.sales.forEach(sale => {
+            const byPayment: Record<string, { name: string; amount: number; count: number; tickets: any[] }> = {};
+            session.sales.forEach((sale: any) => {
                 const pmName = sale.paymentMethod?.name || 'Sin método';
-                if (!byPayment[pmName]) byPayment[pmName] = { name: pmName, amount: 0, count: 0 };
+                if (!byPayment[pmName]) byPayment[pmName] = { name: pmName, amount: 0, count: 0, tickets: [] };
                 byPayment[pmName].amount += sale.total;
                 byPayment[pmName].count++;
+                byPayment[pmName].tickets.push({
+                    id: sale.id,
+                    receiptNumber: sale.receiptNumber,
+                    total: sale.total,
+                    createdAt: sale.createdAt,
+                    clientName: sale.client?.name || null,
+                    soldByName: sale.soldBy?.name || null,
+                });
             });
 
             const totalIn  = session.movements.filter(m => m.type === 'IN').reduce((sum, m) => sum + m.amount, 0);
@@ -216,6 +257,13 @@ export async function getZCutsReport({ startDate, endDate, locationId }: ReportD
                 expectedBalance,
                 difference,
                 salesByPayment: Object.values(byPayment),
+                movements: session.movements.map((m: any) => ({
+                    id: m.id,
+                    type: m.type,
+                    amount: m.amount,
+                    reason: m.reason,
+                    createdAt: m.createdAt,
+                })),
             };
         });
 
@@ -357,10 +405,14 @@ export async function getCommissionReport({ startDate, endDate, locationId }: {
 export async function getReportPermissions() {
     try {
         const user = await getSessionUser();
-        if (!user) return { role: null, canViewReports: false, canViewCommissions: false, canViewZCuts: false, isCashier: false, sessionStartedAt: null as Date | null };
+        if (!user) return { role: null, canViewReports: false, canViewCommissions: false, canViewZCuts: false, canViewProfit: false, canViewTransfers: false, isCashier: false, sessionStartedAt: null as Date | null };
 
-        if (user.role === 'SELLER' || user.role === 'ADMIN') {
-            return { role: user.role, canViewReports: true, canViewCommissions: true, canViewZCuts: true, isCashier: false, sessionStartedAt: null as Date | null };
+        if (user.role === 'SELLER') {
+            return { role: 'SELLER', canViewReports: true, canViewCommissions: true, canViewZCuts: true, canViewProfit: true, canViewTransfers: true, isCashier: false, sessionStartedAt: null as Date | null };
+        }
+
+        if (user.role === 'ADMIN') {
+            return { role: 'ADMIN', canViewReports: false, canViewCommissions: true, canViewZCuts: false, canViewProfit: false, canViewTransfers: false, isCashier: false, sessionStartedAt: null as Date | null };
         }
 
         if (user.role === 'CASHIER') {
@@ -387,12 +439,244 @@ export async function getReportPermissions() {
                 canViewReports: cashier?.canViewReports ?? false,
                 canViewCommissions: cashier?.canViewCommissions ?? false,
                 canViewZCuts: cashier?.canViewZCuts ?? false,
+                canViewProfit: false,
+                canViewTransfers: false,
                 sessionStartedAt,
             };
         }
 
-        return { role: user.role, canViewReports: false, canViewCommissions: false, canViewZCuts: false, isCashier: false, sessionStartedAt: null as Date | null };
+        return { role: user.role, canViewReports: false, canViewCommissions: false, canViewZCuts: false, canViewProfit: false, canViewTransfers: false, isCashier: false, sessionStartedAt: null as Date | null };
     } catch {
-        return { role: null, canViewReports: false, canViewCommissions: false, canViewZCuts: false, isCashier: false, sessionStartedAt: null as Date | null };
+        return { role: null, canViewReports: false, canViewCommissions: false, canViewZCuts: false, canViewProfit: false, canViewTransfers: false, isCashier: false, sessionStartedAt: null as Date | null };
+    }
+}
+
+// ─── Reporte de Ganancia ────────────────────────────────────────────────────
+export async function getProfitReport({ startDate, endDate, locationId }: ReportDateRange & { locationId?: string }) {
+    try {
+        const user = await getSessionUser();
+        if (!user || user.role !== 'SELLER') {
+            return { success: false, error: 'No autorizado.' };
+        }
+
+        const sellerFilter: any = { sellerId: user.id };
+        if (locationId) sellerFilter.locationId = locationId;
+
+        const sales = await prisma.sale.findMany({
+            where: {
+                ...sellerFilter,
+                createdAt: { gte: startDate, lte: endDate },
+                status: 'COMPLETED',
+            },
+            include: {
+                items: {
+                    include: {
+                        variant: { include: { product: true } }
+                    }
+                }
+            }
+        });
+
+        let totalRevenue = 0;
+        let totalCost = 0;
+        let totalUnits = 0;
+        let excludedUnits = 0;
+        const excludedProductIds = new Set<string>();
+        const productMap = new Map<string, { id: string; name: string; image: string; quantity: number; revenue: number; cost: number; profit: number }>();
+
+        sales.forEach((sale: any) => {
+            sale.items.forEach((item: any) => {
+                const product = item.variant?.product;
+                if (!product) return;
+
+                if (product.cost == null) {
+                    excludedUnits += item.quantity;
+                    excludedProductIds.add(product.id);
+                    return;
+                }
+
+                const lineRevenue = item.quantity * item.price;
+                const lineCost = item.quantity * product.cost;
+                const lineProfit = lineRevenue - lineCost;
+
+                totalRevenue += lineRevenue;
+                totalCost += lineCost;
+                totalUnits += item.quantity;
+
+                if (productMap.has(product.id)) {
+                    const ep = productMap.get(product.id)!;
+                    ep.quantity += item.quantity;
+                    ep.revenue += lineRevenue;
+                    ep.cost += lineCost;
+                    ep.profit += lineProfit;
+                } else {
+                    productMap.set(product.id, {
+                        id: product.id,
+                        name: product.name,
+                        image: product.images?.[0] || '',
+                        quantity: item.quantity,
+                        revenue: lineRevenue,
+                        cost: lineCost,
+                        profit: lineProfit,
+                    });
+                }
+            });
+        });
+
+        const totalProfit = totalRevenue - totalCost;
+        const marginPct = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+        const topProducts = Array.from(productMap.values()).sort((a, b) => b.profit - a.profit);
+
+        return {
+            success: true,
+            kpis: {
+                totalProfit,
+                totalCost,
+                totalRevenue,
+                marginPct,
+                totalUnits,
+                excludedUnits,
+                excludedProducts: excludedProductIds.size,
+            },
+            topProducts,
+        };
+    } catch (error: any) {
+        console.error('Error generating profit report:', error);
+        return { success: false, error: 'No se pudo generar el reporte de ganancia.' };
+    }
+}
+
+// ─── Reporte de Comisiones del Marketplace (solo ADMIN) ─────────────────────
+const OFFLINE_PAYMENT_KEYWORDS = ['transferencia', 'efectivo', 'depósito', 'deposito', 'transfer', 'cash'];
+function isOfflinePayment(pm?: string | null): boolean {
+    if (!pm) return false;
+    const lower = pm.toLowerCase();
+    return OFFLINE_PAYMENT_KEYWORDS.some(k => lower.includes(k));
+}
+
+export async function getMarketplaceCommissionReport({ startDate, endDate }: ReportDateRange) {
+    try {
+        const user = await getSessionUser();
+        if (!user || user.role !== 'ADMIN') {
+            return { success: false, error: 'No autorizado.' };
+        }
+
+        const orders = await prisma.order.findMany({
+            where: {
+                status: 'COMPLETED',
+                createdAt: { gte: startDate, lte: endDate },
+            },
+            select: {
+                sellerId: true,
+                total: true,
+                commissionAmount: true,
+                paymentMethod: true,
+                seller: {
+                    select: {
+                        id: true,
+                        name: true,
+                        businessName: true,
+                        planName: true,
+                        commission: true,
+                        fixedFee: true,
+                    },
+                },
+            },
+        });
+
+        const sellerMap = new Map<string, any>();
+
+        orders.forEach((o: any) => {
+            if (!o.seller) return;
+            const offline = isOfflinePayment(o.paymentMethod);
+            const commission = o.commissionAmount || 0;
+
+            if (!sellerMap.has(o.sellerId)) {
+                sellerMap.set(o.sellerId, {
+                    sellerId: o.sellerId,
+                    name: o.seller.name,
+                    businessName: o.seller.businessName,
+                    planName: o.seller.planName,
+                    commissionPct: o.seller.commission ?? 5,
+                    monthlyFee: o.seller.fixedFee ?? 0,
+                    ordersCount: 0,
+                    totalSales: 0,
+                    commissionRetained: 0,
+                    commissionPending: 0,
+                    commissionTotal: 0,
+                });
+            }
+            const row = sellerMap.get(o.sellerId);
+            row.ordersCount += 1;
+            row.totalSales += o.total;
+            row.commissionTotal += commission;
+            if (offline) row.commissionPending += commission;
+            else row.commissionRetained += commission;
+        });
+
+        const rows = Array.from(sellerMap.values())
+            .sort((a, b) => b.commissionTotal - a.commissionTotal);
+
+        const totals = rows.reduce(
+            (acc, r) => ({
+                ordersCountAll: acc.ordersCountAll + r.ordersCount,
+                totalSalesAll: acc.totalSalesAll + r.totalSales,
+                commissionTotalAll: acc.commissionTotalAll + r.commissionTotal,
+                commissionRetainedAll: acc.commissionRetainedAll + r.commissionRetained,
+                commissionPendingAll: acc.commissionPendingAll + r.commissionPending,
+            }),
+            { ordersCountAll: 0, totalSalesAll: 0, commissionTotalAll: 0, commissionRetainedAll: 0, commissionPendingAll: 0 }
+        );
+
+        return { success: true, rows, totals };
+    } catch (error: any) {
+        console.error('Error generating marketplace commission report:', error);
+        return { success: false, error: 'No se pudo generar el reporte de comisiones del marketplace.' };
+    }
+}
+
+// ─── Reporte de Traspasos (solo SELLER) ─────────────────────────────────────
+export async function getTransfersReport({ startDate, endDate, locationId }: ReportDateRange & { locationId?: string }) {
+    try {
+        const user = await getSessionUser();
+        if (!user || user.role !== 'SELLER') {
+            return { success: false, error: 'No autorizado.' };
+        }
+
+        const where: any = {
+            sellerId: user.id,
+            createdAt: { gte: startDate, lte: endDate },
+        };
+        if (locationId) {
+            where.OR = [
+                { sourceLocationId: locationId },
+                { destLocationId: locationId },
+            ];
+        }
+
+        const transfers = await (prisma as any).stockTransfer.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            include: {
+                sourceLocation: { select: { id: true, name: true } },
+                destLocation: { select: { id: true, name: true } },
+                user: { select: { id: true, name: true } },
+            },
+        });
+
+        const rows = transfers.map((t: any) => ({
+            id: t.id,
+            folio: t.folio,
+            createdAt: t.createdAt,
+            sourceLocationName: t.sourceLocation?.name || '—',
+            destLocationName: t.destLocation?.name || '—',
+            userName: t.user?.name || '—',
+            totalItems: t.totalItems,
+        }));
+
+        return { success: true, rows };
+    } catch (error: any) {
+        console.error('Error generating transfers report:', error);
+        return { success: false, error: 'No se pudo generar el reporte de traspasos.' };
     }
 }

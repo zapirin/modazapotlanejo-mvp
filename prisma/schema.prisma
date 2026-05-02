@@ -10,26 +10,26 @@ datasource db {
 }
 
 model StoreSettings {
-  id        String   @id @default(cuid())
-  storeName String   @default("Mi Punto de Venta")
-  logoUrl   String?
-  taxId     String?
-  legalName String?
-  address     String?
-  phone       String?
-  shippingZip String?
-  aiProvider  String?
-  aiApiKey    String?
+  id                    String   @id @default(cuid())
+  storeName             String   @default("Mi Punto de Venta")
+  logoUrl               String?
+  taxId                 String?
+  legalName             String?
+  address               String?
+  phone                 String?
+  shippingZip           String?
+  aiProvider            String?
+  aiApiKey              String?
   acceptsTransfer       Boolean  @default(false)
   transferBank          String?
   transferAccountHolder String?
   transferCLABE         String?
   transferAccountNumber String?
   transferInstructions  String?
-  createdAt   DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  sellerId  String?  @unique
-  seller    User?    @relation("UserStoreSettings", fields: [sellerId], references: [id])
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  sellerId              String?  @unique
+  seller                User?    @relation("UserStoreSettings", fields: [sellerId], references: [id])
 }
 
 model MarketplaceSettings {
@@ -46,6 +46,7 @@ model MarketplaceSettings {
   privacyUrl         String?
   termsUrl           String?
   photographyPrices  Json?
+  photographyEnabled Boolean  @default(true)
   brandColors        Json?
   showPricesPublicly Boolean  @default(true)
   updatedAt          DateTime @updatedAt
@@ -119,83 +120,92 @@ model StoreLocation {
   sales                Sale[]
   seller               User?                 @relation("SellerLocations", fields: [sellerId], references: [id])
   users                User[]
+  transfersOut         StockTransfer[]       @relation("TransferSource")
+  transfersIn          StockTransfer[]       @relation("TransferDest")
 }
 
 model User {
-  id                  String                 @id @default(cuid())
-  email               String
-  passwordHash        String?
-  name                String
-  role                Role                   @default(CASHIER)
-  createdAt           DateTime               @default(now())
-  updatedAt           DateTime               @updatedAt
-  isWholesale         Boolean                @default(false)
-  businessName        String?
-  sellerSlug          String?                @unique
-  taxId               String?
-  commission          Float?                 @default(5)
-  fixedFee            Float?                 @default(0)
-  stripeAccountId     String?
-  stripeConnectStatus String?
-  isActive            Boolean                @default(true)
-  adminNotes          String?
-  phone               String?
-  whatsapp            String?
-  minOrderAmount      Float?
-  logoUrl             String?
-  posEnabled          Boolean                @default(true)
-  canOpenDrawer       Boolean?
-  maxProducts         Int?
-  posRequested        Boolean                @default(false)
-  planName            String                 @default("Básico")
-  maxLocations        Int                    @default(1)
-  maxCashiers         Int                    @default(1)
-  managedBySellerId   String?
-  allowedLocationIds  String[]
-  canRefund           Boolean                @default(true)
-  canDiscount         Boolean                @default(true)
-  canViewReports      Boolean                @default(false)
-  canViewCommissions  Boolean                @default(false)
-  canViewZCuts        Boolean                @default(false)
-  canCreateProducts   Boolean                @default(false)
-  requireCashSession          Boolean                @default(false)
-  requireSalesperson          Boolean                @default(false)
-  cashierCanDeleteSuspended   Boolean                @default(true)
-  locationId          String?
-  resetToken          String?                @unique
-  resetTokenExpiry    DateTime?
-  registeredDomain    String?
-  ownedBrands         Brand[]
-  sessions            CashRegisterSession[]
-  clients             Client[]
-  denominations       CurrencyDenomination[] @relation("SellerDenominations")
-  receivedMessages    Message[]              @relation("ReceivedMessages")
-  sentMessages        Message[]              @relation("SentMessages")
-  buyerOrders         Order[]                @relation("BuyerOrders")
-  sellerOrders        Order[]                @relation("SellerOrders")
-  paymentMethods      PaymentMethod[]
-  photographyRequests PhotographyRequest[]
-  posPeripherals      PosPeripheral[]
-  priceTiers          PriceTier[]
-  ownedProducts       Product[]
-  buyerSales          Sale[]                 @relation("BuyerSales")
-  soldBySales         Sale[]                 @relation("SoldBySales")
-  sales               Sale[]
-  buyerReviews        SellerReview[]         @relation("BuyerReviews")
-  sellerReviews       SellerReview[]         @relation("SellerReviews")
-  sellerSettlements   Settlement[]           @relation("SellerSettlements")
-  shippingAddresses   ShippingAddress[]
-  ownedLocations      StoreLocation[]        @relation("SellerLocations")
-  storeSettings       StoreSettings?         @relation("UserStoreSettings")
-  suppliers           Supplier[]
-  tags                Tag[]
-  location            StoreLocation?         @relation(fields: [locationId], references: [id])
-  managedBySeller     User?                  @relation("SellerCashiers", fields: [managedBySellerId], references: [id])
-  cashiers            User[]                 @relation("SellerCashiers")
-  coupons             DiscountCoupon[]       @relation("SellerCoupons")
-  couponUsages        CouponUsage[]          @relation("BuyerCouponUsages")
-  wishlistItems       Wishlist[]
-  floorSalespeople    Salesperson[]          @relation("SellerFloorSalespeople")
+  id                        String                 @id @default(cuid())
+  email                     String
+  passwordHash              String?
+  name                      String
+  role                      Role                   @default(CASHIER)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  isWholesale               Boolean                @default(false)
+  businessName              String?
+  sellerSlug                String?                @unique
+  taxId                     String?
+  commission                Float?                 @default(5)
+  fixedFee                  Float?                 @default(0)
+  stripeAccountId           String?
+  stripeConnectStatus       String?
+  isActive                  Boolean                @default(true)
+  adminNotes                String?
+  phone                     String?
+  whatsapp                  String?
+  minOrderAmount            Float?
+  logoUrl                   String?
+  posEnabled                Boolean                @default(true)
+  canOpenDrawer             Boolean?
+  maxProducts               Int?
+  posRequested              Boolean                @default(false)
+  planName                  String                 @default("Básico")
+  subscriptionStartedAt     DateTime?
+  lastPaidAt                DateTime?
+  maxLocations              Int                    @default(1)
+  maxCashiers               Int                    @default(1)
+  managedBySellerId         String?
+  allowedLocationIds        String[]
+  canRefund                 Boolean                @default(true)
+  canDiscount               Boolean                @default(true)
+  canViewReports            Boolean                @default(false)
+  canViewCommissions        Boolean                @default(false)
+  canViewZCuts              Boolean                @default(false)
+  canCreateProducts         Boolean                @default(false)
+  requireCashSession        Boolean                @default(false)
+  requireSalesperson        Boolean                @default(false)
+  cashierCanDeleteSuspended Boolean                @default(true)
+  locationId                String?
+  resetToken                String?                @unique
+  resetTokenExpiry          DateTime?
+  registeredDomain          String?
+  ownedBrands               Brand[]
+  sessions                  CashRegisterSession[]
+  clients                   Client[]
+  denominations             CurrencyDenomination[] @relation("SellerDenominations")
+  receivedMessages          Message[]              @relation("ReceivedMessages")
+  sentMessages              Message[]              @relation("SentMessages")
+  buyerOrders               Order[]                @relation("BuyerOrders")
+  sellerOrders              Order[]                @relation("SellerOrders")
+  paymentMethods            PaymentMethod[]
+  photographyRequests       PhotographyRequest[]
+  posPeripherals            PosPeripheral[]
+  priceTiers                PriceTier[]
+  ownedProducts             Product[]
+  buyerSales                Sale[]                 @relation("BuyerSales")
+  soldBySales               Sale[]                 @relation("SoldBySales")
+  sales                     Sale[]
+  buyerReviews              SellerReview[]         @relation("BuyerReviews")
+  sellerReviews             SellerReview[]         @relation("SellerReviews")
+  sellerSettlements         Settlement[]           @relation("SellerSettlements")
+  shippingAddresses         ShippingAddress[]
+  ownedLocations            StoreLocation[]        @relation("SellerLocations")
+  storeSettings             StoreSettings?         @relation("UserStoreSettings")
+  suppliers                 Supplier[]
+  tags                      Tag[]
+  location                  StoreLocation?         @relation(fields: [locationId], references: [id])
+  managedBySeller           User?                  @relation("SellerCashiers", fields: [managedBySellerId], references: [id])
+  cashiers                  User[]                 @relation("SellerCashiers")
+  coupons                   DiscountCoupon[]       @relation("SellerCoupons")
+  couponUsages              CouponUsage[]          @relation("BuyerCouponUsages")
+  wishlistItems             Wishlist[]
+  floorSalespeople          Salesperson[]          @relation("SellerFloorSalespeople")
+  loyaltyProgram            LoyaltyProgram?        @relation("SellerLoyaltyProgram")
+  sellerLoyaltyAccounts     LoyaltyAccount[]       @relation("SellerLoyaltyAccounts")
+  buyerLoyaltyAccounts      LoyaltyAccount[]       @relation("BuyerLoyaltyAccounts")
+  stockTransfers            StockTransfer[]        @relation("SellerStockTransfers")
+  stockTransfersMade        StockTransfer[]        @relation("UserStockTransfers")
 
   @@unique([email, registeredDomain])
 }
@@ -284,6 +294,7 @@ model Variant {
   saleItems          SaleItem[]
   product            Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
   wishlistItems      Wishlist[]
+  transferItems      StockTransferItem[]
 
   @@index([productId])
 }
@@ -353,6 +364,7 @@ model Client {
   seller               User?                 @relation(fields: [sellerId], references: [id])
   sales                Sale[]
   storeAccountPayments StoreAccountPayment[]
+  loyaltyAccounts      LoyaltyAccount[]
 }
 
 model PriceTier {
@@ -419,38 +431,39 @@ model CashMovement {
 }
 
 model Sale {
-  id                    String               @id @default(cuid())
-  receiptNumber         Int                  @default(autoincrement())
-  total                 Float
-  subtotal              Float                @default(0)
-  discount              Float                @default(0)
-  clientId              String?
-  priceTierId           String?
-  paymentMethodId       String?
-  cashSessionId         String?
-  locationId            String?
-  sellerId              String?
-  buyerId               String?
-  soldByUserId          String?
-  soldBySalespersonId   String?
-  status                String               @default("COMPLETED")
-  amountPaid            Float                @default(0)
-  balance               Float                @default(0)
-  dueDate               DateTime?
-  notes                 String?
-  paymentSplit          String?
-  createdAt             DateTime             @default(now())
-  layawayPayments       LayawayPayment[]
-  buyer                 User?                @relation("BuyerSales", fields: [buyerId], references: [id])
-  cashSession           CashRegisterSession? @relation(fields: [cashSessionId], references: [id])
-  client                Client?              @relation(fields: [clientId], references: [id])
-  location              StoreLocation?       @relation(fields: [locationId], references: [id])
-  paymentMethod         PaymentMethod?       @relation(fields: [paymentMethodId], references: [id])
-  priceTier             PriceTier?           @relation(fields: [priceTierId], references: [id])
-  seller                User?                @relation(fields: [sellerId], references: [id])
-  soldBy                User?                @relation("SoldBySales", fields: [soldByUserId], references: [id])
-  salesperson           Salesperson?         @relation(fields: [soldBySalespersonId], references: [id])
-  items                 SaleItem[]
+  id                  String               @id @default(cuid())
+  receiptNumber       Int                  @default(autoincrement())
+  total               Float
+  subtotal            Float                @default(0)
+  discount            Float                @default(0)
+  clientId            String?
+  priceTierId         String?
+  paymentMethodId     String?
+  cashSessionId       String?
+  locationId          String?
+  sellerId            String?
+  buyerId             String?
+  soldByUserId        String?
+  soldBySalespersonId String?
+  status              String               @default("COMPLETED")
+  amountPaid          Float                @default(0)
+  balance             Float                @default(0)
+  dueDate             DateTime?
+  notes               String?
+  paymentSplit        String?
+  loyaltyDiscount     Float                @default(0)
+  createdAt           DateTime             @default(now())
+  layawayPayments     LayawayPayment[]
+  buyer               User?                @relation("BuyerSales", fields: [buyerId], references: [id])
+  cashSession         CashRegisterSession? @relation(fields: [cashSessionId], references: [id])
+  client              Client?              @relation(fields: [clientId], references: [id])
+  location            StoreLocation?       @relation(fields: [locationId], references: [id])
+  paymentMethod       PaymentMethod?       @relation(fields: [paymentMethodId], references: [id])
+  priceTier           PriceTier?           @relation(fields: [priceTierId], references: [id])
+  seller              User?                @relation(fields: [sellerId], references: [id])
+  soldBy              User?                @relation("SoldBySales", fields: [soldByUserId], references: [id])
+  salesperson         Salesperson?         @relation(fields: [soldBySalespersonId], references: [id])
+  items               SaleItem[]
 }
 
 model Salesperson {
@@ -534,42 +547,43 @@ model SellerApplication {
 }
 
 model Order {
-  id                  String           @id @default(cuid())
-  orderNumber         Int              @default(autoincrement())
-  buyerId             String
-  sellerId            String
-  status              String           @default("PENDING")
-  total               Float
-  discount            Float            @default(0)
-  notes               String?
-  sellerNotes         String?
-  paymentMethod       String?
-  priceTierId         String?
-  shippingAddressId   String?
-  shippingCost        Float            @default(0)
-  skydropxRateId      String?
-  skydropxQuotationId String?
-  shippingCarrier     String?
-  shippingServiceName String?
-  sourceDomain        String?
-  commissionRate          Float            @default(0)
-  commissionAmount        Float            @default(0)
-  sellerEarnings          Float            @default(0)
-  isSettled               Boolean          @default(false)
-  stripePaymentIntentId   String?
-  paymentReleasedAt       DateTime?
-  refundedAt              DateTime?
-  settlementId        String?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  buyer               User             @relation("BuyerOrders", fields: [buyerId], references: [id])
-  priceTier           PriceTier?       @relation(fields: [priceTierId], references: [id])
-  seller              User             @relation("SellerOrders", fields: [sellerId], references: [id])
-  settlement          Settlement?      @relation(fields: [settlementId], references: [id])
-  shippingAddress     ShippingAddress? @relation(fields: [shippingAddressId], references: [id])
-  items               OrderItem[]
-  review              SellerReview?
-  shipment            Shipment?
+  id                    String           @id @default(cuid())
+  orderNumber           Int              @default(autoincrement())
+  buyerId               String
+  sellerId              String
+  status                String           @default("PENDING")
+  total                 Float
+  discount              Float            @default(0)
+  notes                 String?
+  sellerNotes           String?
+  paymentMethod         String?
+  priceTierId           String?
+  shippingAddressId     String?
+  shippingCost          Float            @default(0)
+  skydropxRateId        String?
+  skydropxQuotationId   String?
+  shippingCarrier       String?
+  shippingServiceName   String?
+  sourceDomain          String?
+  commissionRate        Float            @default(0)
+  commissionAmount      Float            @default(0)
+  sellerEarnings        Float            @default(0)
+  isSettled             Boolean          @default(false)
+  stripePaymentIntentId String?
+  paymentReleasedAt     DateTime?
+  refundedAt            DateTime?
+  loyaltyDiscount       Float            @default(0)
+  settlementId          String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  buyer                 User             @relation("BuyerOrders", fields: [buyerId], references: [id])
+  priceTier             PriceTier?       @relation(fields: [priceTierId], references: [id])
+  seller                User             @relation("SellerOrders", fields: [sellerId], references: [id])
+  settlement            Settlement?      @relation(fields: [settlementId], references: [id])
+  shippingAddress       ShippingAddress? @relation(fields: [shippingAddressId], references: [id])
+  items                 OrderItem[]
+  review                SellerReview?
+  shipment              Shipment?
 }
 
 model OrderItem {
@@ -679,35 +693,77 @@ model CurrencyDenomination {
 }
 
 model DiscountCoupon {
-  id               String         @id @default(cuid())
-  code             String
-  sellerId         String
-  discountType     String         // "PERCENTAGE" | "FIXED"
-  discountValue    Float
-  minPurchase      Float          @default(0)
-  maxUses          Int?
-  maxUsesPerBuyer  Int?           // null = sin límite por comprador
-  usedCount        Int            @default(0)
-  startsAt         DateTime?
-  expiresAt        DateTime?
-  isActive         Boolean        @default(true)
-  createdAt        DateTime       @default(now())
-  seller           User           @relation("SellerCoupons", fields: [sellerId], references: [id])
-  usages           CouponUsage[]
+  id              String        @id @default(cuid())
+  code            String
+  sellerId        String
+  discountType    String // "PERCENTAGE" | "FIXED"
+  discountValue   Float
+  minPurchase     Float         @default(0)
+  maxUses         Int?
+  maxUsesPerBuyer Int? // null = sin límite por comprador
+  usedCount       Int           @default(0)
+  startsAt        DateTime?
+  expiresAt       DateTime?
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  seller          User          @relation("SellerCoupons", fields: [sellerId], references: [id])
+  usages          CouponUsage[]
 
   @@unique([code, sellerId])
   @@index([sellerId])
 }
 
 model CouponUsage {
-  id        String         @id @default(cuid())
-  couponId  String
-  buyerId   String
-  usedAt    DateTime       @default(now())
-  coupon    DiscountCoupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
-  buyer     User           @relation("BuyerCouponUsages", fields: [buyerId], references: [id])
+  id       String         @id @default(cuid())
+  couponId String
+  buyerId  String
+  usedAt   DateTime       @default(now())
+  coupon   DiscountCoupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  buyer    User           @relation("BuyerCouponUsages", fields: [buyerId], references: [id])
 
   @@index([couponId, buyerId])
+}
+
+model LoyaltyProgram {
+  id              String   @id @default(cuid())
+  sellerId        String   @unique
+  isActive        Boolean  @default(true)
+  earnRate        Float
+  redeemRate      Float
+  minRedeemPoints Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  seller          User     @relation("SellerLoyaltyProgram", fields: [sellerId], references: [id])
+}
+
+model LoyaltyAccount {
+  id           String               @id @default(cuid())
+  sellerId     String
+  buyerId      String?
+  posClientId  String?
+  balance      Int                  @default(0)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  seller       User                 @relation("SellerLoyaltyAccounts", fields: [sellerId], references: [id])
+  buyer        User?                @relation("BuyerLoyaltyAccounts", fields: [buyerId], references: [id])
+  posClient    Client?              @relation(fields: [posClientId], references: [id])
+  transactions LoyaltyTransaction[]
+
+  @@unique([sellerId, buyerId])
+  @@unique([sellerId, posClientId])
+}
+
+model LoyaltyTransaction {
+  id        String         @id @default(cuid())
+  accountId String
+  type      String
+  points    Int
+  amountMXN Float?
+  orderId   String?
+  saleId    String?
+  reason    String?
+  createdAt DateTime       @default(now())
+  account   LoyaltyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 }
 
 enum Role {
@@ -716,4 +772,35 @@ enum Role {
   CASHIER
   BUYER
   SELLER
+}
+
+model StockTransfer {
+  id               String              @id @default(cuid())
+  sellerId         String
+  seller           User                @relation("SellerStockTransfers", fields: [sellerId], references: [id])
+  sourceLocationId String
+  sourceLocation   StoreLocation       @relation("TransferSource", fields: [sourceLocationId], references: [id])
+  destLocationId   String
+  destLocation     StoreLocation       @relation("TransferDest", fields: [destLocationId], references: [id])
+  userId           String?
+  user             User?               @relation("UserStockTransfers", fields: [userId], references: [id])
+  folio            Int
+  totalItems       Int                 @default(0)
+  notes            String?
+  createdAt        DateTime            @default(now())
+  items            StockTransferItem[]
+
+  @@unique([sellerId, folio])
+  @@index([sellerId, createdAt])
+}
+
+model StockTransferItem {
+  id          String        @id @default(cuid())
+  transferId  String
+  transfer    StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  variantId   String
+  variant     Variant       @relation(fields: [variantId], references: [id])
+  quantity    Int
+  productName String
+  variantInfo String?
 }

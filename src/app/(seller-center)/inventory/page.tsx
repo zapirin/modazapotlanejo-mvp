@@ -149,38 +149,100 @@ export default function InventoryPage() {
         }
     };
 
-    const exportToCSV = () => {
-        if (products.length === 0) return;
+    const exportToCSV = async () => {
+        // Pedir TODOS los productos (sin paginación) respetando los filtros actuales
+        const qs = new URLSearchParams();
+        qs.set('all', 'true');
+        if (searchQuery) qs.set('search', searchQuery);
+        if (selectedCategory) {
+            const [catId] = selectedCategory.split('|');
+            qs.set('categoryId', catId);
+        }
+        if (selectedBrand) qs.set('brandId', selectedBrand);
+        if (selectedSupplier) qs.set('supplierId', selectedSupplier);
 
-        // Header
-        const headers = ["Nombre", "Categoría", "Costo", "Precio Base", "Descripción", "Variantes", "Stock Total"];
+        const res = await fetch('/api/inventory?' + qs.toString(), { cache: 'no-store' });
+        if (!res.ok) {
+            alert('No se pudo obtener el inventario completo para exportar.');
+            return;
+        }
+        const all = await res.json();
+        if (!Array.isArray(all) || all.length === 0) {
+            alert('No hay productos para exportar.');
+            return;
+        }
 
-        // Data rows
-        const rows = products.map(product => {
-            const totalStock = product.variants.reduce((acc: number, v: any) => acc + v.stock, 0);
-            const variantSummaries = product.variants.map((v: any) => formatVariantName(v)).join(";");
+        const escape = (v: any) => {
+            const s = (v ?? '').toString();
+            return `"${s.replace(/"/g, '""')}"`;
+        };
 
-            return [
-                `"${product.name}"`,
-                `"${product.category?.name || 'Varios'}"`,
-                product.cost || 0,
+        const headers = [
+            'Producto', 'Color', 'Talla', 'SKU',
+            'Marca', 'Proveedor', 'Categoría', 'Subcategoría',
+            'Costo', 'Precio Base', 'Descripción',
+            'Sucursal', 'Stock', 'URL Imagen'
+        ];
+
+        const rows: string[] = [];
+        all.forEach((product: any) => {
+            const imagesJoined = (product.images || []).join(';');
+            const baseCols = [
+                escape(product.name),
+                '', '', '',                                                  // color, talla, sku — por variante
+                escape(product.brand?.name || ''),
+                escape(product.supplier?.name || ''),
+                escape(product.category?.name || 'Varios'),
+                escape(product.subcategory?.name || ''),
+                product.cost ?? 0,
                 product.price,
-                `"${(product.description || "").replace(/"/g, '""')}"`,
-                `"${variantSummaries}"`,
-                totalStock
-            ].join(",");
+                escape(product.description || ''),
+                '',                                                          // sucursal — por fila
+                0,                                                           // stock — por fila
+                escape(imagesJoined),
+            ];
+            if (!product.variants || product.variants.length === 0) {
+                rows.push(baseCols.join(','));
+                return;
+            }
+            product.variants.forEach((v: any) => {
+                const color = v.color || (v.attributes?.Color ?? v.attributes?.color ?? '');
+                const size = v.size || (v.attributes?.Talla ?? v.attributes?.talla ?? v.attributes?.Size ?? v.attributes?.size ?? '');
+                const skuCol = escape(v.sku || '');
+                const levels = Array.isArray(v.inventoryLevels) ? v.inventoryLevels : [];
+                if (levels.length > 0) {
+                    levels.forEach((lvl: any) => {
+                        const cols = [...baseCols];
+                        cols[1] = escape(color);
+                        cols[2] = escape(size);
+                        cols[3] = skuCol;
+                        cols[11] = escape(lvl.location?.name || '');
+                        cols[12] = lvl.stock ?? 0;
+                        rows.push(cols.join(','));
+                    });
+                } else {
+                    const cols = [...baseCols];
+                    cols[1] = escape(color);
+                    cols[2] = escape(size);
+                    cols[3] = skuCol;
+                    cols[12] = v.stock ?? 0;
+                    rows.push(cols.join(','));
+                }
+            });
         });
 
-        const csvContent = [headers.join(","), ...rows].join("\n");
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const csvContent = [headers.join(','), ...rows].join('\n');
+        // BOM para que Excel abra UTF-8 correctamente
+        const blob = new Blob(['﻿' + csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", `inventario_moda_zapo_${new Date().toISOString().split('T')[0]}.csv`);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `inventario_moda_zapo_${new Date().toISOString().split('T')[0]}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     };
 
     const handleImportClick = () => {
@@ -195,45 +257,154 @@ export default function InventoryPage() {
         const reader = new FileReader();
 
         reader.onload = async (event) => {
-            const content = event.target?.result as string;
-            const lines = content.split('\n');
-            const newProducts = [];
+            const content = (event.target?.result as string).replace(/^﻿/, '');
+            const lines = content.split(/\r?\n/);
+
+            const unquote = (s: string) => s.replace(/^"|"$/g, '').replace(/""/g, '"');
+            const norm = (s: string) => (s || '').trim().toLowerCase();
+            const findIdByName = (arr: any[], name: string): string | undefined => {
+                if (!name) return undefined;
+                const n = norm(name);
+                return arr.find((x: any) => norm(x.name) === n)?.id;
+            };
+            const findSubcategoryId = (categoryId: string | undefined, name: string): string | undefined => {
+                if (!categoryId || !name) return undefined;
+                const cat = categories.find((c: any) => c.id === categoryId);
+                if (!cat?.subcategories) return undefined;
+                const n = norm(name);
+                return cat.subcategories.find((s: any) => norm(s.name) === n)?.id;
+            };
+
+            const warnings: string[] = [];
+            const seenWarn = new Set<string>();
+            const warn = (key: string, msg: string) => {
+                if (seenWarn.has(key)) return;
+                seenWarn.add(key);
+                warnings.push(msg);
+                console.warn('[Import]', msg);
+            };
+
+            type VariantAcc = {
+                color: string; size: string; sku: string | null;
+                attributes: any;
+                stock: number;
+                inventoryLevels: { locationId: string; quantity: number }[];
+            };
+            type ProductAcc = {
+                name: string;
+                brandId?: string; supplierId?: string;
+                categoryId?: string; subcategoryId?: string;
+                cost: string; basePrice: string; description: string;
+                images: string[];
+                variants: Map<string, VariantAcc>;
+            };
+            const productMap = new Map<string, ProductAcc>();
 
             // Skip header (i=1)
             for (let i = 1; i < lines.length; i++) {
                 const line = lines[i].trim();
                 if (!line) continue;
 
-                // Basic CSV parsing (handles quotes)
-                const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(unquote);
+                if (parts.length < 13) continue;
 
-                if (parts.length >= 3) {
-                    const name = parts[0].replace(/^"|"$/g, '');
-                    const category = parts[1].replace(/^"|"$/g, '');
-                    const price = parts[2].replace(/^"|"$/g, '');
-                    const description = parts[3]?.replace(/^"|"$/g, '') || '';
-                    const colorsStr = parts[4]?.replace(/^"|"$/g, '') || 'Único';
-                    const sizesStr = parts[5]?.replace(/^"|"$/g, '') || 'Única';
+                const [
+                    name, color, size, sku,
+                    brandName, supplierName, categoryName, subcategoryName,
+                    cost, price, description,
+                    locationName, stockStr, urlImagen
+                ] = parts;
+                if (!name || !price) continue;
 
-                    const colors = colorsStr.split(';').map(c => c.trim());
-                    const sizes = sizesStr.split(';').map(s => s.trim());
+                const stock = parseInt(stockStr) || 0;
+                const images = (urlImagen || '').split(';').map(u => u.trim()).filter(Boolean);
 
-                    newProducts.push({
+                let p = productMap.get(name);
+                if (!p) {
+                    const categoryId = findIdByName(categories, categoryName);
+                    if (categoryName && !categoryId) warn(`cat:${categoryName}`, `Categoría no encontrada: "${categoryName}"`);
+                    const subcategoryId = findSubcategoryId(categoryId, subcategoryName);
+                    if (subcategoryName && !subcategoryId) warn(`sub:${subcategoryName}`, `Subcategoría no encontrada: "${subcategoryName}"`);
+                    const brandId = findIdByName(brands, brandName);
+                    if (brandName && !brandId) warn(`brand:${brandName}`, `Marca no encontrada: "${brandName}"`);
+                    const supplierId = findIdByName(suppliers, supplierName);
+                    if (supplierName && !supplierId) warn(`sup:${supplierName}`, `Proveedor no encontrado: "${supplierName}"`);
+
+                    p = {
                         name,
-                        category: category.toLowerCase(),
+                        brandId, supplierId, categoryId, subcategoryId,
+                        cost: cost || '',
                         basePrice: price,
-                        description,
-                        colors,
-                        sizes,
-                        inventory: {}, // Import defaults to 0 stock for variant matrix
-                        images: []
-                    });
+                        description: description || '',
+                        images: [...images],
+                        variants: new Map(),
+                    };
+                    productMap.set(name, p);
+                } else {
+                    images.forEach(u => { if (!p!.images.includes(u)) p!.images.push(u); });
+                }
+
+                if (!color && !size) continue; // sin variante
+
+                const vKey = `${norm(color)}|${norm(size)}|${norm(sku || '')}`;
+                let v = p.variants.get(vKey);
+                if (!v) {
+                    v = {
+                        color: color || '',
+                        size: size || '',
+                        sku: sku || null,
+                        attributes: {
+                            ...(color ? { Color: color } : {}),
+                            ...(size ? { Talla: size } : {}),
+                        },
+                        stock: 0,
+                        inventoryLevels: [],
+                    };
+                    p.variants.set(vKey, v);
+                }
+
+                if (locationName) {
+                    const locationId = findIdByName(locations, locationName);
+                    if (!locationId) {
+                        warn(`loc:${locationName}`, `Sucursal no encontrada: "${locationName}"`);
+                    } else {
+                        v.inventoryLevels.push({ locationId, quantity: stock });
+                        v.stock += stock; // total de la variante = suma de sucursales
+                    }
+                } else {
+                    v.stock = stock; // stock global
                 }
             }
 
+            const newProducts = Array.from(productMap.values()).map(p => {
+                const variantsArr = Array.from(p.variants.values()).map(v => ({
+                    color: v.color,
+                    size: v.size,
+                    sku: v.sku,
+                    attributes: v.attributes,
+                    stock: v.stock,
+                    inventoryLevels: v.inventoryLevels.length > 0 ? v.inventoryLevels : undefined,
+                }));
+                return {
+                    name: p.name,
+                    brandId: p.brandId,
+                    supplierId: p.supplierId,
+                    categoryId: p.categoryId,
+                    subcategoryId: p.subcategoryId,
+                    cost: p.cost,
+                    basePrice: p.basePrice,
+                    description: p.description,
+                    images: p.images,
+                    variantsData: variantsArr.length > 0 ? variantsArr : undefined,
+                };
+            });
+
             if (newProducts.length > 0) {
                 const results = await bulkCreateProducts(newProducts);
-                alert(`Importación finalizada: ${results.success} éxitos, ${results.failed} errores.`);
+                const warnSummary = warnings.length > 0
+                    ? `\n\n${warnings.length} campos no reconocidos (revisa la consola para el detalle).`
+                    : '';
+                alert(`Importación finalizada: ${results.success} éxitos, ${results.failed} errores.${warnSummary}`);
                 if (results.errors.length > 0) console.error("Import Errors:", results.errors);
                 loadInventory();
             } else {

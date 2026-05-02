@@ -11,6 +11,7 @@ import {
   sendLowInventoryAlert,
   sendOrderUpdatedToBuyer,
 } from "@/lib/email/templates";
+import { earnPoints, redeemPoints, pointsToMXN, getProgram } from "@/lib/loyalty";
 
 interface OrderItemInput {
     variantId: string;
@@ -37,6 +38,7 @@ export async function createOrder(data: {
     shippingServiceName?: string;
     paymentMethod?: string;
     domain?: string;
+    loyaltyRedeemPoints?: number;
 }) {
     try {
         const user = await getSessionUser();
@@ -44,7 +46,18 @@ export async function createOrder(data: {
 
         const total = data.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
         const discount = data.discount || 0;
-        const finalTotal = Math.max(0, total - discount);
+
+        // Loyalty discount calculation
+        let loyaltyDiscount = 0;
+        const requestedRedeemPoints = Math.floor(data.loyaltyRedeemPoints || 0);
+        if (requestedRedeemPoints > 0) {
+            const program = await getProgram(data.sellerId);
+            if (program?.isActive) {
+                loyaltyDiscount = pointsToMXN(requestedRedeemPoints, program.redeemRate);
+            }
+        }
+
+        const finalTotal = Math.max(0, total - discount - loyaltyDiscount);
 
         // Fetch seller's commission rate
         const seller = await prisma.user.findUnique({
@@ -75,6 +88,7 @@ export async function createOrder(data: {
                 shippingCarrier: data.shippingCarrier || null,
                 shippingServiceName: data.shippingServiceName || null,
                 sourceDomain: data.domain || null,
+                loyaltyDiscount,
                 items: {
                     create: data.items.map(item => ({
                         variantId: item.variantId,
@@ -130,6 +144,32 @@ export async function createOrder(data: {
                     paymentMethod: data.paymentMethod,
                 }).catch(console.error);
             }).catch(console.error);
+        }
+
+        // Loyalty: redeem first, then earn (based on finalTotal post all discounts)
+        if (requestedRedeemPoints > 0) {
+            try {
+                await redeemPoints({
+                    sellerId: data.sellerId,
+                    customer: { buyerId: user.id },
+                    points: requestedRedeemPoints,
+                    orderId: order.id,
+                });
+            } catch (e) {
+                console.error("Loyalty redeem failed:", e);
+            }
+        }
+        if (finalTotal > 0) {
+            try {
+                await earnPoints({
+                    sellerId: data.sellerId,
+                    customer: { buyerId: user.id },
+                    amountMXN: finalTotal,
+                    orderId: order.id,
+                });
+            } catch (e) {
+                console.error("Loyalty earn failed:", e);
+            }
         }
 
         revalidatePath("/orders");

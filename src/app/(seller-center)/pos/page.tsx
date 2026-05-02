@@ -7,11 +7,67 @@ import { savePendingSale, getPendingSales, markSaleSynced, markSaleSyncError, co
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { searchProducts, getPriceTiers, getPaymentMethods, getPOSCategories, getProductsByCategory, processSale, getSuspendedSales, suspendSale, deleteSuspendedSale, createLayaway, getSaleById, updateSale } from '../products/new/actions';
-import { getCurrentCashSession, openCashSession, addCashMovement, closeCashSession, createTransfer, getAllowedLocations, checkSellerPOSAccess, getSalesBySession, getSalespersons } from './actions';
+import { getCurrentCashSession, openCashSession, addCashMovement, closeCashSession, createTransfer, getAllowedLocations, checkSellerPOSAccess, getSalesBySession, getSalespersons, getTransferById } from './actions';
+import TransferTicket from './TransferTicket';
 import { getStoreSettings, getLocationsSettings, getRequireSalesperson } from '../settings/actions';
 import { createClient, searchClients, getClientById } from '../clients/actions';
+import { getLoyaltyForPosClient } from '@/app/actions/loyalty';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
 import { toast } from 'sonner';
+
+// Helper de impresión para iOS/Android: oculta físicamente el DOM antes de imprimir.
+// Los navegadores móviles (WebKit) ignoran @media print CSS, así que manipulamos
+// el DOM directamente para que solo el ticket sea visible al momento del snapshot.
+const handlePrintDirect = (elementId: string) => {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    // 1. Guardar y ocultar TODOS los hijos directos del body
+    const bodyChildren = Array.from(document.body.children) as HTMLElement[];
+    const savedStyles: { el: HTMLElement; display: string }[] = [];
+    bodyChildren.forEach(child => {
+        savedStyles.push({ el: child, display: child.style.display });
+        child.style.display = 'none';
+    });
+
+    // 2. Crear el área de impresión con solo el ticket
+    const printArea = document.createElement('div');
+    printArea.id = 'pos-print-area';
+    printArea.style.cssText = 'background:white;margin:0;padding:0;width:100%;display:flex;justify-content:center;';
+    printArea.innerHTML = el.outerHTML;
+    // Quitar sombras del clone
+    printArea.querySelectorAll('[class]').forEach(node => {
+        (node as HTMLElement).style.boxShadow = 'none';
+    });
+    document.body.appendChild(printArea);
+
+    // 3. Forzar fondo blanco en body
+    const origBodyBg = document.body.style.background;
+    const origBodyMargin = document.body.style.margin;
+    document.body.style.background = 'white';
+    document.body.style.margin = '0';
+
+    // 4. Imprimir sincrónicamente (requerido para iOS: debe ser en el mismo click)
+    try {
+        window.print();
+    } catch (err) {
+        console.error('Print error', err);
+    }
+
+    // 5. Restaurar todo después de que el diálogo de impresión cierre
+    const restore = () => {
+        printArea.remove();
+        document.body.style.background = origBodyBg;
+        document.body.style.margin = origBodyMargin;
+        savedStyles.forEach(({ el: child, display }) => {
+            child.style.display = display;
+        });
+    };
+
+    // iOS: afterprint no es confiable, usar ambos mecanismos
+    window.addEventListener('afterprint', restore, { once: true });
+    setTimeout(restore, 3000);
+};
 
 // Orden estándar de tallas de ropa — de menor a mayor
 const SIZE_ORDER: Record<string, number> = {
@@ -75,6 +131,8 @@ function POSContent() {
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [transferSourceId, setTransferSourceId] = useState<string>('');
     const [transferDestId, setTransferDestId] = useState<string>('');
+    const [lastTransfer, setLastTransfer] = useState<any>(null);
+    const [showTransferReceiptModal, setShowTransferReceiptModal] = useState(false);
 
     // Edit State
     const [originalSale, setOriginalSale] = useState<any>(null);
@@ -97,6 +155,10 @@ function POSContent() {
     const [clientHistoryData, setClientHistoryData] = useState<any>(null);
     const [loadingHistory, setLoadingHistory] = useState(false);
 
+    // Loyalty (POS) State
+    const [loyaltyInfo, setLoyaltyInfo] = useState<{ balance: number; minRedeemPoints: number; redeemRate: number; earnRate: number } | null>(null);
+    const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState<number>(0);
+
     // Discount Modal State
     const [showDiscountModal, setShowDiscountModal] = useState(false);
     const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent');
@@ -117,6 +179,7 @@ function POSContent() {
     const [otherCashierSession, setOtherCashierSession] = useState<any>(null); // Sesión abierta por otro cajero
     const [showOtherCashierModal, setShowOtherCashierModal] = useState(false);
     const [showMobileRight, setShowMobileRight] = useState(false); // Panel derecho en móvil
+    const [showClearCartConfirm, setShowClearCartConfirm] = useState(false);
     const [denominations, setDenominations] = useState<any[]>([]);
     const [denCounts, setDenCounts] = useState<Record<string, string>>({});
     const [isOnline, setIsOnline] = useState(true);
@@ -143,43 +206,67 @@ function POSContent() {
         setOfflineSyncTime(new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }));
     }, []);
 
-    // Enter para imprimir ticket cuando el modal de recibo está abierto
+    // Enter para imprimir ticket / ESC para cerrar modal de recibo
     useEffect(() => {
         if (!showReceiptModal) return;
-        const handleReceiptEnter = (e: KeyboardEvent) => {
+        const handleReceiptKey = (e: KeyboardEvent) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 printReceiptBtnRef.current?.click();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setShowReceiptModal(false);
+                setTimeout(() => searchInputRef.current?.focus(), 50);
             }
         };
-        window.addEventListener('keydown', handleReceiptEnter);
-        return () => window.removeEventListener('keydown', handleReceiptEnter);
+        window.addEventListener('keydown', handleReceiptKey);
+        return () => window.removeEventListener('keydown', handleReceiptKey);
     }, [showReceiptModal]);
+
+    // ESC para cerrar modal de reimpresión de ticket
+    useEffect(() => {
+        if (!reprintSale) return;
+        const handleReprintEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setReprintSale(null);
+            }
+        };
+        window.addEventListener('keydown', handleReprintEsc);
+        return () => window.removeEventListener('keydown', handleReprintEsc);
+    }, [reprintSale]);
+
+    // Auto-focus en buscador (desktop) al cargar la página y al cerrar el ticket de venta
+    const prevReceiptOpenRef = useRef(false);
+    useEffect(() => {
+        const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 1024;
+        if (!isDesktop) { prevReceiptOpenRef.current = showReceiptModal; return; }
+        // Cierre del modal de recibo (venta terminada): poner foco en buscador
+        if (prevReceiptOpenRef.current && !showReceiptModal) {
+            setTimeout(() => searchInputRef.current?.focus(), 100);
+        }
+        prevReceiptOpenRef.current = showReceiptModal;
+    }, [showReceiptModal]);
+    useEffect(() => {
+        // Al montar (primer load / refresh) en desktop, foco en buscador
+        if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+            setTimeout(() => searchInputRef.current?.focus(), 200);
+        }
+    }, []);
 
     // Cajón de dinero
     const openCashDrawer = (reason?: string) => {
-        const drawerHtml = `
-            <html>
-            <head>
-                <style>
-                    body { margin: 0; }
-                    @page { margin: 0; size: 1mm 1mm; }
-                </style>
-            </head>
-            <body>
-                <!-- ESC/POS: ESC p 0 50 255 — comando de apertura de cajón -->
-                <div style="font-family:monospace;font-size:1px;color:white;">
-                    \x1B\x70\x00\x32\xFF
-                    ${reason ? `Apertura manual: ${reason}` : 'Apertura de cajón'}
-                </div>
-            </body>
-            </html>`;
-        const win = window.open('', '', 'width=1,height=1');
-        if (win) {
-            win.document.write(drawerHtml);
-            win.document.close();
-            setTimeout(() => { win.print(); win.close(); }, 200);
-        }
+        const drawerDiv = document.createElement('div');
+        drawerDiv.id = 'temp-drawer-open';
+        drawerDiv.innerHTML = `
+            <div style="font-family:monospace;font-size:1px;color:white;">
+                \x1B\x70\x00\x32\xFF
+                ${reason ? `Apertura manual: ${reason}` : 'Apertura de cajón'}
+            </div>
+        `;
+        document.body.appendChild(drawerDiv);
+        handlePrintDirect('temp-drawer-open');
+        setTimeout(() => drawerDiv.remove(), 2000);
     };
     const [lastSaleData, setLastSaleData] = useState<any>(null);
 
@@ -198,6 +285,35 @@ function POSContent() {
     // Global Store & Location Config
     const [globalConfig, setGlobalConfig] = useState<any>(null);
     const [requireSalesperson, setRequireSalesperson] = useState(false);
+
+    // ── Pantalla del cliente via BroadcastChannel ──
+    const customerChannelRef = useRef<BroadcastChannel | null>(null);
+    useEffect(() => {
+        customerChannelRef.current = new BroadcastChannel('pos_customer_display');
+        return () => { customerChannelRef.current?.close(); };
+    }, []);
+
+    useEffect(() => {
+        if (!customerChannelRef.current) return;
+        if (cart.length === 0) {
+            customerChannelRef.current.postMessage({ type: 'POS_CLEAR' });
+            return;
+        }
+        customerChannelRef.current.postMessage({
+            type: 'POS_SALE',
+            payload: {
+                items: cart.map(item => ({ name: item.name, qty: item.quantity, price: item.price })),
+                subtotal: calculateSubtotal(),
+                total: calculateTotal(),
+                tierName: selectedTier?.name || null,
+                discount: globalDiscount ? { type: globalDiscount.type, value: globalDiscount.value } : null,
+                payment: selectedPaymentMethod,
+                change: selectedPaymentMethod?.toLowerCase().includes('efectivo') && parseFloat(receivedAmount) > calculateTotal()
+                    ? parseFloat(receivedAmount) - calculateTotal()
+                    : 0,
+            },
+        });
+    }, [cart, selectedPaymentMethod, receivedAmount, globalDiscount, selectedTier]);
 
     // Hook de conectividad — detecta online/offline y sincroniza automáticamente
     useEffect(() => {
@@ -457,6 +573,50 @@ function POSContent() {
         return 'Única';
     };
 
+    // ── Auto-reset al vaciar carrito (cubre todos los flujos) ──
+    const prevCartLenRef = useRef(0);
+    useEffect(() => {
+        if (prevCartLenRef.current > 0 && cart.length === 0) {
+            setSelectedTier(null);
+            setGlobalDiscount(null);
+            setSelectedClient(null);
+            setSelectedSalesperson(null);
+            setReceivedAmount('');
+            setPartialPayments([]);
+            const efectivoReset = paymentMethods.find((m: any) => m.name.toLowerCase().includes('efectivo'));
+            setSelectedPaymentMethod(efectivoReset ? efectivoReset.name : (paymentMethods[0]?.name || 'Efectivo'));
+        }
+        prevCartLenRef.current = cart.length;
+    }, [cart.length]);
+
+    // Cargar loyalty info cuando se selecciona/deselecciona un cliente
+    useEffect(() => {
+        const sellerIdEff = currentUser?.role === 'SELLER'
+            ? currentUser.id
+            : (currentUser?.managedBySellerId || null);
+        if (!selectedClient || !sellerIdEff) {
+            setLoyaltyInfo(null);
+            setLoyaltyPointsToRedeem(0);
+            return;
+        }
+        let cancelled = false;
+        getLoyaltyForPosClient(sellerIdEff, selectedClient.id).then(res => {
+            if (cancelled) return;
+            if (res.eligible && res.program) {
+                setLoyaltyInfo({
+                    balance: res.balance,
+                    minRedeemPoints: res.program.minRedeemPoints,
+                    redeemRate: res.program.redeemRate,
+                    earnRate: res.program.earnRate,
+                });
+            } else {
+                setLoyaltyInfo(null);
+            }
+            setLoyaltyPointsToRedeem(0);
+        });
+        return () => { cancelled = true; };
+    }, [selectedClient?.id, currentUser?.id, currentUser?.role]);
+
     useEffect(() => {
         const delayDebounceFn = setTimeout(() => {
             if (searchQuery && searchQuery.length >= 3) {
@@ -537,6 +697,7 @@ function POSContent() {
             setCart([...newCartItems, ...cart]);
         }
         setShowVariationModal(false);
+        setTimeout(() => searchInputRef.current?.focus(), 50);
     };
 
     const handleSingleVariantSelect = (variant: any) => {
@@ -559,6 +720,7 @@ function POSContent() {
             setCart([newItem, ...cart]);
         }
         setShowVariationModal(false);
+        setTimeout(() => searchInputRef.current?.focus(), 50);
     };
 
     const handleProductSelect = (product: any) => {
@@ -620,6 +782,12 @@ function POSContent() {
             } else if (globalDiscount.type === 'fixed') {
                 subtotal -= globalDiscount.value;
             }
+        }
+
+        // 3. Loyalty Points Discount (POS, solo Client registrado)
+        if (loyaltyInfo && loyaltyPointsToRedeem > 0 && selectedClient && !isReturnMode) {
+            const loyaltyDisc = Math.floor((loyaltyPointsToRedeem / loyaltyInfo.redeemRate) * 100) / 100;
+            subtotal -= loyaltyDisc;
         }
 
         return isReturnMode ? Math.abs(subtotal) : Math.max(0, subtotal);
@@ -696,6 +864,10 @@ function POSContent() {
 
         setIsProcessing(true);
         try {
+            const loyaltyDiscMXN = (loyaltyInfo && loyaltyPointsToRedeem > 0 && selectedClient && !isReturnMode)
+                ? Math.floor((loyaltyPointsToRedeem / loyaltyInfo.redeemRate) * 100) / 100
+                : 0;
+
             const saleData = {
                 cart: cart.map(item => ({
                     variantId: item.variantId,
@@ -704,7 +876,7 @@ function POSContent() {
                 })).filter(item => item.quantity !== 0),
                 total: calculateTotal(),
                 subtotal: calculateSubtotal(),
-                discount: calculateSubtotal() - calculateTotal(),
+                discount: calculateSubtotal() - calculateTotal() - loyaltyDiscMXN,
                 paymentMethodName: selectedPaymentMethod,
                 clientId: selectedClient?.id || null,
                 priceTierId: selectedTier?.id || null,
@@ -712,6 +884,7 @@ function POSContent() {
                 cashSessionId: currentSession?.id || null,
                 partialPayments: paymentsToUse.length > 0 ? paymentsToUse : null,
                 soldBySalespersonId: selectedSalesperson?.id || null,
+                loyaltyRedeemPoints: loyaltyPointsToRedeem > 0 ? loyaltyPointsToRedeem : 0,
             };
 
             // === MODO OFFLINE ===
@@ -728,6 +901,9 @@ function POSContent() {
                 setGlobalDiscount(null);
                 setReceivedAmount('');
                 setPartialPayments([]);
+                // Resetear método de pago a Efectivo
+                const efectivoOffline = paymentMethods.find((m: any) => m.name.toLowerCase().includes('efectivo'));
+                setSelectedPaymentMethod(efectivoOffline ? efectivoOffline.name : (paymentMethods[0]?.name || 'Efectivo'));
                 setIsProcessing(false);
                 return;
             }
@@ -749,15 +925,26 @@ function POSContent() {
             }
 
             if (res.success) {
+                // Calcular cambio para toast verde si aplica
+                const wasCash = selectedPaymentMethod?.toLowerCase().includes('efectivo');
+                const totalAtSale = calculateTotal();
+                const cashReceived = explicitReceivedAmount !== undefined
+                    ? explicitReceivedAmount
+                    : (wasCash ? (parseFloat(receivedAmount) || 0) : 0);
+                const partialSumAtSale = paymentsToUse.reduce((a, p) => a + p.amount, 0);
+                const changeDue = !isReturnMode && wasCash
+                    ? Math.max(0, (cashReceived + partialSumAtSale) - totalAtSale)
+                    : 0;
+
                 // Save data for the receipt before clearing the cart
                 setLastSaleData({
                     id: res.saleId,
                     receiptNumber: res.receiptNumber,
                     date: new Date(),
                     cart: [...cart],
-                    total: calculateTotal(),
+                    total: totalAtSale,
                     subtotal: calculateSubtotal(),
-                    discount: calculateSubtotal() - calculateTotal(),
+                    discount: calculateSubtotal() - totalAtSale,
                     paymentMethodName: selectedPaymentMethod,
                     tierName: selectedTier ? selectedTier.name : 'Precio Público',
                     clientName: selectedClient ? selectedClient.name : 'Venta de Mostrador',
@@ -765,7 +952,7 @@ function POSContent() {
                     isReturn: isReturnMode,
                     receivedAmount: explicitReceivedAmount !== undefined
                         ? explicitReceivedAmount
-                        : (selectedPaymentMethod?.toLowerCase().includes('efectivo') ? (parseFloat(receivedAmount) || 0) : null),
+                        : (wasCash ? (parseFloat(receivedAmount) || 0) : null),
                     partialPayments: paymentsToUse.length > 0 ? paymentsToUse : null,
                 });
 
@@ -782,6 +969,9 @@ function POSContent() {
                 const efectivoAfterSale = paymentMethods.find((m: any) => m.name.toLowerCase().includes('efectivo'));
                 setSelectedPaymentMethod(efectivoAfterSale ? efectivoAfterSale.name : (paymentMethods[0]?.name || 'Efectivo'));
                 setShowReceiptModal(true);
+                if (changeDue > 0) {
+                    toast.success(`💵 Cambio: ${formatCurrency(changeDue)}`, { duration: 8000 });
+                }
             } else {
                 toast.error(res.error || "Ocurrió un error al procesar la venta.");
             }
@@ -828,6 +1018,9 @@ function POSContent() {
                 setReceivedAmount('');
                 setPartialPayments([]);
                 setIsReturnMode(false);
+                // Resetear método de pago a Efectivo
+                const efectivoSuspend = paymentMethods.find((m: any) => m.name.toLowerCase().includes('efectivo'));
+                setSelectedPaymentMethod(efectivoSuspend ? efectivoSuspend.name : (paymentMethods[0]?.name || 'Efectivo'));
                 setSuspendedSales(await getSuspendedSales());
             } else {
                 toast.error(res.error || "Ocurrió un error al suspender la venta.");
@@ -1055,6 +1248,13 @@ function POSContent() {
                 setTransferSourceId('');
                 setTransferDestId('');
                 setIsTransferMode(false);
+                if ((res as any).transferId) {
+                    const transfer = await getTransferById((res as any).transferId);
+                    if (transfer) {
+                        setLastTransfer(transfer);
+                        setShowTransferReceiptModal(true);
+                    }
+                }
             } else {
                 toast.error(res.error || "Ocurrió un error al procesar el traspaso.");
             }
@@ -1162,13 +1362,31 @@ function POSContent() {
 
     return (
         <div className="flex h-[calc(100dvh-64px)] bg-background text-foreground transition-colors duration-300 overflow-hidden font-sans text-sm relative">
-            {/* Botón móvil para mostrar/ocultar panel de cobro */}
-            <button
-                className="fixed bottom-4 right-4 z-50 lg:hidden bg-blue-600 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-2xl"
-                onClick={() => setShowMobileRight(prev => !prev)}
-            >
-                {showMobileRight ? '✕' : '💰'}
-            </button>
+            {/* Barra inferior móvil — total + botón Cobrar siempre visible */}
+            {!showMobileRight && (
+                <div className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-card border-t border-border shadow-2xl px-4 py-3 flex items-center justify-between gap-3">
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Total</span>
+                        <span className="text-lg font-black text-foreground leading-none">{formatCurrency(calculateTotal())}</span>
+                    </div>
+                    <button
+                        onClick={() => setShowMobileRight(true)}
+                        disabled={cart.length === 0}
+                        className="flex-1 max-w-[60%] bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-black py-3 rounded-xl shadow-lg text-sm uppercase tracking-wider"
+                    >
+                        Cobrar {cart.length > 0 ? formatCurrency(calculateTotal()) : ''}
+                    </button>
+                </div>
+            )}
+            {showMobileRight && (
+                <button
+                    className="fixed top-4 right-4 z-50 lg:hidden bg-gray-700 text-white w-12 h-12 rounded-full shadow-2xl flex items-center justify-center text-2xl"
+                    onClick={() => setShowMobileRight(false)}
+                    aria-label="Cerrar"
+                >
+                    ✕
+                </button>
+            )}
 
             {/* Lado Izquierdo: Principal */}
             <div className={`flex-1 flex flex-col p-4 gap-4 overflow-hidden border-r border-border ${showMobileRight ? 'hidden lg:flex' : 'flex'}`}>
@@ -1296,9 +1514,9 @@ function POSContent() {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
-                        {/* Search Dropdown Overlay */}
+                        {/* Search Dropdown Overlay — desktop dropdown / mobile fullscreen */}
                         {searchResults.length > 0 && searchQuery && (
-                            <div className="absolute top-full left-0 w-full bg-card border border-border rounded-b-2xl shadow-xl z-50 max-h-60 overflow-y-auto mt-1">
+                            <div className="absolute top-full left-0 w-full bg-card border border-border rounded-b-2xl shadow-xl z-50 max-h-60 overflow-y-auto mt-1 hidden lg:block">
                                 {searchResults.map(res => (
                                     <div
                                         key={res.id}
@@ -1314,6 +1532,42 @@ function POSContent() {
                                             {res.sku && <p className="text-[10px] font-mono text-blue-500 font-bold">{res.sku}</p>}
                                         </div>
                                         <span className="text-blue-500 font-bold shrink-0">${res.price}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {searchResults.length > 0 && searchQuery && (
+                            <div className="lg:hidden fixed left-0 right-0 top-16 bottom-0 z-40 bg-card border-t border-border overflow-y-auto">
+                                <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-card border-b border-border">
+                                    <span className="text-xs font-bold uppercase tracking-wider text-gray-500">{searchResults.length} resultado{searchResults.length !== 1 ? 's' : ''}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSearchQuery('');
+                                            setSearchResults([]);
+                                            searchInputRef.current?.blur();
+                                        }}
+                                        className="px-3 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                                {searchResults.map(res => (
+                                    <div
+                                        key={res.id}
+                                        className="px-4 py-3 active:bg-black/10 dark:active:bg-white/10 cursor-pointer border-b border-border flex justify-between items-center min-h-[56px]"
+                                        onClick={() => {
+                                            handleProductSelect(res);
+                                            setSearchQuery('');
+                                            setSearchResults([]);
+                                            searchInputRef.current?.blur();
+                                        }}
+                                    >
+                                        <div className="min-w-0 flex-1 pr-3">
+                                            <p className="font-bold text-foreground text-base truncate">{res.name}</p>
+                                            {res.sku && <p className="text-xs font-mono text-blue-500 font-bold">{res.sku}</p>}
+                                        </div>
+                                        <span className="text-blue-500 font-bold shrink-0 text-base">${res.price}</span>
                                     </div>
                                 ))}
                             </div>
@@ -1404,26 +1658,28 @@ function POSContent() {
                 {/* Tabla del Carrito */}
                 <div className="flex-1 bg-card border border-border rounded-2xl shadow-sm overflow-hidden flex flex-col mt-2">
                     {/* Cabecera del Carrito */}
-                    <div className="bg-card border-b border-border p-4 lg:p-6 flex justify-between items-center shadow-sm shrink-0">
-                        <div className="flex items-center gap-4">
-                            <h2 className="text-xl lg:text-2xl font-bold tracking-tight text-foreground flex items-center gap-3">
-                                {isReturnMode ? <span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm">Modo Devolución</span> : 'Ticket Actual'}
+                    <div className="bg-card border-b border-border p-3 lg:p-6 flex justify-between items-center gap-2 shadow-sm shrink-0">
+                        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                            <h2 className="text-base sm:text-xl lg:text-2xl font-bold tracking-tight text-foreground flex items-center gap-3 truncate">
+                                {isReturnMode ? <span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-sm">Modo Devolución</span> : 'Ticket'}
                             </h2>
-                            <span className="text-sm font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full border border-border">
+                            <span className="text-xs sm:text-sm font-medium text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-border whitespace-nowrap">
                                 {(() => {
                                     const totalQty = cart.reduce((sum, item) => sum + Math.abs(item.quantity || 1), 0);
-                                    return `${totalQty} ${totalQty === 1 ? 'artículo' : 'artículos'}`;
+                                    return `${totalQty} ${totalQty === 1 ? 'art.' : 'arts.'}`;
                                 })()}
                             </span>
                         </div>
-                        
-                        <div className="flex items-center gap-2 relative">
+
+                        <div className="flex items-center gap-2 relative shrink-0">
                             <div className="relative">
                                 <button
                                     onClick={() => setShowTicketOptions(!showTicketOptions)}
-                                    className="px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-border rounded-full text-xs font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition flex items-center justify-center text-foreground"
+                                    className="px-3 sm:px-4 py-2 bg-gray-100 dark:bg-gray-800 border border-border rounded-full text-xs font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition flex items-center justify-center text-foreground min-w-[40px]"
+                                    aria-label="Opciones"
                                 >
-                                    ••• Opciones
+                                    <span className="sm:hidden">•••</span>
+                                    <span className="hidden sm:inline">••• Opciones</span>
                                 </button>
                                 {showTicketOptions && (
                                     <>
@@ -1464,27 +1720,27 @@ function POSContent() {
                             {suspendedSales.length > 0 && (
                                 <button
                                     onClick={loadSuspendedSales}
-                                    className="text-xs font-bold text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 dark:hover:bg-orange-900/30 px-4 py-2 rounded-xl border border-orange-200 dark:border-orange-900/30 transition-colors flex items-center gap-2"
+                                    className="text-xs font-bold text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/10 hover:bg-orange-100 dark:hover:bg-orange-900/30 px-3 sm:px-4 py-2 rounded-xl border border-orange-200 dark:border-orange-900/30 transition-colors flex items-center gap-2"
+                                    aria-label="Ver suspendidas"
                                 >
                                     <span>⏱️</span>
-                                    Ver Suspendidas
+                                    <span className="hidden sm:inline">Ver Suspendidas</span>
                                 </button>
                             )}
                             {cart.length > 0 && (
                                 <button
-                                    onClick={() => {
-                                        if(window.confirm("¿Seguro que deseas vaciar todo el carrito?")) { clearCartStorage(); setCart([]); }
-                                    }}
-                                    className="text-xs font-bold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/30 px-4 py-2 rounded-xl border border-red-200 dark:border-red-900/30 transition-colors flex items-center gap-2"
+                                    onClick={() => setShowClearCartConfirm(true)}
+                                    className="text-xs font-bold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/30 px-3 sm:px-4 py-2 rounded-xl border border-red-200 dark:border-red-900/30 transition-colors flex items-center gap-2 min-w-[44px] min-h-[40px]"
+                                    aria-label="Vaciar carrito"
                                 >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                    Vaciar Carrito
+                                    <svg className="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    <span className="hidden sm:inline">Vaciar Carrito</span>
                                 </button>
                             )}
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0">
-                        <table className="w-full text-left border-collapse">
+                    <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0 pb-24 lg:pb-0">
+                        <table className="w-full text-left border-collapse hidden sm:table">
                             <thead className="sticky top-0 z-10 bg-gray-50/50 dark:bg-card/80 backdrop-blur-md">
                                 <tr className="border-b border-border text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider text-[10px]">
                                     <th className="p-4 w-12 text-center hidden sm:table-cell">Acción</th>
@@ -1576,6 +1832,93 @@ function POSContent() {
                             })}
                         </tbody>
                     </table>
+
+                    {/* Cards móvil — render alterno del carrito en pantallas pequeñas */}
+                    <div className="sm:hidden flex flex-col gap-2 px-2">
+                        {cart.length === 0 && (
+                            <div className="py-16 text-center text-base font-bold text-gray-400 uppercase tracking-widest opacity-50">
+                                <div className="text-4xl mb-3">🛒</div>
+                                El carrito está vacío
+                            </div>
+                        )}
+                        {cart.map((item, idx) => {
+                            let itemDiscountStr = "0%";
+                            let itemDiscountedPrice = item.price;
+                            if (selectedTier) {
+                                if (selectedTier.discountPercentage > 0) {
+                                    itemDiscountStr = `-${selectedTier.discountPercentage}%`;
+                                    itemDiscountedPrice = item.price * (1 - (selectedTier.discountPercentage / 100));
+                                } else if (selectedTier.defaultPriceMinusFixed > 0) {
+                                    itemDiscountStr = `-$${selectedTier.defaultPriceMinusFixed}`;
+                                    itemDiscountedPrice = item.price - selectedTier.defaultPriceMinusFixed;
+                                }
+                            }
+                            const rowTotal = itemDiscountedPrice * (item.quantity || 0);
+                            return (
+                                <div key={`m-${idx}`} className="bg-card border border-border rounded-2xl p-3 shadow-sm">
+                                    <div className="flex items-start justify-between gap-2 mb-3">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="font-bold text-foreground text-sm break-words">{item.name}</p>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                {isReturnMode && <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded-full uppercase text-[10px] font-bold">Dev</span>}
+                                                {itemDiscountStr !== '0%' && (
+                                                    <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-black">{itemDiscountStr}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => removeFromCart(idx)}
+                                            className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full inline-flex items-center justify-center min-w-[44px] min-h-[44px] shrink-0"
+                                            aria-label="Eliminar"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-800/40 border border-border rounded-xl">
+                                            <button
+                                                onClick={() => updateItemQuantity(idx, Math.max(0, (item.quantity || 0) - 1))}
+                                                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-xl font-black text-gray-700 dark:text-gray-200 active:bg-black/10 dark:active:bg-white/10 rounded-l-xl"
+                                                aria-label="Disminuir"
+                                            >−</button>
+                                            <input
+                                                type="number"
+                                                value={Number.isNaN(item.quantity) ? '' : item.quantity}
+                                                onChange={(e) => updateItemQuantity(idx, parseInt(e.target.value, 10))}
+                                                className="w-12 text-center bg-transparent outline-none font-black text-base"
+                                            />
+                                            <button
+                                                onClick={() => updateItemQuantity(idx, (item.quantity || 0) + 1)}
+                                                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-xl font-black text-gray-700 dark:text-gray-200 active:bg-black/10 dark:active:bg-white/10 rounded-r-xl"
+                                                aria-label="Aumentar"
+                                            >+</button>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="block text-base font-black text-foreground">${rowTotal.toFixed(2)}</span>
+                                            {itemDiscountStr !== '0%' && (
+                                                <span className="block text-[11px] text-gray-400 line-through">${(item.price * item.quantity).toFixed(2)}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="mt-3 flex items-center justify-between gap-2">
+                                        <label className="text-[11px] font-bold uppercase text-gray-500">Precio unit.</label>
+                                        <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-800/40 border border-border rounded-lg px-2">
+                                            <span className="text-gray-500 font-bold text-sm">$</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                value={item.price === 0 ? '' : item.price}
+                                                onChange={(e) => updateItemPrice(idx, parseFloat(e.target.value) || 0)}
+                                                className="w-24 py-2 bg-transparent outline-none text-right font-bold text-sm"
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
                     </div>
                 </div>
             </div>
@@ -1778,6 +2121,9 @@ function POSContent() {
                                         <p className="text-sm font-bold text-blue-900 dark:text-blue-100">{selectedClient.name}</p>
                                         <p className="text-[10px] font-medium text-blue-600 dark:text-blue-400">
                                             Crédito: ${selectedClient.storeCredit?.toFixed(2) || '0.00'}
+                                            {loyaltyInfo && (
+                                                <span className="ml-2 text-amber-600">⭐ {loyaltyInfo.balance.toLocaleString()} pts</span>
+                                            )}
                                         </p>
                                     </div>
                                 </div>
@@ -1910,6 +2256,75 @@ function POSContent() {
                         >
                             Descuento Manual (% o $)
                         </button>
+
+                        {/* Loyalty: canje de puntos */}
+                        {loyaltyInfo && selectedClient && !isReturnMode && (() => {
+                            const canRedeem = loyaltyInfo.balance >= loyaltyInfo.minRedeemPoints && loyaltyInfo.balance > 0;
+                            const subtotalNoLoyalty = (() => {
+                                let s = calculateSubtotal();
+                                if (selectedTier?.discountPercentage) s -= s * (selectedTier.discountPercentage / 100);
+                                else if (selectedTier?.defaultPriceMinusFixed) {
+                                    const q = cart.reduce((sum, it) => sum + (it.quantity || 0), 0);
+                                    s -= q * selectedTier.defaultPriceMinusFixed;
+                                }
+                                if (globalDiscount?.type === 'percent') s -= s * (globalDiscount.value / 100);
+                                else if (globalDiscount?.type === 'fixed') s -= globalDiscount.value;
+                                return Math.max(0, s);
+                            })();
+                            const maxByBalance = loyaltyInfo.balance;
+                            const maxByBase = Math.floor(subtotalNoLoyalty * loyaltyInfo.redeemRate);
+                            const maxApplicable = Math.min(maxByBalance, maxByBase);
+                            const loyDisc = loyaltyPointsToRedeem > 0
+                                ? Math.floor((loyaltyPointsToRedeem / loyaltyInfo.redeemRate) * 100) / 100
+                                : 0;
+                            return (
+                                <div className="p-2 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-lg space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">⭐ Puntos: {loyaltyInfo.balance.toLocaleString()}</span>
+                                        {loyaltyPointsToRedeem > 0 && (
+                                            <button
+                                                onClick={() => setLoyaltyPointsToRedeem(0)}
+                                                className="text-[10px] font-bold text-red-500 hover:underline"
+                                            >Quitar</button>
+                                        )}
+                                    </div>
+                                    {canRedeem && (
+                                        <div className="flex items-center gap-1.5">
+                                            <input
+                                                type="number"
+                                                min={loyaltyInfo.minRedeemPoints}
+                                                max={maxApplicable}
+                                                step={1}
+                                                value={loyaltyPointsToRedeem || ''}
+                                                placeholder={`Canjear (máx ${maxApplicable})`}
+                                                onChange={e => {
+                                                    const n = parseInt(e.target.value || '0', 10);
+                                                    if (!Number.isFinite(n) || n < 0) {
+                                                        setLoyaltyPointsToRedeem(0);
+                                                        return;
+                                                    }
+                                                    setLoyaltyPointsToRedeem(Math.min(n, maxApplicable));
+                                                }}
+                                                className="flex-1 px-2 py-1 text-xs border border-amber-300 dark:border-amber-700 rounded bg-background"
+                                            />
+                                            <button
+                                                onClick={() => setLoyaltyPointsToRedeem(maxApplicable)}
+                                                disabled={maxApplicable <= 0}
+                                                className="px-2 py-1 text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white rounded disabled:opacity-50"
+                                            >Máx</button>
+                                        </div>
+                                    )}
+                                    {loyaltyPointsToRedeem > 0 && (
+                                        <p className="text-[10px] font-bold text-amber-700">
+                                            -${loyDisc.toFixed(2)} de descuento
+                                        </p>
+                                    )}
+                                    {!canRedeem && loyaltyInfo.minRedeemPoints > 0 && (
+                                        <p className="text-[10px] text-amber-600">Mínimo: {loyaltyInfo.minRedeemPoints} pts</p>
+                                    )}
+                                </div>
+                            );
+                        })()}
                     </div>
                     </>
                 ) : (
@@ -2030,13 +2445,21 @@ function POSContent() {
                             </div>
                         )}
 
-                        {/* Cambio */}
-                        {!isReturnMode && calculateBalance() === 0 && selectedPaymentMethod?.toLowerCase().includes('efectivo') && parseFloat(receivedAmount) > 0 && (
-                            <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl flex justify-between items-center">
-                                <span className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400">Cambio</span>
-                                <span className="text-lg font-black text-emerald-600">{formatCurrency(parseFloat(receivedAmount) - calculateTotal())}</span>
-                            </div>
-                        )}
+                        {/* Cambio en vivo — se muestra apenas el efectivo recibido excede el saldo pendiente */}
+                        {!isReturnMode && selectedPaymentMethod?.toLowerCase().includes('efectivo') && (() => {
+                            const partialSum = partialPayments.reduce((a, p) => a + p.amount, 0);
+                            const received = parseFloat(receivedAmount) || 0;
+                            const total = calculateTotal();
+                            const balance = Math.max(0, total - partialSum);
+                            const change = received - balance;
+                            if (change <= 0 || total <= 0) return null;
+                            return (
+                                <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-400 dark:border-emerald-700 rounded-xl flex justify-between items-center animate-in slide-in-from-top-2 duration-200">
+                                    <span className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">💵 Cambio</span>
+                                    <span className="text-2xl font-black text-emerald-600">{formatCurrency(change)}</span>
+                                </div>
+                            );
+                        })()}
 
                         {/* Grid de métodos de pago — botones más compactos */}
                         <div className="grid grid-cols-3 gap-1.5">
@@ -2064,19 +2487,19 @@ function POSContent() {
                                                 setReceivedAmount('');
                                             }
                                         }}
-                                        className={`px-2 py-2.5 text-xs font-bold rounded-xl border transition-all flex flex-col items-center justify-center gap-1 min-h-[62px] ${selectedPaymentMethod === method.name ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 border-blue-500 shadow-sm' : 'bg-card text-gray-500 border-border hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                        className={`px-2 py-2.5 text-xs font-bold rounded-xl border transition-all flex flex-col items-center justify-center gap-1.5 min-h-[80px] ${selectedPaymentMethod === method.name ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 border-blue-500 shadow-sm' : 'bg-card text-gray-500 border-border hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                                     >
                                         {logoSrc ? (
                                             <img
                                                 src={logoSrc}
                                                 alt={method.name}
-                                                className="h-7 w-7 object-contain rounded-md shrink-0"
+                                                className="h-8 w-8 object-contain rounded-md shrink-0"
                                                 draggable={false}
                                             />
                                         ) : (
-                                            <span className="text-lg shrink-0">{icon}</span>
+                                            <span className="text-2xl shrink-0">{icon}</span>
                                         )}
-                                        <span className="text-[8px] uppercase tracking-tight text-center leading-[1.1] break-words line-clamp-2 w-full">{method.name}</span>
+                                        <span className="text-xs uppercase tracking-tight text-center leading-[1.1] break-words line-clamp-2 w-full">{method.name}</span>
                                     </button>
                                 );
                             })}
@@ -2200,8 +2623,8 @@ function POSContent() {
 
             {/* Modal de Variación (Estilo Tabular pero con UI Premium) */}
             {showVariationModal && selectedProduct && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-                    <div className="bg-card w-full max-w-2xl rounded-3xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 flex-1">
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-card w-full sm:max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[90vh] animate-in slide-in-from-bottom sm:zoom-in-95 sm:slide-in-from-bottom-0 duration-200 flex-1">
                         {/* Header */}
                         <div className="flex justify-between items-center p-6 border-b border-border bg-gray-50/50 dark:bg-gray-900/50 shrink-0">
                             <div>
@@ -2423,10 +2846,41 @@ function POSContent() {
                 </div>
             )}
 
+            {/* Modal confirmación vaciar carrito */}
+            {showClearCartConfirm && (
+                <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-card w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl shadow-2xl border border-border overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
+                        <div className="p-6">
+                            <div className="flex items-start gap-3 mb-4">
+                                <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center shrink-0 text-2xl">🗑️</div>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="text-lg font-black text-foreground">¿Vaciar carrito?</h3>
+                                    <p className="text-sm text-gray-500 mt-1">Se eliminarán todos los artículos del ticket actual.</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setShowClearCartConfirm(false)}
+                                    className="flex-1 py-3 rounded-xl border border-border text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={() => { clearCartStorage(); setCart([]); setShowClearCartConfirm(false); setTimeout(() => searchInputRef.current?.focus(), 50); }}
+                                    className="flex-1 py-3 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 transition-colors"
+                                >
+                                    Vaciar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Modal de Descuento Manual */}
             {showDiscountModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-                    <div className="bg-card w-full max-w-sm rounded-3xl shadow-2xl border border-border overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-card w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl shadow-2xl border border-border overflow-hidden flex flex-col animate-in slide-in-from-bottom sm:zoom-in-95 sm:slide-in-from-bottom-0 duration-200">
                         {/* Header */}
                         <div className="flex justify-between items-center p-6 border-b border-border bg-gray-50/50 dark:bg-gray-900/50">
                             <div>
@@ -2439,14 +2893,17 @@ function POSContent() {
                             >×</button>
                         </div>
 
+                        <form onSubmit={(e) => { e.preventDefault(); const val = parseFloat(discountValue); if (!isNaN(val) && val > 0) { setGlobalDiscount({ type: discountType, value: val }); } else { setGlobalDiscount(null); } setShowDiscountModal(false); setDiscountValue(''); }}>
                         {/* Body */}
                         <div className="p-6 space-y-4">
                             <div className="flex bg-gray-100 dark:bg-gray-800 rounded-xl p-1 mb-6">
                                 <button
+                                    type="button"
                                     onClick={() => setDiscountType('percent')}
                                     className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${discountType === 'percent' ? 'bg-white dark:bg-gray-700 text-blue-600 shadow-sm' : 'text-gray-500 hover:text-foreground'}`}
                                 >Porcentaje %</button>
                                 <button
+                                    type="button"
                                     onClick={() => setDiscountType('fixed')}
                                     className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${discountType === 'fixed' ? 'bg-white dark:bg-gray-700 text-green-600 shadow-sm' : 'text-gray-500 hover:text-foreground'}`}
                                 >Monto Fijo $</button>
@@ -2465,6 +2922,7 @@ function POSContent() {
                                         placeholder="Ej: 10"
                                         value={discountValue}
                                         onChange={(e) => setDiscountValue(e.target.value)}
+                                        autoFocus
                                         className="w-full pl-10 pr-4 py-4 text-xl font-black bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground placeholder:text-gray-400"
                                     />
                                 </div>
@@ -2474,27 +2932,20 @@ function POSContent() {
                         {/* Footer */}
                         <div className="p-6 border-t border-border bg-gray-50/50 dark:bg-gray-900/50 flex flex-col md:flex-row gap-3">
                             <button
+                                type="button"
                                 onClick={() => setShowDiscountModal(false)}
                                 className="flex-1 px-4 py-3 bg-white dark:bg-gray-800 border border-border text-foreground font-bold rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition"
                             >
                                 Cancelar
                             </button>
                             <button
-                                onClick={() => {
-                                    const val = parseFloat(discountValue);
-                                    if (!isNaN(val) && val > 0) {
-                                        setGlobalDiscount({ type: discountType, value: val });
-                                    } else {
-                                        setGlobalDiscount(null);
-                                    }
-                                    setShowDiscountModal(false);
-                                    setDiscountValue('');
-                                }}
+                                type="submit"
                                 className={`flex-1 px-4 py-3 ${discountType === 'percent' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30' : 'bg-green-600 hover:bg-green-700 shadow-green-500/30'} text-white shadow-lg rounded-xl transition font-black uppercase tracking-wider`}
                             >
                                 Aplicar Dcto.
                             </button>
                         </div>
+                        </form>
                     </div>
                 </div>
             )}
@@ -2704,13 +3155,16 @@ function POSContent() {
                                 className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 transition-colors flex items-center justify-center font-bold text-gray-500"
                             >×</button>
                         </div>
+                        <form onSubmit={(e) => { e.preventDefault(); handleAddMovement(); }}>
                         <div className="p-6 space-y-4">
                             <div className="flex bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
                                 <button
+                                    type="button"
                                     onClick={() => setMovementType('IN')}
                                     className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${movementType === 'IN' ? 'bg-white dark:bg-gray-700 text-green-600 shadow-sm' : 'text-gray-500 hover:text-foreground'}`}
                                 >Entrada</button>
                                 <button
+                                    type="button"
                                     onClick={() => setMovementType('OUT')}
                                     className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${movementType === 'OUT' ? 'bg-white dark:bg-gray-700 text-red-600 shadow-sm' : 'text-gray-500 hover:text-foreground'}`}
                                 >Salida</button>
@@ -2722,6 +3176,7 @@ function POSContent() {
                                     value={cashReason}
                                     onChange={(e) => setCashReason(e.target.value)}
                                     placeholder={movementType === 'IN' ? "Ej: Saldo a favor, Abono" : "Ej: Pago proveedor, Comida"}
+                                    autoFocus
                                     className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground placeholder:text-gray-400 font-bold"
                                 />
                             </div>
@@ -2739,12 +3194,13 @@ function POSContent() {
                         </div>
                         <div className="p-6 border-t border-border bg-gray-50/50 dark:bg-gray-900/50 flex flex-col gap-3">
                             <button
-                                onClick={handleAddMovement}
+                                type="submit"
                                 className={`w-full px-4 py-3 text-white shadow-lg rounded-xl transition font-black uppercase tracking-wider ${movementType === 'IN' ? 'bg-green-600 hover:bg-green-700 shadow-green-500/30' : 'bg-red-600 hover:bg-red-700 shadow-red-500/30'}`}
                             >
                                 Registrar {movementType === 'IN' ? 'Ingreso' : 'Egreso'}
                             </button>
                         </div>
+                        </form>
                     </div>
                 </div>
             )}
@@ -3084,7 +3540,7 @@ function POSContent() {
                     <div className="bg-card w-full max-w-sm rounded-3xl shadow-2xl flex flex-col max-h-[90vh]">
                         <div className="p-4 border-b border-border flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 rounded-t-3xl">
                             <h3 className="font-bold text-foreground">Imprimir Ticket</h3>
-                            <button onClick={() => setShowReceiptModal(false)} className="text-gray-400 hover:text-red-500 w-8 h-8 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center transition-colors">✕</button>
+                            <button onClick={() => { setShowReceiptModal(false); setTimeout(() => searchInputRef.current?.focus(), 50); }} className="text-gray-400 hover:text-red-500 w-8 h-8 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center transition-colors">✕</button>
                         </div>
                         
                         <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900 flex justify-center">
@@ -3247,38 +3703,65 @@ function POSContent() {
 
                         <div className="p-4 bg-card border-t border-border flex gap-3 rounded-b-3xl">
                             <button
-                                onClick={() => setShowReceiptModal(false)}
+                                onClick={() => { setShowReceiptModal(false); setTimeout(() => searchInputRef.current?.focus(), 50); }}
                                 className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-foreground font-bold rounded-xl transition-colors"
                             >
-                                Cerrar
+                                Cerrar (Esc)
                             </button>
                             <button
                                 ref={printReceiptBtnRef}
                                 autoFocus
                                 onClick={() => {
-                                    const receiptEl = document.getElementById('thermal-receipt');
-                                    if (!receiptEl) return;
-                                    // Copy the actual compiled CSS from the page so it renders identically
-                                    const styleLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(l => l.outerHTML).join('');
-                                    const inlineStyles = Array.from(document.querySelectorAll('style')).map(s => s.outerHTML).join('');
-                                    const printWindow = window.open('', '', 'width=400,height=800');
-                                    if (printWindow) {
-                                        printWindow.document.write(
-                                            '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket</title>' +
-                                            styleLinks + inlineStyles +
-                                            '<style>@page{margin:0;size:80mm auto}body{margin:0;padding:4px;background:white;display:flex;justify-content:center}.shadow-md,.shadow-2xl,.shadow-sm{box-shadow:none!important}</style>' +
-                                            '</head><body>' + receiptEl.outerHTML +
-                                            '<script>window.onload=function(){setTimeout(function(){window.print();setTimeout(function(){window.close()},500)},400)}<\/script>' +
-                                            '</body></html>'
-                                        );
-                                        printWindow.document.close();
-                                        setShowReceiptModal(false);
-                                    }
+                                    handlePrintDirect('thermal-receipt');
+                                    setShowReceiptModal(false);
+                                    setTimeout(() => searchInputRef.current?.focus(), 50);
                                 }}
                                 className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all flex justify-center items-center gap-2"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
                                 Imprimir Ticket (Enter)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal - Ticket de Traspaso (post-traspaso) */}
+            {showTransferReceiptModal && lastTransfer && (
+                <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+                    <div className="bg-card w-full max-w-md rounded-3xl shadow-2xl flex flex-col max-h-[90dvh] overflow-hidden">
+                        <div className="p-5 border-b border-border bg-gray-50 dark:bg-gray-800/50 rounded-t-3xl shrink-0 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-lg font-black text-foreground">📦 Traspaso Completado</h3>
+                                <p className="text-xs text-gray-500 mt-0.5">Folio T-{String(lastTransfer.folio).padStart(6, '0')}</p>
+                            </div>
+                            <button
+                                onClick={() => { setShowTransferReceiptModal(false); setLastTransfer(null); }}
+                                className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 hover:text-red-500 flex items-center justify-center font-bold transition-colors"
+                            >✕</button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900 flex justify-center">
+                            <TransferTicket
+                                transfer={lastTransfer}
+                                elementId="transfer-receipt"
+                                storeName={globalConfig?.storeName}
+                                logoUrl={globalConfig?.logoUrl}
+                            />
+                        </div>
+                        <div className="p-4 bg-card border-t border-border flex gap-3 rounded-b-3xl">
+                            <button
+                                onClick={() => { setShowTransferReceiptModal(false); setLastTransfer(null); setTimeout(() => searchInputRef.current?.focus(), 50); }}
+                                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-foreground font-bold rounded-xl transition-colors"
+                            >Cerrar</button>
+                            <button
+                                autoFocus
+                                onClick={() => {
+                                    handlePrintDirect('transfer-receipt');
+                                }}
+                                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all flex justify-center items-center gap-2"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                                Imprimir Comprobante
                             </button>
                         </div>
                     </div>
@@ -3371,22 +3854,7 @@ function POSContent() {
                                     >← Volver</button>
                                     <button
                                         onClick={() => {
-                                            const receiptEl = document.getElementById('reprint-receipt');
-                                            if (!receiptEl) return;
-                                            const styleLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(l => l.outerHTML).join('');
-                                            const inlineStyles = Array.from(document.querySelectorAll('style')).map(s => s.outerHTML).join('');
-                                            const win = window.open('', '', 'width=400,height=800');
-                                            if (win) {
-                                                win.document.write(
-                                                    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket</title>' +
-                                                    styleLinks + inlineStyles +
-                                                    '<style>@page{margin:0;size:80mm auto}body{margin:0;padding:4px;background:white;display:flex;justify-content:center}.shadow-md,.shadow-2xl,.shadow-sm{box-shadow:none!important}</style>' +
-                                                    '</head><body>' + receiptEl.outerHTML +
-                                                    '<script>window.onload=function(){setTimeout(function(){window.print();setTimeout(function(){window.close()},500)},400)}<\/script>' +
-                                                    '</body></html>'
-                                                );
-                                                win.document.close();
-                                            }
+                                            handlePrintDirect('reprint-receipt');
                                         }}
                                         className="flex-1 py-3 rounded-xl bg-purple-600 text-white text-sm font-bold hover:bg-purple-700 transition-colors"
                                     >🖨️ Imprimir</button>

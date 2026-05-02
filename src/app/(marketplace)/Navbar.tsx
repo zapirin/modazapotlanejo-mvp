@@ -297,6 +297,15 @@ export default function Navbar({
                         </Link>
                         )}
 
+                        {/* Mis Puntos Icon — solo compradores logueados */}
+                        {user && (user.role === 'BUYER' || user.role === 'WHOLESALE_BUYER') && (
+                        <Link href="/mis-puntos" className="p-2 text-gray-700 dark:text-gray-300 hover:text-amber-500 transition-colors" title="Mis Puntos">
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2l2.6 7.6h8L16 14.2l2.4 7.6L12 17.4 5.6 21.8 8 14.2 1.4 9.6h8z" />
+                            </svg>
+                        </Link>
+                        )}
+
                         {/* Cart Icon */}
                         <Link href="/cart" className="relative p-2 text-gray-700 dark:text-gray-300 hover:text-blue-600 transition-colors">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>

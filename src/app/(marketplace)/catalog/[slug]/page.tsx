@@ -4,7 +4,7 @@ import { getProductDetail, getAdjacentProducts, getRelatedProducts } from '../..
 import ProductDetailClient from './ProductDetailClient';
 import { getSessionUser } from '@/app/actions/auth';
 import { headers } from 'next/headers';
-import { getBrandConfig } from '@/lib/brand';
+import { getBrandConfig, getCanonicalBase } from '@/lib/brand';
 import { getMarketplaceSettings } from '@/app/actions/marketplace';
 import type { Metadata } from 'next';
 
@@ -50,7 +50,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
             description,
             images: image ? [image] : [],
         },
-        alternates: { canonical: `${baseUrl}/catalog/${slug}` },
+        alternates: { canonical: `${getCanonicalBase(host, brand)}/catalog/${slug}` },
     };
 }
 

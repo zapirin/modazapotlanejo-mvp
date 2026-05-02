@@ -1,5 +1,5 @@
 # CONTEXTO COMPLETO — PROYECTO MODAZAPO
-*Actualizado el 14/04/2026 — logos POS, Cortes Z, permisos cajeros, 404→home*
+*Actualizado el 20/04/2026 — precio público toggle, abonos suspendidas, POS mejoras, lightbox imágenes*
 
 ---
 
@@ -184,8 +184,9 @@ pm2 logs modazapo --lines 50 --nostream | tail -30
 - **Cuando se tenga el token correcto:** `sed -i 's/^SKYDROPX_API_KEY=.*/SKYDROPX_API_KEY=TOKEN_REAL/' /var/www/modazapo/.env && pm2 restart modazapo` (no necesita rebuild)
 
 ### Columnas extra en BD (inofensivas)
-- La tabla `User` tiene columna `requireCashSession` y `StoreSettings` tiene `aiProvider`/`aiApiKey` en la BD del servidor. No están en el schema.prisma actual (se revirtieron en el código) pero son inofensivas.
-- La tabla `User` ahora tiene `canViewCommissions` y `canViewZCuts` (añadidas el 14/04/2026 con `prisma db push`).
+- La tabla `User` ahora tiene `requireCashSession`, `requireSalesperson`, `cashierCanDeleteSuspended` (añadidas en abril 2026 con `prisma db push`)
+- La tabla `User` tiene `canViewCommissions` y `canViewZCuts` (añadidas el 14/04/2026)
+- `StoreSettings` tiene `aiProvider`/`aiApiKey` en la BD del servidor (inofensivas)
 
 ### Seguridad — repositorio público
 - El repo `zapirin/modazapotlanejo-mvp` en GitHub es **público**
@@ -199,6 +200,7 @@ pm2 logs modazapo --lines 50 --nostream | tail -30
 ## FUNCIONALIDADES IMPLEMENTADAS
 
 ### Marketplace
+- **Visibilidad de precios configurable**: toggle en Admin → Marketplace para mostrar precios a todos o solo a usuarios logueados (uno por marketplace global y uno por marca/dominio). Agregar al carrito siempre requiere login. Configuración guardada en `MarketplaceSettings.showPricesPublicly` y `BrandConfig.showPricesPublicly`
 - Catálogo público sin login requerido
 - Niveles de precio por volumen (auto en marketplace y POS)
 - Carrito con modos de mayoreo (Corrida/Paquete/Caja)
@@ -221,6 +223,8 @@ pm2 logs modazapo --lines 50 --nostream | tail -30
 - Tracking de envíos
 
 ### Admin
+- **Gestión de marcas**: botones Desactivar/Activar y Eliminar en cada tarjeta de marca; las marcas inactivas muestran banner amarillo de advertencia
+- **Login por dominio**: la página de login muestra "Volver a [Nombre de Marca]" en lugar de "Volver al Marketplace" en dominios de marca propia
 - Teléfono y WhatsApp visibles en lista de vendedores
 - Teléfono copiado al User al aprobar vendedor
 - Branding correcto en correos de bienvenida a vendedores
@@ -257,6 +261,13 @@ pm2 logs modazapo --lines 50 --nostream | tail -30
 - **Variantes con stock cero/negativo** pueden venderse (advertencia naranja en lugar de bloqueo)
 - **Ticket impresión**: función reescrita con CSS inline + `window.onload` (eliminada dependencia a CDN Tailwind que causaba papel en blanco)
 - **Logos de métodos de pago**: Clip, Zettle/PayPal y Ualabis muestran iconos SVG reales en lugar de emojis (archivos en `/public/logos/`)
+- **Notificación de cambio en efectivo**: aparece en esquina superior derecha al cerrar el modal del ticket, dura 2 segundos
+- **Lightbox de imágenes**: clicar el nombre de un producto en el carrito muestra su foto en pantalla completa
+- **Vendedor de piso obligatorio**: toggle en Configuración → Tienda que bloquea completar venta si no se asigna vendedor de piso
+- **Ventas suspendidas con abono**: el efectivo abonado al suspender se registra como `CashMovement IN` en el Corte Z activo; al completar la venta en sesión posterior se crea `CashMovement OUT` para evitar doble conteo
+- **Cajero puede eliminar ventas suspendidas**: toggle en Configuración → Tienda; ventas con abono nunca pueden ser eliminadas por cajero
+- **Bug fix**: ventas suspendidas reanudadas ahora se eliminan correctamente (el problema era que `deleteSuspendedSale` bloqueaba a cajeros — ahora usa `clearResumedSale`)
+- **Corte Z → auto-logout**: al cerrar sesión de caja se desloguea automáticamente; el monto contado queda en `localStorage` para pre-llenarlo al abrir la siguiente sesión
 
 ### Reportes
 - Tab **Ventas**: filtros por periodo, sucursal y producto; accesible a cajeros con `canViewReports`
@@ -265,10 +276,12 @@ pm2 logs modazapo --lines 50 --nostream | tail -30
 - Tab **Cortes Z**: lista de sesiones de caja cerradas (más reciente primero) con KPIs y desglose por método de pago; requiere permiso `canViewZCuts`
 - Permisos independientes `canViewCommissions` y `canViewZCuts` configurables por cajero en Configuración → Equipo
 - Campos nuevos en modelo `User` (schema + BD): `canViewCommissions Boolean @default(false)`, `canViewZCuts Boolean @default(false)`
+- **Filtro de sucursal en todas las pestañas** de reportes (no solo Comisiones)
 
 ### Inventario
 - Grilla multi-almacén/sucursal para editar stock por ubicación
 - Celda de stock clickeable directamente para abrir modal de ajuste
+- **Lightbox de imágenes**: pasar el mouse sobre la foto de un producto muestra ícono 🔍; al hacer clic se abre en pantalla completa (aplica también en Gestión de Productos — vista tabla y vista tarjeta)
 
 ### Productos
 - Constructor de nuevo producto con grilla de variantes multi-ubicación integrada

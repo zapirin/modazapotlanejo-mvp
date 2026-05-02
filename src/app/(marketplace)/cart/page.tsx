@@ -9,6 +9,7 @@ import { createCheckoutSession } from '@/app/actions/stripe';
 import { getMarketplacePriceTiers, getProductImages, getSellerTransferSettings } from '../actions';
 import { calculateAutoDiscount } from '@/lib/discountUtils';
 import { validateCoupon, incrementCouponUsage } from '@/app/actions/coupons';
+import { getLoyaltyForBuyer } from '@/app/actions/loyalty';
 import { toast } from 'sonner';
 import {
     getMyShippingAddresses,
@@ -42,6 +43,9 @@ export default function CartPage() {
     const [couponInputs, setCouponInputs] = useState<Record<string, string>>({});
     const [couponLoading, setCouponLoading] = useState<Record<string, boolean>>({});
     const [couponErrors, setCouponErrors] = useState<Record<string, string>>({});
+    // Loyalty: { [sellerId]: { program, balance } } y { [sellerId]: pointsApplied }
+    const [loyaltyMap, setLoyaltyMap] = useState<Record<string, { earnRate: number; redeemRate: number; minRedeemPoints: number; balance: number }>>({});
+    const [loyaltyApplied, setLoyaltyApplied] = useState<Record<string, number>>({});
 
     // Detect if we're on kalexafashion.com
     useEffect(() => {
@@ -76,17 +80,28 @@ export default function CartPage() {
 
     const sellerGroups = getItemsBySeller();
 
-    // Cargar niveles de precio de cada vendedor en el carrito
+    // Cargar niveles de precio + loyalty de cada vendedor en el carrito
     useEffect(() => {
         const loadTiers = async () => {
             const groups = getItemsBySeller();
             if (groups.size === 0) return;
             const tierMap = new Map<string, any[]>();
+            const loyalty: Record<string, any> = {};
             for (const [sellerId] of groups) {
                 const tiers = await getMarketplacePriceTiers(sellerId);
                 if (tiers.length > 0) tierMap.set(sellerId, tiers);
+                const loy = await getLoyaltyForBuyer(sellerId);
+                if (loy.program) {
+                    loyalty[sellerId] = {
+                        earnRate: loy.program.earnRate,
+                        redeemRate: loy.program.redeemRate,
+                        minRedeemPoints: loy.program.minRedeemPoints,
+                        balance: loy.balance,
+                    };
+                }
             }
             setSellerTiers(tierMap);
+            setLoyaltyMap(loyalty);
         };
         loadTiers();
 
@@ -272,7 +287,15 @@ export default function CartPage() {
         return total;
     };
 
-    // Total con descuentos de volumen + cupones aplicados (sin envío)
+    // Descuento por puntos aplicados a un vendedor (en MXN)
+    const getLoyaltyDiscount = (sellerId: string) => {
+        const pts = loyaltyApplied[sellerId] || 0;
+        const cfg = loyaltyMap[sellerId];
+        if (!cfg || pts <= 0 || cfg.redeemRate <= 0) return 0;
+        return Math.floor((pts / cfg.redeemRate) * 100) / 100;
+    };
+
+    // Total con descuentos de volumen + cupones + loyalty (sin envío)
     const getSubtotalWithAll = () => {
         let total = 0;
         for (const [sellerId, group] of sellerGroups) {
@@ -280,7 +303,8 @@ export default function CartPage() {
             const volumeTotal = discountResult ? discountResult.finalTotal : group.total;
             const coupon = appliedCoupons.get(sellerId);
             const couponDiscount = coupon ? coupon.discountAmount : 0;
-            total += Math.max(0, volumeTotal - couponDiscount);
+            const loyaltyDisc = getLoyaltyDiscount(sellerId);
+            total += Math.max(0, volumeTotal - couponDiscount - loyaltyDisc);
         }
         return total;
     };
@@ -332,6 +356,7 @@ export default function CartPage() {
                         ? (paymentMethod === 'paypal' ? 'Tarjeta de Débito/Crédito' : 'Depósito/Transferencia')
                         : (paymentMethod === 'transfer' ? 'Depósito/Transferencia' : undefined),
                     domain: typeof window !== 'undefined' ? window.location.hostname : undefined,
+                    loyaltyRedeemPoints: loyaltyApplied[sellerId] || 0,
                 });
 
                 if (result.success && result.orderId) {
@@ -733,6 +758,79 @@ export default function CartPage() {
                                                 </div>
                                             );
                                         })()}
+
+                                        {/* ── PROGRAMA DE PUNTOS ── */}
+                                        {(() => {
+                                            const cfg = loyaltyMap[sellerId];
+                                            if (!cfg || cfg.earnRate <= 0) return null;
+                                            const volumeTotal = discountResult ? discountResult.finalTotal : group.total;
+                                            const coupon = appliedCoupons.get(sellerId);
+                                            const baseAfterDiscounts = Math.max(0, volumeTotal - (coupon?.discountAmount || 0));
+                                            const ptsApplied = loyaltyApplied[sellerId] || 0;
+                                            const loyDisc = getLoyaltyDiscount(sellerId);
+                                            const finalBase = Math.max(0, baseAfterDiscounts - loyDisc);
+                                            const willEarn = Math.floor(finalBase / cfg.earnRate);
+                                            const canRedeem = cfg.balance >= cfg.minRedeemPoints && cfg.balance > 0;
+                                            const maxPtsForBalance = cfg.balance;
+                                            const maxPtsForBase = Math.floor(baseAfterDiscounts * cfg.redeemRate);
+                                            const maxApplicable = Math.min(maxPtsForBalance, maxPtsForBase);
+                                            return (
+                                                <div className="p-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">⭐ Puntos</span>
+                                                        <span className="text-[10px] text-amber-600 font-bold">Saldo: {cfg.balance.toLocaleString()}</span>
+                                                    </div>
+                                                    <p className="text-xs text-amber-700 dark:text-amber-200">
+                                                        Ganarás <strong>{willEarn}</strong> punto{willEarn === 1 ? '' : 's'} con esta compra.
+                                                    </p>
+                                                    {canRedeem && (
+                                                        <div className="space-y-1.5">
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={ptsApplied > 0}
+                                                                    onChange={e => {
+                                                                        if (e.target.checked) {
+                                                                            const pts = Math.min(maxApplicable, cfg.balance);
+                                                                            setLoyaltyApplied(p => ({ ...p, [sellerId]: pts }));
+                                                                        } else {
+                                                                            setLoyaltyApplied(p => { const n = { ...p }; delete n[sellerId]; return n; });
+                                                                        }
+                                                                    }}
+                                                                    className="w-4 h-4"
+                                                                />
+                                                                <span className="text-xs font-bold text-amber-800 dark:text-amber-200">
+                                                                    Usar mis puntos como descuento
+                                                                </span>
+                                                            </label>
+                                                            {ptsApplied > 0 && (
+                                                                <div className="flex items-center gap-2 pl-6">
+                                                                    <input
+                                                                        type="number"
+                                                                        min={cfg.minRedeemPoints}
+                                                                        max={maxApplicable}
+                                                                        step={1}
+                                                                        value={ptsApplied}
+                                                                        onChange={e => {
+                                                                            const n = parseInt(e.target.value || '0', 10);
+                                                                            if (!Number.isFinite(n) || n < 0) return;
+                                                                            setLoyaltyApplied(p => ({ ...p, [sellerId]: Math.min(n, maxApplicable) }));
+                                                                        }}
+                                                                        className="w-24 px-2 py-1 text-xs border border-amber-300 dark:border-amber-700 rounded bg-background"
+                                                                    />
+                                                                    <span className="text-xs font-bold text-amber-700">
+                                                                        pts = -${loyDisc.toFixed(2)}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            {cfg.minRedeemPoints > 0 && (
+                                                                <p className="text-[10px] text-amber-600 pl-6">Mínimo: {cfg.minRedeemPoints} pts</p>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             );
@@ -1049,6 +1147,37 @@ export default function CartPage() {
                                 </div>
                             )}
 
+                            {/* Dynamic Trust Signal based on Payment Method */}
+                            {!isKalexa && (
+                                <div className={`p-4 rounded-2xl border ${
+                                    paymentMethod === 'stripe' 
+                                        ? 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-800/50' 
+                                        : 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800/50'
+                                }`}>
+                                    {paymentMethod === 'stripe' ? (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                                                <span className="text-xs font-black uppercase tracking-wider">Compra Protegida</span>
+                                            </div>
+                                            <p className="text-[11px] font-medium text-blue-600/80 dark:text-blue-300/80 leading-relaxed">
+                                                Tu dinero está seguro. Retenemos el pago y no se lo entregamos al vendedor hasta que recibas tu pedido tal como lo esperabas.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                                <span className="text-xs font-black uppercase tracking-wider">Pago Directo al Vendedor</span>
+                                            </div>
+                                            <p className="text-[11px] font-medium text-yellow-700/80 dark:text-yellow-400/80 leading-relaxed">
+                                                Este método es un acuerdo directo con el vendedor. El programa de <strong>Compra Protegida</strong> no cubre pagos realizados por transferencia o depósito fuera de nuestra pasarela.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <button
                                 onClick={handleCheckout}
                                 disabled={isSubmitting || (!pickupMode && (!selectedAddressId || !selectedRate))}
@@ -1073,6 +1202,33 @@ export default function CartPage() {
                                             ? `Confirmar Pedido — Transferencia`
                                             : `Pagar $${getTotalWithShipping().toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
                             </button>
+
+                            {/* Security Assets (Visa, Mastercard, Amex, Lock) */}
+                            {(!isKalexa && paymentMethod === 'stripe') && (
+                                <div className="flex flex-col items-center gap-3 pt-2 pb-2">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 rounded-lg border border-border">
+                                            <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Pago 100% Seguro</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 opacity-60">
+                                        {/* Visa */}
+                                        <div className="h-6 w-auto bg-white rounded flex items-center justify-center px-2 border border-gray-200">
+                                            <span className="text-[12px] font-black italic text-[#1A1F71]">VISA</span>
+                                        </div>
+                                        {/* Mastercard */}
+                                        <div className="h-6 w-auto bg-white rounded flex items-center justify-center px-1 border border-gray-200">
+                                            <svg className="h-4" viewBox="0 0 36 24" fill="none"><circle cx="12" cy="12" r="10" fill="#EB001B"/><circle cx="24" cy="12" r="10" fill="#F79E1B"/><path d="M18 20.3a10 10 0 0 1 0-16.6 10 10 0 0 0 0 16.6z" fill="#FF5F00"/></svg>
+                                        </div>
+                                        {/* Amex */}
+                                        <div className="h-6 w-auto bg-blue-500 rounded flex items-center justify-center px-1.5 border border-blue-600">
+                                            <span className="text-[9px] font-black text-white leading-none">AMEX</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
 
                             <p className="text-[10px] text-center text-gray-400 font-medium leading-relaxed">
                                 {isKalexa
