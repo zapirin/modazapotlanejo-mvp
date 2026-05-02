@@ -30,10 +30,16 @@ export async function GET(request: NextRequest) {
 
         const where: any = { isActive: true, ...sellerFilter };
         if (search) {
-            where.OR = [
-                { name: { contains: search, mode: 'insensitive' } },
-                { sku: { contains: search, mode: 'insensitive' } },
-            ];
+            const normalized = search.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+            // Use PostgreSQL translate() for true accent-insensitive search
+            const matchingIds: { id: string }[] = await prisma.$queryRawUnsafe(
+                `SELECT id FROM "Product" WHERE "isActive" = true AND (
+                    translate(lower(name), 'áéíóúñàèìòùâêîôûäëïöü', 'aeiounaeiouaeiouaeiou') LIKE $1
+                    OR lower(sku) LIKE $1
+                )`,
+                `%${normalized}%`
+            );
+            where.id = { in: matchingIds.map(r => r.id) };
         }
         if (categoryId) where.categoryId = categoryId;
         if (brandId) where.brandId = brandId;
