@@ -910,7 +910,15 @@ export default function InventoryPage() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-border">
-                                        {adjustingProduct.variants.map((v: any) => {
+                                        {(() => {
+                                            const opts: any[] = adjustingProduct.variantOptions || [];
+                                            const getSortKey = (v: any) => opts.map((opt: any) => {
+                                                const val = v.attributes?.[opt.name] ?? (opt.name === 'Color' ? v.color : (opt.name === 'Talla' || opt.name === 'Tamaño') ? v.size : '');
+                                                const idx = (opt.values as string[]).indexOf(val);
+                                                return idx >= 0 ? String(idx).padStart(4, '0') : '9999';
+                                            }).join('-');
+                                            return [...adjustingProduct.variants].sort((a: any, b: any) => getSortKey(a).localeCompare(getSortKey(b)));
+                                        })().map((v: any) => {
                                             const totalRow = locations.reduce((acc, loc) => acc + (stockAdjustments[`${v.id}_${loc.id}`] || 0), 0);
                                             return (
                                                 <tr key={v.id} className="hover:bg-input/50 transition-colors">

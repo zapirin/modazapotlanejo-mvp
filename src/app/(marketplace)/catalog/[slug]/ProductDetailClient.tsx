@@ -86,7 +86,14 @@ export default function ProductDetailClient({
         if (!lastAttr) return [];
         const sizes = getUniqueValues(lastAttr.name);
         const allNumeric = sizes.every(s => !isNaN(parseFloat(s)) && isFinite(Number(s)));
-        return allNumeric ? [...sizes].sort((a, b) => parseFloat(a) - parseFloat(b)) : sizes;
+        if (allNumeric) return [...sizes].sort((a, b) => parseFloat(a) - parseFloat(b));
+        // Respect the order defined in variantOptions.values
+        const definedOrder: string[] = lastAttr.values || [];
+        return [...sizes].sort((a, b) => {
+            const ia = definedOrder.indexOf(a);
+            const ib = definedOrder.indexOf(b);
+            return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+        });
     })();
 
     // Stock disponible por talla (filtrando por otros atributos seleccionados)
