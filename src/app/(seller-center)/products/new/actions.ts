@@ -572,6 +572,15 @@ export async function createLayaway(data: {
                         }
                     }
                 });
+
+                // Also decrement inventoryLevel for the current location
+                if (locationId) {
+                    await tx.inventoryLevel.upsert({
+                        where: { variantId_locationId: { variantId: item.variantId, locationId } },
+                        create: { variantId: item.variantId, locationId, stock: -item.quantity },
+                        update: { stock: { decrement: item.quantity } }
+                    });
+                }
             }
 
             return createdSale;
@@ -773,6 +782,15 @@ export async function processSale(data: {
                     data: { stock: { decrement: item.quantity } }
                 });
 
+                // Also decrement inventoryLevel for the current location
+                if (locationId) {
+                    await tx.inventoryLevel.upsert({
+                        where: { variantId_locationId: { variantId: item.variantId, locationId } },
+                        create: { variantId: item.variantId, locationId, stock: -item.quantity },
+                        update: { stock: { decrement: item.quantity } }
+                    });
+                }
+
                 // Low-stock alerts are no longer sent per-sale.
                 // A daily digest is sent at 9 PM via /api/cron/low-stock-digest
             }
@@ -921,6 +939,15 @@ export async function deleteSale(saleId: string) {
                     where: { id: item.variantId },
                     data: { stock: { increment: revertQty } }
                 });
+
+                // Also revert inventoryLevel
+                if (sale.locationId) {
+                    await tx.inventoryLevel.upsert({
+                        where: { variantId_locationId: { variantId: item.variantId, locationId: sale.locationId } },
+                        create: { variantId: item.variantId, locationId: sale.locationId, stock: revertQty },
+                        update: { stock: { increment: revertQty } }
+                    });
+                }
             }
 
             // 2. Revert Store Credit if applicable
@@ -1019,6 +1046,15 @@ export async function updateSale(saleId: string, data: {
                     where: { id: item.variantId },
                     data: { stock: { increment: revertQty } }
                 });
+
+                // Also revert inventoryLevel
+                if (oldSale.locationId) {
+                    await tx.inventoryLevel.upsert({
+                        where: { variantId_locationId: { variantId: item.variantId, locationId: oldSale.locationId } },
+                        create: { variantId: item.variantId, locationId: oldSale.locationId, stock: revertQty },
+                        update: { stock: { increment: revertQty } }
+                    });
+                }
             }
 
             // 2. Clear Old Items
@@ -1088,6 +1124,15 @@ export async function updateSale(saleId: string, data: {
                     where: { id: item.variantId },
                     data: { stock: { decrement: item.quantity } }
                 });
+
+                // Also decrement inventoryLevel for the sale location
+                if (oldSale.locationId) {
+                    await tx.inventoryLevel.upsert({
+                        where: { variantId_locationId: { variantId: item.variantId, locationId: oldSale.locationId } },
+                        create: { variantId: item.variantId, locationId: oldSale.locationId, stock: -item.quantity },
+                        update: { stock: { decrement: item.quantity } }
+                    });
+                }
             }
 
             // 7. Apply New Store Credit if needed
@@ -1664,6 +1709,15 @@ export async function updateSaleDashboard(saleId: string, data: {
                         where: { id: oldItem.variantId },
                         data: { stock: { increment: oldItem.quantity } }
                     });
+
+                    // Also revert inventoryLevel
+                    if (oldSale.locationId) {
+                        await tx.inventoryLevel.upsert({
+                            where: { variantId_locationId: { variantId: oldItem.variantId, locationId: oldSale.locationId } },
+                            create: { variantId: oldItem.variantId, locationId: oldSale.locationId, stock: oldItem.quantity },
+                            update: { stock: { increment: oldItem.quantity } }
+                        });
+                    }
                     await tx.inventoryMovement.create({
                         data: {
                             variantId: oldItem.variantId,
@@ -1688,6 +1742,15 @@ export async function updateSaleDashboard(saleId: string, data: {
                         where: { id: item.variantId },
                         data: { stock: { decrement: item.quantity } }
                     });
+
+                    // Also decrement inventoryLevel for the sale location
+                    if (oldSale.locationId) {
+                        await tx.inventoryLevel.upsert({
+                            where: { variantId_locationId: { variantId: item.variantId, locationId: oldSale.locationId } },
+                            create: { variantId: item.variantId, locationId: oldSale.locationId, stock: -item.quantity },
+                            update: { stock: { decrement: item.quantity } }
+                        });
+                    }
                     await tx.inventoryMovement.create({
                         data: {
                             variantId: item.variantId,
