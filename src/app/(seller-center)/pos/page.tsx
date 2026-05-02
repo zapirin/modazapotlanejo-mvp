@@ -125,6 +125,7 @@ function POSContent() {
     const [showGrid, setShowGrid] = useState(false);
     const [useVariationSelector, setUseVariationSelector] = useState(false);
     const [showModeDropdown, setShowModeDropdown] = useState(false);
+    const [lightboxImage, setLightboxImage] = useState<string | null>(null);
     
     // Transfer State
     const [locations, setLocations] = useState<any[]>([]);
@@ -688,7 +689,8 @@ function POSContent() {
                     name: `${selectedProduct.name} [${formatVariantName(v)}]`,
                     price: input.price || selectedProduct.price,
                     quantity: isReturnMode ? -input.quantity : input.quantity,
-                    discount: 0
+                    discount: 0,
+                    image: (selectedProduct.images as string[])?.[0] || null
                 });
             }
         });
@@ -707,7 +709,8 @@ function POSContent() {
             name: `${selectedProduct.name} [${formatVariantName(variant)}]`,
             price: selectedProduct.price,
             quantity: isReturnMode ? -1 : 1,
-            discount: 0
+            discount: 0,
+            image: (selectedProduct.images as string[])?.[0] || null
         };
 
         // Comprobar si ya existe para sumar cantidad
@@ -1785,7 +1788,7 @@ function POSContent() {
                                         </td>
                                         <td className="p-4 font-bold text-foreground">
                                             <div className="flex flex-col gap-1">
-                                                <span className="truncate max-w-[120px] sm:max-w-none">{item.name}</span>
+                                                <span className={`truncate max-w-[120px] sm:max-w-none ${item.image ? 'cursor-pointer hover:text-blue-600 transition-colors' : ''}`} onClick={() => item.image && setLightboxImage(item.image)}>{item.name}</span>
                                                 {isReturnMode && <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded-full uppercase text-[8px] w-fit">Dev</span>}
                                                 <button onClick={() => removeFromCart(idx)} className="text-red-500 text-[9px] font-bold uppercase sm:hidden w-fit">Eliminar</button>
                                             </div>
@@ -1858,7 +1861,7 @@ function POSContent() {
                                 <div key={`m-${idx}`} className="bg-card border border-border rounded-2xl p-3 shadow-sm">
                                     <div className="flex items-start justify-between gap-2 mb-3">
                                         <div className="min-w-0 flex-1">
-                                            <p className="font-bold text-foreground text-sm break-words">{item.name}</p>
+                                            <p className={`font-bold text-foreground text-sm break-words ${item.image ? 'cursor-pointer hover:text-blue-600 transition-colors' : ''}`} onClick={() => item.image && setLightboxImage(item.image)}>{item.name}</p>
                                             <div className="flex items-center gap-2 mt-1">
                                                 {isReturnMode && <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded-full uppercase text-[10px] font-bold">Dev</span>}
                                                 {itemDiscountStr !== '0%' && (
@@ -3905,6 +3908,14 @@ function POSContent() {
                             </div>
                         )}
                     </div>
+                </div>
+            )}
+            {/* Lightbox — imagen del producto en pantalla completa */}
+            {lightboxImage && (
+                <div className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4" onClick={() => setLightboxImage(null)}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={lightboxImage} alt="Producto" className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl" />
+                    <button className="absolute top-6 right-6 text-white/70 hover:text-white text-4xl font-bold transition-colors" onClick={() => setLightboxImage(null)}>✕</button>
                 </div>
             )}
         </div>
