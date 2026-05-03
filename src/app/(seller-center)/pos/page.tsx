@@ -601,9 +601,14 @@ function POSContent() {
     useEffect(() => { if (showVariationModal) setVariantHighlightIdx(0); }, [showVariationModal]);
 
     // Atajos de teclado del modal de variantes
+    const variantHighlightIdxRef = useRef(0);
+    useEffect(() => { variantHighlightIdxRef.current = variantHighlightIdx; }, [variantHighlightIdx]);
     useEffect(() => {
         if (!showVariationModal || !selectedProduct) return;
+        let active = false;
+        const t = setTimeout(() => { active = true; }, 200);
         const handler = (e: KeyboardEvent) => {
+            if (!active) return;
             if (singleVariantMode) {
                 const variants = sortVariants(selectedProduct.variants);
                 if (!variants.length) return;
@@ -615,7 +620,7 @@ function POSContent() {
                     });
                 } else if (e.key === 'Enter') {
                     e.preventDefault();
-                    const v = variants[variantHighlightIdx];
+                    const v = variants[variantHighlightIdxRef.current];
                     if (v) handleSingleVariantSelect(v);
                 }
             } else {
@@ -626,8 +631,8 @@ function POSContent() {
             }
         };
         window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, [showVariationModal, selectedProduct, singleVariantMode, variantHighlightIdx]);
+        return () => { clearTimeout(t); window.removeEventListener('keydown', handler); };
+    }, [showVariationModal, selectedProduct, singleVariantMode]);
 
     // Cargar loyalty info cuando se selecciona/deselecciona un cliente
     useEffect(() => {
