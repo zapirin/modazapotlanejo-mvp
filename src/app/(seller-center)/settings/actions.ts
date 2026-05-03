@@ -56,6 +56,20 @@ export async function getStoreSettings() {
                 }
             });
         }
+        
+        const seller = await (prisma.user as any).findUnique({
+            where: { id: sellerId },
+            select: { logoUrl: true, businessName: true }
+        });
+        
+        if (seller) {
+            settings = {
+                ...settings,
+                logoUrl: settings.logoUrl || seller.logoUrl,
+                storeName: (settings.storeName === "Mi Punto de Venta" && seller.businessName) ? seller.businessName : settings.storeName
+            };
+        }
+
         return { success: true, data: settings };
     } catch (error: any) {
         return { success: false, error: error.message };
