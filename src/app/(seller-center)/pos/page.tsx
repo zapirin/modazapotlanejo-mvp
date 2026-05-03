@@ -2873,7 +2873,18 @@ function POSContent() {
                                     Cancelar
                                 </button>
                                 <button
-                                    onClick={() => { clearCartStorage(); setCart([]); setShowClearCartConfirm(false); setTimeout(() => searchInputRef.current?.focus(), 50); }}
+                                    onClick={() => {
+                                        clearCartStorage();
+                                        setCart([]);
+                                        setSelectedClient(null);
+                                        setSelectedSalesperson(null);
+                                        setSelectedTier(null);
+                                        setGlobalDiscount(null);
+                                        setReceivedAmount('');
+                                        setPartialPayments([]);
+                                        setShowClearCartConfirm(false);
+                                        setTimeout(() => searchInputRef.current?.focus(), 50);
+                                    }}
                                     className="flex-1 py-3 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 transition-colors"
                                 >
                                     Vaciar
