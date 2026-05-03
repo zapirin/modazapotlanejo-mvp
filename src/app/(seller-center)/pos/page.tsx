@@ -1014,6 +1014,7 @@ function POSContent() {
                 amountPaid: partialPayments.reduce((acc, p) => acc + p.amount, 0),
                 balance: calculateBalance(),
                 notes: noteOverride || null,
+                soldBySalespersonId: selectedSalesperson?.id || null,
             };
             const res = await suspendSale(suspendedData);
             if (res.success) {
@@ -1161,6 +1162,13 @@ function POSContent() {
             setSelectedClient(sale.client);
         } else {
             setSelectedClient(null);
+        }
+
+        // Restore Vendedor de Piso (Salesperson) if it had one
+        if (sale.salesperson) {
+            setSelectedSalesperson({ id: sale.salesperson.id, name: sale.salesperson.name });
+        } else {
+            setSelectedSalesperson(null);
         }
 
         // Delete the suspended sale from DB since we are resuming it

@@ -251,7 +251,7 @@ export async function getInventory() {
         const sellerFilter = user?.role === 'ADMIN' ? {} : { sellerId: effectiveSellerId };
 
         const products = await prisma.product.findMany({
-            where: { 
+            where: {
                 isActive: true,
                 ...sellerFilter
             },
@@ -280,12 +280,12 @@ export async function getStoreLocations() {
     try {
         const user = await getSessionUser();
         const effectiveSellerId = await getEffectiveSellerId(user);
-        
+
         const locations = await prisma.storeLocation.findMany({
             where: { sellerId: effectiveSellerId },
             orderBy: [{ createdAt: 'asc' }, { name: 'asc' }]
         });
-        
+
         // Auto-crear "Matriz" si el vendedor no tiene sucursales para no romper inventario
         if (locations.length === 0 && effectiveSellerId) {
             const matriz = await prisma.storeLocation.create({
@@ -318,7 +318,7 @@ export async function createStoreLocation(name: string) {
                 isWebStore: false
             }
         });
-        
+
         return { success: true, location };
     } catch (e: any) {
         return { success: false, error: e.message };
@@ -428,6 +428,7 @@ export async function suspendSale(data: {
     priceTierId?: string | null;
     clientId?: string | null;
     notes?: string | null;
+    soldBySalespersonId?: string | null;
 }) {
     try {
         const user = await getSessionUser();
@@ -450,6 +451,7 @@ export async function suspendSale(data: {
                     amountPaid: data.amountPaid || 0,
                     balance: data.balance ?? data.total,
                     notes: data.notes || null,
+                    soldBySalespersonId: data.soldBySalespersonId || null,
                     items: {
                         create: data.cart.map(item => ({
                             variantId: item.variantId,
@@ -474,6 +476,7 @@ export async function suspendSale(data: {
                         status: "SUSPENDED",
                         amountPaid: data.amountPaid || 0,
                         balance: data.balance ?? data.total,
+                        soldBySalespersonId: data.soldBySalespersonId || null,
                         items: {
                             create: data.cart.map(item => ({
                                 variantId: item.variantId,
@@ -924,7 +927,7 @@ export async function deleteSale(saleId: string) {
             for (const item of sale.items) {
                 // If it was a sale, we increment stock to revert it. If it was a return, we decrement it.
                 const revertQty = sale.status === "REFUNDED" ? -item.quantity : item.quantity;
-                
+
                 await tx.inventoryMovement.create({
                     data: {
                         variantId: item.variantId,
@@ -1027,7 +1030,7 @@ export async function updateSale(saleId: string, data: {
                 where: { id: saleId },
                 include: { items: true }
             });
-            
+
             if (!oldSale) throw new Error("Venta no encontrada.");
 
             // 1. Revert Old Items Inventory
@@ -1064,14 +1067,14 @@ export async function updateSale(saleId: string, data: {
 
             // 3. Revert Old Store Credit logic if it was a credit
             if (oldSale.status === "STORE_CREDIT" && oldSale.clientId) {
-                 // A STORE_CREDIT sale meant they owed us money.
-                 // We revert that by decrementing what they owe (incrementing conceptually, wait).
-                 // Actually they bought something on credit, so `storeCredit` goes UP (debt).
-                 // Reverting it means `storeCredit` goes DOWN.
-                 await tx.client.update({
-                     where: { id: oldSale.clientId },
-                     data: { storeCredit: { decrement: oldSale.total } } 
-                 });
+                // A STORE_CREDIT sale meant they owed us money.
+                // We revert that by decrementing what they owe (incrementing conceptually, wait).
+                // Actually they bought something on credit, so `storeCredit` goes UP (debt).
+                // Reverting it means `storeCredit` goes DOWN.
+                await tx.client.update({
+                    where: { id: oldSale.clientId },
+                    data: { storeCredit: { decrement: oldSale.total } }
+                });
             }
 
             // 4. Determine New Status & Apply changes
@@ -1081,7 +1084,7 @@ export async function updateSale(saleId: string, data: {
             else if (oldSale.status === "LAYAWAY" || oldSale.status === "SUSPENDED" || oldSale.status === "CANCELLED") {
                 // If the user decides to edit a layaway or suspended and transform it
                 // Usually an edit maintains type, but let's assume it becomes a normal sale or takes new explicit type
-                finalStatus = oldSale.status; 
+                finalStatus = oldSale.status;
             }
 
             // 5. Update Sale properties and replace Items
@@ -1143,7 +1146,7 @@ export async function updateSale(saleId: string, data: {
                     data: { storeCredit: { increment: amountDiff } }
                 });
             }
-            
+
             return await tx.sale.findUnique({
                 where: { id: updatedSale.id }
             });
@@ -1202,6 +1205,7 @@ export async function getSuspendedSales() {
             where: whereClause,
             include: {
                 client: true,
+                salesperson: { select: { id: true, name: true } },
                 items: {
                     include: {
                         variant: {
@@ -1484,7 +1488,7 @@ export async function createBrand(name: string) {
             where: { name: { equals: name.trim(), mode: 'insensitive' } }
         });
         if (existing) return { success: true, brand: existing };
-        
+
         const brand = await prisma.brand.create({
             data: { name: name.trim() }
         });
@@ -1500,7 +1504,7 @@ export async function createSubcategory(name: string, categorySlug: string) {
         if (user?.role !== 'ADMIN') return { success: false, error: "No tienes permisos para realizar esta acción" };
 
         if (!name.trim() || !categorySlug) return { success: false, error: "Nombre y Categoría requeridos" };
-        
+
         let category = await prisma.category.findUnique({ where: { slug: categorySlug } });
         if (!category) {
             category = await prisma.category.create({
@@ -1512,7 +1516,7 @@ export async function createSubcategory(name: string, categorySlug: string) {
         const existing = await prisma.subcategory.findFirst({
             where: { slug, categoryId: category.id }
         });
-        
+
         if (existing) return { success: true, subcategory: existing };
 
         const subcategory = await prisma.subcategory.create({
@@ -1559,20 +1563,20 @@ export async function createSupplier(name: string) {
     try {
         const user = await getSessionUser();
         if (!name.trim()) return { success: false, error: "El nombre del proveedor no puede estar vacío" };
-        
+
         const existing = await (prisma as any).supplier.findFirst({
             where: { name: { equals: name.trim(), mode: 'insensitive' } }
         });
-        
+
         if (existing) return { success: true, supplier: existing };
-        
+
         const supplier = await (prisma as any).supplier.create({
-            data: { 
+            data: {
                 name: name.trim(),
                 sellerId: user?.id || null
             }
         });
-        
+
         revalidatePath("/inventory");
         return { success: true, supplier };
     } catch (e: any) {
