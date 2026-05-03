@@ -173,6 +173,8 @@ function POSContent() {
     const [variationInputs, setVariationInputs] = useState<any>({});
     const [singleVariantMode, setSingleVariantMode] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [searchHighlightIdx, setSearchHighlightIdx] = useState(0);
+    const [variantHighlightIdx, setVariantHighlightIdx] = useState(0);
 
     // Cash Management State
     const [currentSession, setCurrentSession] = useState<any>(null);
@@ -584,11 +586,48 @@ function POSContent() {
             setSelectedSalesperson(null);
             setReceivedAmount('');
             setPartialPayments([]);
+            setIsReturnMode(false);
+            setIsTransferMode(false);
             const efectivoReset = paymentMethods.find((m: any) => m.name.toLowerCase().includes('efectivo'));
             setSelectedPaymentMethod(efectivoReset ? efectivoReset.name : (paymentMethods[0]?.name || 'Efectivo'));
         }
         prevCartLenRef.current = cart.length;
     }, [cart.length]);
+
+    // Reset índice resaltado del buscador cuando cambian resultados
+    useEffect(() => { setSearchHighlightIdx(0); }, [searchResults]);
+
+    // Reset índice de variante al abrir modal
+    useEffect(() => { if (showVariationModal) setVariantHighlightIdx(0); }, [showVariationModal]);
+
+    // Atajos de teclado del modal de variantes
+    useEffect(() => {
+        if (!showVariationModal || !selectedProduct) return;
+        const handler = (e: KeyboardEvent) => {
+            if (singleVariantMode) {
+                const variants = sortVariants(selectedProduct.variants);
+                if (!variants.length) return;
+                if (e.key === 'Tab') {
+                    e.preventDefault();
+                    setVariantHighlightIdx(i => {
+                        const n = variants.length;
+                        return e.shiftKey ? (i - 1 + n) % n : (i + 1) % n;
+                    });
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const v = variants[variantHighlightIdx];
+                    if (v) handleSingleVariantSelect(v);
+                }
+            } else {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveVariationsToCart();
+                }
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [showVariationModal, selectedProduct, singleVariantMode, variantHighlightIdx]);
 
     // Cargar loyalty info cuando se selecciona/deselecciona un cliente
     useEffect(() => {
@@ -1528,14 +1567,38 @@ function POSContent() {
                             className="w-full h-full px-3 sm:px-5 outline-none bg-transparent font-medium text-xs sm:text-sm"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Escape') {
+                                    setSearchQuery('');
+                                    setSearchResults([]);
+                                    return;
+                                }
+                                if (!searchResults.length) return;
+                                if (e.key === 'ArrowDown') {
+                                    e.preventDefault();
+                                    setSearchHighlightIdx(i => (i + 1) % searchResults.length);
+                                } else if (e.key === 'ArrowUp') {
+                                    e.preventDefault();
+                                    setSearchHighlightIdx(i => (i - 1 + searchResults.length) % searchResults.length);
+                                } else if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const sel = searchResults[searchHighlightIdx] || searchResults[0];
+                                    if (sel) {
+                                        handleProductSelect(sel);
+                                        setSearchQuery('');
+                                        setSearchResults([]);
+                                    }
+                                }
+                            }}
                         />
                         {/* Search Dropdown Overlay — desktop dropdown / mobile fullscreen */}
                         {searchResults.length > 0 && searchQuery && (
                             <div className="absolute top-full left-0 w-full bg-card border border-border rounded-b-2xl shadow-xl z-50 max-h-60 overflow-y-auto mt-1 hidden lg:block">
-                                {searchResults.map(res => (
+                                {searchResults.map((res, idx) => (
                                     <div
                                         key={res.id}
-                                        className="p-4 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer border-b border-border flex justify-between items-center transition-colors"
+                                        className={`p-4 cursor-pointer border-b border-border flex justify-between items-center transition-colors ${idx === searchHighlightIdx ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
+                                        onMouseEnter={() => setSearchHighlightIdx(idx)}
                                         onClick={() => {
                                             handleProductSelect(res);
                                             setSearchQuery('');
@@ -2743,11 +2806,12 @@ function POSContent() {
                             ) : (
                                 // MODO SIMPLE (BOTONES DE SELECCIÓN RÁPIDA)
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {sortVariants(selectedProduct.variants).map((v: any) => (
+                                    {sortVariants(selectedProduct.variants).map((v: any, idx: number) => (
                                         <button
                                             key={v.id}
                                             onClick={() => handleSingleVariantSelect(v)}
-                                            className={`p-4 rounded-2xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer ${v.stock > 0 ? 'bg-white dark:bg-gray-800 border-border hover:border-blue-500 hover:shadow-md' : 'bg-orange-50 dark:bg-orange-900/10 border-orange-300 dark:border-orange-700 hover:border-orange-500 hover:shadow-md'}`}
+                                            onMouseEnter={() => setVariantHighlightIdx(idx)}
+                                            className={`p-4 rounded-2xl border flex flex-col items-center justify-center text-center transition-all cursor-pointer ${idx === variantHighlightIdx ? 'border-blue-500 ring-2 ring-blue-500/40 shadow-md' : ''} ${v.stock > 0 ? 'bg-white dark:bg-gray-800 border-border hover:border-blue-500 hover:shadow-md' : 'bg-orange-50 dark:bg-orange-900/10 border-orange-300 dark:border-orange-700 hover:border-orange-500 hover:shadow-md'}`}
                                         >
                                             <span className="bg-gray-100 dark:bg-gray-700 rounded-xl px-4 py-2 font-black text-xs mb-2">{formatVariantName(v)}</span>
                                             <span className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${v.stock > 0 ? 'text-gray-400' : 'text-orange-500'}`}>{v.stock} pz</span>
