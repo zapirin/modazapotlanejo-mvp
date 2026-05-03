@@ -7,9 +7,10 @@ import { duplicateProduct } from './new/actions';
 
 interface ProductCardButtonsProps {
     productId: string;
+    onShowHistory?: () => void;
 }
 
-export default function ProductCardButtons({ productId }: ProductCardButtonsProps) {
+export default function ProductCardButtons({ productId, onShowHistory }: ProductCardButtonsProps) {
     const router = useRouter();
     const [isDuplicating, setIsDuplicating] = useState(false);
 
@@ -40,7 +41,7 @@ export default function ProductCardButtons({ productId }: ProductCardButtonsProp
             >
                 Editar
             </Link>
-            <button 
+            <button
                 onClick={handleDuplicate}
                 disabled={isDuplicating}
                 className="flex-1 py-2 text-sm font-medium border border-blue-200 bg-blue-50 rounded-lg text-blue-700 hover:bg-blue-100 text-center transition-all disabled:opacity-50 flex items-center justify-center gap-2"
@@ -54,6 +55,13 @@ export default function ProductCardButtons({ productId }: ProductCardButtonsProp
                     'Duplicar'
                 )}
             </button>
+            {onShowHistory && (
+                <button
+                    onClick={onShowHistory}
+                    title="Historial de ventas"
+                    className="px-3 py-2 text-sm font-medium border border-purple-200 bg-purple-50 rounded-lg text-purple-700 hover:bg-purple-100 transition-colors"
+                >📊</button>
+            )}
         </div>
     );
 }

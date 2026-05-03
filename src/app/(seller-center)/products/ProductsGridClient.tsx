@@ -5,6 +5,7 @@ import Link from 'next/link';
 import ProductCardButtons from './ProductCardButtons';
 import GenerateSKUsButton from './GenerateSKUsButton';
 import BulkActionsModal from './BulkActionsModal';
+import ProductSalesHistoryModal from './ProductSalesHistoryModal';
 import dynamic from 'next/dynamic';
 const BarcodePrintModal = dynamic(() => import('./BarcodePrintModal'), { ssr: false });
 
@@ -20,6 +21,7 @@ export default function ProductsGridClient({ products, categories, brands, suppl
     const [selectedSupplier, setSelectedSupplier] = useState('');
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [historyProduct, setHistoryProduct] = useState<{ id: string; name: string } | null>(null);
 
     const safeCategories = categories || [];
     const safeBrands = brands || [];
@@ -273,7 +275,11 @@ export default function ProductsGridClient({ products, categories, brands, suppl
                                                     <Link href={`/products/${product.id}/edit`} className="bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 font-medium px-3 py-1 rounded text-xs transition">
                                                         Editar
                                                     </Link>
-                                                    {/* Botón rápido extra opcional */}
+                                                    <button
+                                                        onClick={() => setHistoryProduct({ id: product.id, name: product.name })}
+                                                        className="bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 font-medium px-2 py-1 rounded text-xs transition"
+                                                        title="Historial de ventas"
+                                                    >📊</button>
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 font-semibold text-blue-600 hover:underline">
@@ -448,7 +454,10 @@ export default function ProductsGridClient({ products, categories, brands, suppl
                                                     Editar Datos
                                                 </Link>
                                             ) : (
-                                                <ProductCardButtons productId={product.id} />
+                                                <ProductCardButtons
+                                                    productId={product.id}
+                                                    onShowHistory={() => setHistoryProduct({ id: product.id, name: product.name })}
+                                                />
                                             )}
                                         </div>
                                     </div>
@@ -474,6 +483,14 @@ export default function ProductsGridClient({ products, categories, brands, suppl
                 <BarcodePrintModal
                     products={products.filter((p: any) => selectedIds.includes(p.id))}
                     onClose={() => setShowBarcodeModal(false)}
+                />
+            )}
+
+            {historyProduct && (
+                <ProductSalesHistoryModal
+                    productId={historyProduct.id}
+                    productName={historyProduct.name}
+                    onClose={() => setHistoryProduct(null)}
                 />
             )}
         </div>

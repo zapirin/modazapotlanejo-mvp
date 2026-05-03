@@ -7,6 +7,7 @@ import { bulkCreateProducts, deleteProduct, getCategories, duplicateProduct, get
 import { adjustProductStock, adjustProductStockGrid } from './actions';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
 import BulkActionsModal from '../products/BulkActionsModal';
+import ProductSalesHistoryModal from '../products/ProductSalesHistoryModal';
 import { useCallback } from 'react';
 
 const formatVariantName = (variant: any) => {
@@ -59,6 +60,7 @@ export default function InventoryPage() {
     const [isImporting, setIsImporting] = useState(false);
     const [isDuplicating, setIsDuplicating] = useState<string | null>(null);
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+    const [historyProduct, setHistoryProduct] = useState<{ id: string; name: string } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Ajuste de Stock State
@@ -823,11 +825,17 @@ export default function InventoryPage() {
                                                         >
                                                             {isDuplicating === product.id ? '⌛ Duplicando...' : '👯 Duplicar'}
                                                         </button>
-                                                        <button 
+                                                        <button
                                                             className="w-full text-left px-5 py-3 flex text-sm font-bold text-foreground hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                                                             onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); handleOpenAdjustModal(product); }}
                                                         >
                                                             ⚖️ Ajustar Stock
+                                                        </button>
+                                                        <button
+                                                            className="w-full text-left px-5 py-3 flex text-sm font-bold text-foreground hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                                                            onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); setHistoryProduct({ id: product.id, name: product.name }); }}
+                                                        >
+                                                            📊 Historial de Ventas
                                                         </button>
                                                         <div className="h-px bg-border my-1 w-full"></div>
                                                         <button 
@@ -982,14 +990,22 @@ export default function InventoryPage() {
             )}
 
             {isBulkModalOpen && (
-                <BulkActionsModal 
-                    selectedIds={selectedIds} 
+                <BulkActionsModal
+                    selectedIds={selectedIds}
                     onClose={() => setIsBulkModalOpen(false)}
                     onSuccess={() => {
                         setIsBulkModalOpen(false);
                         setSelectedIds([]);
                         loadInventory();
                     }}
+                />
+            )}
+
+            {historyProduct && (
+                <ProductSalesHistoryModal
+                    productId={historyProduct.id}
+                    productName={historyProduct.name}
+                    onClose={() => setHistoryProduct(null)}
                 />
             )}
         </div>
