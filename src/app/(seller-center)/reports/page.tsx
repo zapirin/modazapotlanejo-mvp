@@ -142,10 +142,14 @@ export default function ReportsPage() {
         });
         getReportPermissions().then(p => {
             setPerms({ role: p.role, canViewReports: p.canViewReports, canViewCommissions: p.canViewCommissions, canViewZCuts: p.canViewZCuts, canViewProfit: p.canViewProfit, canViewTransfers: (p as any).canViewTransfers ?? false, isCashier: p.isCashier, sessionStartedAt: p.sessionStartedAt ? new Date(p.sessionStartedAt) : null });
-            // Si es cajero, fijar el rango de fechas a la sesión activa
-            if (p.isCashier && p.sessionStartedAt) {
-                setDateRange({ startDate: new Date(p.sessionStartedAt), endDate: new Date() });
-                setActiveFilter('session');
+            // Cajero: solo ve las ventas del día actual (00:00 → ahora),
+            // sin importar desde cuándo está abierta la caja.
+            if (p.isCashier) {
+                const now = new Date();
+                const startOfDay = new Date(now);
+                startOfDay.setHours(0, 0, 0, 0);
+                setDateRange({ startDate: startOfDay, endDate: now });
+                setActiveFilter('today');
             }
             // Si el tab activo no está permitido, saltar al primero que sí lo esté
             setActiveTab(tab => {
@@ -293,11 +297,11 @@ export default function ReportsPage() {
                 </div>
                 
                 <div className="flex flex-col items-end gap-3 w-full md:w-auto">
-                    {/* Cajero: mostrar rango de sesión activa en lugar de filtros */}
-                    {perms.isCashier && perms.sessionStartedAt && (
+                    {/* Cajero: mostrar que solo ve las ventas del día actual */}
+                    {perms.isCashier && (
                         <div className="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-2xl px-4 py-2 text-xs font-bold text-blue-700 dark:text-blue-300">
                             <span>📅</span>
-                            <span>Sesión activa desde {new Date(perms.sessionStartedAt).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                            <span>Mostrando ventas de hoy</span>
                         </div>
                     )}
                     {/* Location filter — visible in all tabs for seller/admin */}
