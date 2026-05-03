@@ -63,6 +63,7 @@ export default function ProductSalesHistoryModal({
     const [page, setPage] = useState(1);
     const [status, setStatus] = useState('all');
     const [reprintSale, setReprintSale] = useState<any | null>(null);
+    const [globalConfig, setGlobalConfig] = useState<any>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -73,8 +74,19 @@ export default function ProductSalesHistoryModal({
             else alert(res.error || 'Error al cargar historial.');
             setLoading(false);
         });
+        
+        // Cargar config global para el logo del ticket (solo una vez)
+        if (!globalConfig) {
+            import('../settings/actions').then(({ getStoreSettings }) => {
+                getStoreSettings().then(res => {
+                    if (cancelled) return;
+                    if (res.success) setGlobalConfig(res.data);
+                });
+            });
+        }
+        
         return () => { cancelled = true; };
-    }, [productId, page, status]);
+    }, [productId, page, status, globalConfig]);
 
     const handleViewTicket = async (saleId: string) => {
         const sale = await getSaleForReprint(saleId);
@@ -209,7 +221,13 @@ export default function ProductSalesHistoryModal({
                             <button onClick={() => setReprintSale(null)} className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 hover:text-red-500 flex items-center justify-center font-bold transition-colors">✕</button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900 flex justify-center">
-                            <SaleTicket sale={reprintSale} elementId="history-reprint" isReprint />
+                            <SaleTicket 
+                                sale={reprintSale} 
+                                elementId="history-reprint" 
+                                isReprint 
+                                logoUrl={globalConfig?.logoUrl}
+                                storeName={globalConfig?.storeName}
+                            />
                         </div>
                         <div className="p-4 bg-card border-t border-border flex gap-3 rounded-b-3xl">
                             <button
