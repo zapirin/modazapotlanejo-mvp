@@ -3265,17 +3265,6 @@ function POSContent() {
                                 >Salida</button>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-xs font-black uppercase tracking-widest text-gray-400">Motivo</label>
-                                <input
-                                    type="text"
-                                    value={cashReason}
-                                    onChange={(e) => setCashReason(e.target.value)}
-                                    placeholder={movementType === 'IN' ? "Ej: Saldo a favor, Abono" : "Ej: Pago proveedor, Comida"}
-                                    autoFocus
-                                    className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground placeholder:text-gray-400 font-bold"
-                                />
-                            </div>
-                            <div className="space-y-2">
                                 <label className="text-xs font-black uppercase tracking-widest text-gray-400">Monto $</label>
                                 <input
                                     type="number"
@@ -3283,7 +3272,18 @@ function POSContent() {
                                     value={cashAmount}
                                     onChange={(e) => setCashAmount(e.target.value)}
                                     placeholder="Ej: 200.00"
+                                    autoFocus
                                     className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground placeholder:text-gray-400 text-2xl font-black"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-black uppercase tracking-widest text-gray-400">Motivo</label>
+                                <input
+                                    type="text"
+                                    value={cashReason}
+                                    onChange={(e) => setCashReason(e.target.value)}
+                                    placeholder={movementType === 'IN' ? "Ej: Saldo a favor, Abono" : "Ej: Pago proveedor, Comida"}
+                                    className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground placeholder:text-gray-400 font-bold"
                                 />
                             </div>
                         </div>
