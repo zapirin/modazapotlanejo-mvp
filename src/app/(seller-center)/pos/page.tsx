@@ -541,6 +541,8 @@ function POSContent() {
                         variantId: i.variant.id,
                         name: `${i.variant.product.name} [${formatVariantName(i.variant)}]`,
                         price: i.price,
+                        originalPrice: i.price,
+                        priceLocked: true,
                         quantity: sale.status === 'REFUNDED' ? -i.quantity : i.quantity,
                         discount: 0
                     }));
@@ -596,6 +598,20 @@ function POSContent() {
 
     // Reset índice resaltado del buscador cuando cambian resultados
     useEffect(() => { setSearchHighlightIdx(0); }, [searchResults]);
+
+    // Al cambiar/quitar el nivel de precio, recalcular precio efectivo de items no bloqueados.
+    const prevTierIdRef = useRef<string | null>(null);
+    useEffect(() => {
+        const currentTierId = selectedTier?.id || null;
+        if (prevTierIdRef.current === currentTierId) return;
+        prevTierIdRef.current = currentTierId;
+        if (cart.length === 0) return;
+        setCart(prev => prev.map(it => {
+            if (it.priceLocked) return it;
+            const original = typeof it.originalPrice === 'number' ? it.originalPrice : it.price;
+            return { ...it, originalPrice: original, price: tierAdjustPrice(original, selectedTier) };
+        }));
+    }, [selectedTier]);
 
     // Reset índice de variante al abrir modal
     useEffect(() => { if (showVariationModal) setVariantHighlightIdx(0); }, [showVariationModal]);
@@ -727,11 +743,17 @@ function POSContent() {
         selectedProduct.variants.forEach((v: any) => {
             const input = variationInputs[v.id];
             if (input && input.quantity > 0) {
+                const baseOriginal = input.price || selectedProduct.price;
+                // Si el usuario captura un precio explicito en la tabla, lo respetamos (priceLocked).
+                const priceLocked = !!input.price;
+                const effectivePrice = priceLocked ? baseOriginal : tierAdjustPrice(baseOriginal, selectedTier);
                 newCartItems.push({
                     productId: selectedProduct.id,
                     variantId: v.id,
                     name: `${selectedProduct.name} [${formatVariantName(v)}]`,
-                    price: input.price || selectedProduct.price,
+                    price: effectivePrice,
+                    originalPrice: baseOriginal,
+                    priceLocked,
                     quantity: isReturnMode ? -input.quantity : input.quantity,
                     discount: 0,
                     image: (selectedProduct.images as string[])?.[0] || null
@@ -747,11 +769,14 @@ function POSContent() {
     };
 
     const handleSingleVariantSelect = (variant: any) => {
+        const baseOriginal = selectedProduct.price;
         const newItem = {
             productId: selectedProduct.id,
             variantId: variant.id,
             name: `${selectedProduct.name} [${formatVariantName(variant)}]`,
-            price: selectedProduct.price,
+            price: tierAdjustPrice(baseOriginal, selectedTier),
+            originalPrice: baseOriginal,
+            priceLocked: false,
             quantity: isReturnMode ? -1 : 1,
             discount: 0,
             image: (selectedProduct.images as string[])?.[0] || null
@@ -792,6 +817,7 @@ function POSContent() {
     const updateItemPrice = (index: number, newPrice: number) => {
         const newCart = [...cart];
         newCart[index].price = newPrice;
+        newCart[index].priceLocked = true; // edicion manual: el nivel de precio ya no recalcula este item
         setCart(newCart);
     };
 
@@ -801,27 +827,20 @@ function POSContent() {
         setCart(newCart);
     };
 
+    // Devuelve el precio efectivo aplicando el nivel de precio sobre el precio original.
+    const tierAdjustPrice = (originalPrice: number, tier: any) => {
+        if (!tier) return originalPrice;
+        if (tier.discountPercentage) return originalPrice * (1 - tier.discountPercentage / 100);
+        if (tier.defaultPriceMinusFixed) return Math.max(0, originalPrice - tier.defaultPriceMinusFixed);
+        return originalPrice;
+    };
+
     const calculateSubtotal = () => cart.reduce((acc, item) => acc + (item.price * (item.quantity || 0)), 0);
 
-    // In Kalexa style, discounts are often calculated linearly or based on total. 
-    // We'll calculate total based on tier if applied, AND then apply global manual discounts.
     const calculateTotal = () => {
         let subtotal = calculateSubtotal();
-        let totalDiscount = 0;
 
-        // 1. Tier Discount
-        if (selectedTier) {
-            if (selectedTier.discountPercentage) {
-                const tierDiscAmount = subtotal * (selectedTier.discountPercentage / 100);
-                subtotal -= tierDiscAmount;
-            } else if (selectedTier.defaultPriceMinusFixed) {
-                const totalItemsQty = cart.reduce((sum, item) => sum + (item.quantity || 0), 0);
-                const tierDiscAmount = totalItemsQty * selectedTier.defaultPriceMinusFixed;
-                subtotal -= tierDiscAmount;
-            }
-        }
-
-        // 2. Global Manual Discount
+        // Descuento manual global
         if (globalDiscount) {
             if (globalDiscount.type === 'percent') {
                 const percentDiscAmount = subtotal * (globalDiscount.value / 100);
@@ -1828,36 +1847,22 @@ function POSContent() {
                                 <tr className="border-b border-border text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider text-[10px]">
                                     <th className="p-4 w-12 text-center hidden sm:table-cell">Acción</th>
                                     <th className="p-4">Artículo</th>
-                                    <th className="p-4 text-center hidden sm:table-cell">Precio Base</th>
+                                    <th className="p-4 text-center hidden sm:table-cell">Precio</th>
                                     <th className="p-4 text-center">Cant</th>
-                                    <th className="p-4 text-center hidden sm:table-cell">Descuento</th>
                                     <th className="p-4 text-right pr-6">Total</th>
                                 </tr>
                             </thead>
                             <tbody>
                             {cart.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} className="py-20 text-center text-lg font-bold text-gray-400 uppercase tracking-widest opacity-50">
+                                    <td colSpan={5} className="py-20 text-center text-lg font-bold text-gray-400 uppercase tracking-widest opacity-50">
                                         <div className="text-4xl mb-4">🛒</div>
                                         El carrito está vacío
                                     </td>
                                 </tr>
                             )}
                             {cart.map((item, idx) => {
-                                let itemDiscountStr = "0%";
-                                let itemDiscountedPrice = item.price;
-                                
-                                if (selectedTier) {
-                                    if (selectedTier.discountPercentage > 0) {
-                                        itemDiscountStr = `-${selectedTier.discountPercentage}%`;
-                                        itemDiscountedPrice = item.price * (1 - (selectedTier.discountPercentage / 100));
-                                    } else if (selectedTier.defaultPriceMinusFixed > 0) {
-                                        itemDiscountStr = `-$${selectedTier.defaultPriceMinusFixed}`;
-                                        itemDiscountedPrice = item.price - selectedTier.defaultPriceMinusFixed;
-                                    }
-                                }
-
-                                const rowTotal = itemDiscountedPrice * (item.quantity || 0);
+                                const rowTotal = item.price * (item.quantity || 0);
 
                                 return (
                                     <tr key={idx} className="border-b border-border/50 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
@@ -1899,16 +1904,8 @@ function POSContent() {
                                                 placeholder="0"
                                             />
                                         </td>
-                                        <td className="p-4 text-center hidden sm:table-cell">
-                                            <span className={`font-black text-[10px] px-2 py-1 rounded-full ${itemDiscountStr !== '0%' ? 'bg-green-100 text-green-700' : 'text-gray-400'}`}>
-                                                {itemDiscountStr}
-                                            </span>
-                                        </td>
                                         <td className="p-4 text-right pr-6">
                                             <span className="text-foreground font-black text-xs sm:text-sm">${rowTotal.toFixed(2)}</span>
-                                            {itemDiscountStr !== '0%' && (
-                                                <span className="block text-[10px] text-gray-400 line-through">${(item.price * item.quantity).toFixed(2)}</span>
-                                            )}
                                         </td>
                                     </tr>
                                 );
@@ -1925,18 +1922,7 @@ function POSContent() {
                             </div>
                         )}
                         {cart.map((item, idx) => {
-                            let itemDiscountStr = "0%";
-                            let itemDiscountedPrice = item.price;
-                            if (selectedTier) {
-                                if (selectedTier.discountPercentage > 0) {
-                                    itemDiscountStr = `-${selectedTier.discountPercentage}%`;
-                                    itemDiscountedPrice = item.price * (1 - (selectedTier.discountPercentage / 100));
-                                } else if (selectedTier.defaultPriceMinusFixed > 0) {
-                                    itemDiscountStr = `-$${selectedTier.defaultPriceMinusFixed}`;
-                                    itemDiscountedPrice = item.price - selectedTier.defaultPriceMinusFixed;
-                                }
-                            }
-                            const rowTotal = itemDiscountedPrice * (item.quantity || 0);
+                            const rowTotal = item.price * (item.quantity || 0);
                             return (
                                 <div key={`m-${idx}`} className="bg-card border border-border rounded-2xl p-3 shadow-sm">
                                     <div className="flex items-start justify-between gap-2 mb-3">
@@ -1944,9 +1930,6 @@ function POSContent() {
                                             <p className={`font-bold text-foreground text-sm break-words ${item.image ? 'cursor-pointer hover:text-blue-600 transition-colors' : ''}`} onClick={() => item.image && setLightboxImage(item.image)}>{item.name}</p>
                                             <div className="flex items-center gap-2 mt-1">
                                                 {isReturnMode && <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded-full uppercase text-[10px] font-bold">Dev</span>}
-                                                {itemDiscountStr !== '0%' && (
-                                                    <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-black">{itemDiscountStr}</span>
-                                                )}
                                             </div>
                                         </div>
                                         <button
@@ -1978,9 +1961,6 @@ function POSContent() {
                                         </div>
                                         <div className="text-right">
                                             <span className="block text-base font-black text-foreground">${rowTotal.toFixed(2)}</span>
-                                            {itemDiscountStr !== '0%' && (
-                                                <span className="block text-[11px] text-gray-400 line-through">${(item.price * item.quantity).toFixed(2)}</span>
-                                            )}
                                         </div>
                                     </div>
                                     <div className="mt-3 flex items-center justify-between gap-2">
@@ -2345,11 +2325,6 @@ function POSContent() {
                             const canRedeem = loyaltyInfo.balance >= loyaltyInfo.minRedeemPoints && loyaltyInfo.balance > 0;
                             const subtotalNoLoyalty = (() => {
                                 let s = calculateSubtotal();
-                                if (selectedTier?.discountPercentage) s -= s * (selectedTier.discountPercentage / 100);
-                                else if (selectedTier?.defaultPriceMinusFixed) {
-                                    const q = cart.reduce((sum, it) => sum + (it.quantity || 0), 0);
-                                    s -= q * selectedTier.defaultPriceMinusFixed;
-                                }
                                 if (globalDiscount?.type === 'percent') s -= s * (globalDiscount.value / 100);
                                 else if (globalDiscount?.type === 'fixed') s -= globalDiscount.value;
                                 return Math.max(0, s);
@@ -2456,17 +2431,6 @@ function POSContent() {
                                 <span className="text-gray-500 font-bold uppercase tracking-wider text-xs">Subtotal</span>
                                 <span className="text-foreground font-bold">${calculateSubtotal().toFixed(2)}</span>
                             </div>
-                            {selectedTier && (selectedTier.discountPercentage > 0 || selectedTier.defaultPriceMinusFixed > 0) && (
-                                <div className="flex justify-between items-center px-4 py-2 text-sm bg-gray-50 dark:bg-gray-800/20 border-b border-border text-green-500">
-                                    <span className="font-bold uppercase tracking-wider text-xs">Ahorro ({selectedTier.name})</span>
-                                    <span className="font-bold">
-                                        -${selectedTier.discountPercentage 
-                                            ? (calculateSubtotal() * (selectedTier.discountPercentage / 100)).toFixed(2) 
-                                            : (cart.reduce((sum, item) => sum + (item.quantity || 0), 0) * selectedTier.defaultPriceMinusFixed).toFixed(2)
-                                        }
-                                    </span>
-                                </div>
-                            )}
                             {globalDiscount && (
                                 <div className="flex justify-between items-center px-4 py-2 text-sm bg-gray-50 dark:bg-gray-800/20 border-b border-border text-orange-500">
                                     <span className="font-bold uppercase tracking-wider text-xs flex items-center gap-2">
