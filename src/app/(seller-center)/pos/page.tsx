@@ -3816,6 +3816,9 @@ function POSContent() {
                                 autoFocus
                                 onClick={() => {
                                     handlePrintDirect('transfer-receipt');
+                                    setShowTransferReceiptModal(false);
+                                    setLastTransfer(null);
+                                    setTimeout(() => searchInputRef.current?.focus(), 50);
                                 }}
                                 className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all flex justify-center items-center gap-2"
                             >
