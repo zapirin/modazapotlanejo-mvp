@@ -1990,7 +1990,7 @@ function POSContent() {
             <div className={`${
                 showMobileRight ? 'fixed inset-0 z-40 flex' : 'hidden lg:flex'
             } lg:relative lg:inset-auto lg:z-auto w-full lg:w-[420px] bg-gray-50 dark:bg-gray-900/30 flex-col overflow-y-auto`}>
-                <div className="p-6 space-y-6">
+                <div className="p-6 space-y-6 min-h-full flex flex-col">
 
                     {/* Controles top */}
                     <div className="flex gap-3">
@@ -2649,7 +2649,7 @@ function POSContent() {
                         )}
                     </button>
 
-                    <div className="pt-2 pb-6 px-1">
+                    <div className="pt-2 pb-6 px-1 mt-auto">
                         <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2 text-center">Teclas de acceso rápido</p>
                         <div className="grid grid-cols-2 gap-1">
                             {[
