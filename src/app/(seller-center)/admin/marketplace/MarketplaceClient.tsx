@@ -1439,12 +1439,20 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             className="w-full px-3 py-2 bg-input border border-border rounded-xl text-sm font-medium resize-none focus:ring-2 focus:ring-blue-500 outline-none" />
                                     </div>
 
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input type="checkbox" checked={plan.highlight}
-                                            onChange={e => setPlans(prev => prev.map((p, i) => i === idx ? {...p, highlight: e.target.checked} : p))}
-                                            className="w-4 h-4 accent-blue-600 rounded" />
-                                        <span className="text-xs font-bold text-gray-500">Resaltado (borde azul destacado)</span>
-                                    </label>
+                                    <div className="flex flex-col gap-2">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={plan.highlight}
+                                                onChange={e => setPlans(prev => prev.map((p, i) => i === idx ? {...p, highlight: e.target.checked} : p))}
+                                                className="w-4 h-4 accent-blue-600 rounded" />
+                                            <span className="text-xs font-bold text-gray-500">Resaltado (borde azul destacado)</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={plan.includesPos !== false}
+                                                onChange={e => setPlans(prev => prev.map((p, i) => i === idx ? {...p, includesPos: e.target.checked} : p))}
+                                                className="w-4 h-4 accent-emerald-600 rounded" />
+                                            <span className="text-xs font-bold text-gray-500">Incluye POS (sucursales y cajeros). Si no, el plan es solo marketplace.</span>
+                                        </label>
+                                    </div>
                                 </div>
                             ))}
                         </div>
