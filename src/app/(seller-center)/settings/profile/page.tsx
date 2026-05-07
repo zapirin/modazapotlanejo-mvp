@@ -6,8 +6,10 @@ import { getSessionUser, updateProfile } from '@/app/actions/auth';
 import { updateSellerLogo, ensureSellerSlug } from '../actions';
 import { validateImageFile } from '@/lib/uploadImage';
 import { processImage } from '@/lib/imageUtils';
+import { useTestMode } from '../../pos/TestMode';
 
 export default function ProfilePage() {
+    const [testMode, setTestMode] = useTestMode();
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -129,6 +131,41 @@ export default function ProfilePage() {
                             className="px-4 py-3 bg-blue-600 text-white rounded-xl font-black uppercase tracking-widest text-xs hover:bg-blue-700 transition shrink-0"
                         >
                             Copiar
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Modo Prueba — solo para sellers */}
+            {isSeller && (
+                <div className={`rounded-3xl border shadow-sm p-6 space-y-4 transition-colors ${testMode ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-300 dark:border-amber-700' : 'bg-card border-border'}`}>
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                            <h2 className="text-sm font-black uppercase tracking-widest text-foreground flex items-center gap-2">
+                                🧪 Modo Prueba {testMode && <span className="text-amber-600 text-[10px]">ACTIVO</span>}
+                            </h2>
+                            <p className="text-xs text-gray-500 font-medium mt-2 leading-relaxed">
+                                Activa esta opción para que tú o tus cajeros puedan practicar con el Punto de Venta sin afectar la base de datos.
+                                Mientras esté activa, las ventas, apartados, traspasos y movimientos de caja se simulan y <strong>no se guardan</strong>.
+                                Apágala antes de operar normalmente.
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-2">El modo se aplica solo a este navegador.</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (!testMode) {
+                                    const ok = window.confirm('¿Activar Modo Prueba?\n\nLas ventas, traspasos y movimientos de caja NO se guardarán en la base de datos. Útil para entrenamiento.');
+                                    if (ok) setTestMode(true);
+                                } else {
+                                    setTestMode(false);
+                                }
+                            }}
+                            role="switch"
+                            aria-checked={testMode}
+                            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors shrink-0 ${testMode ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                        >
+                            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${testMode ? 'translate-x-6' : 'translate-x-1'}`} />
                         </button>
                     </div>
                 </div>

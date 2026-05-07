@@ -14,7 +14,7 @@ import { createClient, searchClients, getClientById } from '../clients/actions';
 import { getLoyaltyForPosClient } from '@/app/actions/loyalty';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
 import { toast } from 'sonner';
-import { isTestModeActive, fakeSaleResult, fakeOk, fakeSession, fakeTransfer, TestModeBanner, TestModeToggleButton } from './TestMode';
+import { isTestModeActive, fakeSaleResult, fakeOk, fakeSession, fakeTransfer, TestModeBanner } from './TestMode';
 
 // Helper de impresión para iOS/Android: oculta físicamente el DOM antes de imprimir.
 // Los navegadores móviles (WebKit) ignoran @media print CSS, así que manipulamos
@@ -1536,7 +1536,6 @@ function POSContent() {
 
                 {/* Indicadores de estado: Conexión + Ventas offline */}
                 <div className="flex items-center justify-end gap-3 px-1">
-                    <TestModeToggleButton />
                     {/* Ventas offline pendientes */}
                     {pendingCount > 0 && (
                         <button
