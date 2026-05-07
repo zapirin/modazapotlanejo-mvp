@@ -14,6 +14,7 @@ import { createClient, searchClients, getClientById } from '../clients/actions';
 import { getLoyaltyForPosClient } from '@/app/actions/loyalty';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
 import { toast } from 'sonner';
+import { isTestModeActive, fakeSaleResult, fakeOk, fakeSession, fakeTransfer, TestModeBanner, TestModeToggleButton } from './TestMode';
 
 // Helper de impresión para iOS/Android: oculta físicamente el DOM antes de imprimir.
 // Los navegadores móviles (WebKit) ignoran @media print CSS, así que manipulamos
@@ -975,7 +976,9 @@ function POSContent() {
             }
 
             let res;
-            if (editSaleId) {
+            if (isTestModeActive()) {
+                res = fakeSaleResult();
+            } else if (editSaleId) {
                 res = await updateSale(editSaleId, {
                     cart: saleData.cart,
                     subtotal: saleData.subtotal,
@@ -1079,7 +1082,7 @@ function POSContent() {
                 notes: noteOverride || null,
                 soldBySalespersonId: selectedSalesperson?.id || null,
             };
-            const res = await suspendSale(suspendedData);
+            const res = isTestModeActive() ? fakeSaleResult() : await suspendSale(suspendedData);
             if (res.success) {
                 toast.success("Venta suspendida exitosamente.");
                 clearCartStorage();
@@ -1140,7 +1143,7 @@ function POSContent() {
                 cashSessionId: currentSession?.id || null
             };
             
-            const res = await createLayaway(layawayData);
+            const res = isTestModeActive() ? fakeSaleResult() : await createLayaway(layawayData);
             if (res.success) {
                 // Preparamos el recibo
                 setLastSaleData({
@@ -1254,7 +1257,7 @@ function POSContent() {
             toast.error("Ingrese un monto válido");
             return;
         }
-        const res = await openCashSession(amount, selectedLocationId || undefined);
+        const res = isTestModeActive() ? fakeSession(selectedLocationId) : await openCashSession(amount, selectedLocationId || undefined);
         if (res.success) {
             setCurrentSession(res.session);
             setShowOpenSessionModal(false);
@@ -1271,14 +1274,16 @@ function POSContent() {
             toast.error("Complete los datos correctamente");
             return;
         }
-        const res = await addCashMovement(currentSession.id, movementType, amount, cashReason);
+        const res = isTestModeActive() ? fakeOk() : await addCashMovement(currentSession.id, movementType, amount, cashReason);
         if (res.success) {
             setShowMovementModal(false);
             setCashAmount('');
             setCashReason('');
-            // Reload session
-            const updated = await getCurrentCashSession();
-            setCurrentSession(updated);
+            // Reload session (skip in test mode — no real session in DB)
+            if (!isTestModeActive()) {
+                const updated = await getCurrentCashSession();
+                setCurrentSession(updated);
+            }
             toast.success("Movimiento registrado");
         } else {
             toast.error(res.error || "No se pudo registrar el movimiento.");
@@ -1292,7 +1297,7 @@ function POSContent() {
             toast.error("Ingrese el conteo real en caja");
             return;
         }
-        const res = await closeCashSession(currentSession.id, amount);
+        const res = isTestModeActive() ? fakeOk() : await closeCashSession(currentSession.id, amount);
         if (res.success) {
             setCurrentSession(null);
             setShowZReportModal(false);
@@ -1318,7 +1323,7 @@ function POSContent() {
 
         setIsProcessing(true);
         try {
-            const res = await createTransfer(cart, transferSourceId, transferDestId);
+            const res = isTestModeActive() ? fakeTransfer() : await createTransfer(cart, transferSourceId, transferDestId);
             if (res.success) {
                 toast.success("¡Traspaso completado exitosamente!");
                 clearCartStorage();
@@ -1326,7 +1331,7 @@ function POSContent() {
                 setTransferSourceId('');
                 setTransferDestId('');
                 setIsTransferMode(false);
-                if ((res as any).transferId) {
+                if ((res as any).transferId && !isTestModeActive()) {
                     const transfer = await getTransferById((res as any).transferId);
                     if (transfer) {
                         setLastTransfer(transfer);
@@ -1440,6 +1445,7 @@ function POSContent() {
 
     return (
         <div className="flex h-[calc(100dvh-64px)] bg-background text-foreground transition-colors duration-300 overflow-hidden font-sans text-sm relative">
+            <TestModeBanner />
             {/* Barra inferior móvil — total + botón Cobrar siempre visible */}
             {!showMobileRight && (
                 <div className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-card border-t border-border shadow-2xl px-4 py-3 flex items-center justify-between gap-3">
@@ -1530,6 +1536,7 @@ function POSContent() {
 
                 {/* Indicadores de estado: Conexión + Ventas offline */}
                 <div className="flex items-center justify-end gap-3 px-1">
+                    <TestModeToggleButton />
                     {/* Ventas offline pendientes */}
                     {pendingCount > 0 && (
                         <button
