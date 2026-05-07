@@ -164,6 +164,14 @@ export default function SidebarLayout({
                 {isSidebarOpen && <span className="uppercase tracking-wider truncate">Reportes</span>}
               </Link>
             )}
+
+            <button onClick={toggleDarkMode}
+              className="w-full flex items-center gap-2 px-2 py-3 rounded-xl font-black text-xs transition-all text-gray-400 hover:bg-white/10 hover:text-white"
+              title="Cambiar tema oscuro/claro">
+              <span className="text-base shrink-0 hidden dark:inline">☀️</span>
+              <span className="text-base shrink-0 inline dark:hidden">🌙</span>
+              {isSidebarOpen && <span className="uppercase tracking-wider truncate">Tema</span>}
+            </button>
           </nav>
           <div className="p-2 border-t border-white/10">
             <button onClick={async () => { await logout(); window.location.href = '/login'; }}
