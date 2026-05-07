@@ -41,7 +41,6 @@ export default function NewProductPage() {
         tagIds: [] as string[],
         sku: ''
     });
-    const [newTag, setNewTag] = useState('');
     const [isCreatingTag, setIsCreatingTag] = useState(false);
     const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
     const [aiPrompt, setAiPrompt] = useState('');
@@ -55,6 +54,11 @@ export default function NewProductPage() {
     const [supplierSearch, setSupplierSearch] = useState('');
     const [supplierOpen, setSupplierOpen] = useState(false);
     const supplierRef = useRef<HTMLDivElement>(null);
+
+    // Combobox state for Etiquetas
+    const [tagSearch, setTagSearch] = useState('');
+    const [tagOpen, setTagOpen] = useState(false);
+    const tagRef = useRef<HTMLDivElement>(null);
 
     const handleGenerateDescription = async () => {
         if (formData.images.length === 0) {
@@ -253,21 +257,32 @@ export default function NewProductPage() {
         }));
     };
 
-    const handleCreateTag = async () => {
-        if (!newTag.trim()) return;
+    const handleCreateTag = async (name?: string) => {
+        const value = (name ?? tagSearch).trim();
+        if (!value) return;
         setIsCreatingTag(true);
-        const res = await createTag(newTag.trim());
+        const res = await createTag(value);
         if (res.success && res.tag) {
             setTags(prev => [...prev, res.tag]);
             setFormData(prev => ({
                 ...prev,
-                tagIds: [...prev.tagIds, res.tag.id]
+                tagIds: prev.tagIds.includes(res.tag.id) ? prev.tagIds : [...prev.tagIds, res.tag.id]
             }));
-            setNewTag('');
+            setTagSearch('');
+            setTagOpen(false);
         } else {
             alert(res.error || "Error al crear la etiqueta");
         }
         setIsCreatingTag(false);
+    };
+
+    const toggleTag = (tagId: string) => {
+        setFormData(prev => ({
+            ...prev,
+            tagIds: prev.tagIds.includes(tagId)
+                ? prev.tagIds.filter(id => id !== tagId)
+                : [...prev.tagIds, tagId]
+        }));
     };
 
     const generateCombinations = (options: { name: string, values: string[] }[]) => {
@@ -726,60 +741,96 @@ export default function NewProductPage() {
                                 />
                             </div>
                             
-                            <div className="space-y-4 pt-6 border-t border-border">
+                            <div className="space-y-4 pt-6 border-t border-border" ref={tagRef}>
                                 <label className="text-xs font-black uppercase tracking-widest text-gray-400">Etiquetas / Tags</label>
-                                <p className="text-xs text-gray-500 mb-4">Selecciona etiquetas existentes o crea una nueva escribiendo y presionando Enter.</p>
-                                
-                                <div className="flex gap-2">
-                                    <input 
+                                <p className="text-xs text-gray-500 mb-4">Busca una etiqueta existente o crea una nueva.</p>
+
+                                <div className="relative">
+                                    <input
                                         type="text"
-                                        placeholder="Nueva etiqueta (ej: Oferta, Temporada...)"
-                                        className="flex-1 px-4 py-2 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-sm font-bold"
-                                        value={newTag}
-                                        onChange={(e) => setNewTag(e.target.value)}
+                                        placeholder="Buscar o crear etiqueta..."
+                                        className="w-full px-5 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground"
+                                        value={tagSearch}
+                                        onChange={(e) => { setTagSearch(e.target.value); setTagOpen(true); }}
+                                        onFocus={() => setTagOpen(true)}
+                                        onBlur={() => setTimeout(() => setTagOpen(false), 150)}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter') {
                                                 e.preventDefault();
-                                                handleCreateTag();
+                                                const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+                                                const match = tags.find(t => norm(t.name) === norm(tagSearch.trim()));
+                                                if (match) {
+                                                    if (!formData.tagIds.includes(match.id)) toggleTag(match.id);
+                                                    setTagSearch('');
+                                                    setTagOpen(false);
+                                                } else if (tagSearch.trim()) {
+                                                    handleCreateTag();
+                                                }
                                             }
                                         }}
                                     />
-                                    <button 
-                                        onClick={handleCreateTag}
-                                        disabled={isCreatingTag || !newTag.trim()}
-                                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition disabled:opacity-50"
-                                    >
-                                        + Agregar
-                                    </button>
+                                    {tagOpen && (
+                                        <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                                            {tags
+                                                .filter(t => t.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes(tagSearch.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()))
+                                                .map(tag => {
+                                                    const selected = formData.tagIds.includes(tag.id);
+                                                    return (
+                                                        <button
+                                                            key={tag.id}
+                                                            type="button"
+                                                            className={`w-full text-left px-4 py-2.5 text-sm transition-colors font-medium flex items-center justify-between ${selected ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'hover:bg-blue-50 dark:hover:bg-blue-900/20 text-foreground'}`}
+                                                            onMouseDown={() => {
+                                                                toggleTag(tag.id);
+                                                                setTagSearch('');
+                                                                setTagOpen(false);
+                                                            }}
+                                                        >
+                                                            <span>#{tag.name}</span>
+                                                            {selected && <span className="text-xs font-bold">✓</span>}
+                                                        </button>
+                                                    );
+                                                })
+                                            }
+                                            {tagSearch.trim() && !tags.some(t => t.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() === tagSearch.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()) && (
+                                                <button
+                                                    type="button"
+                                                    disabled={isCreatingTag}
+                                                    className="w-full text-left px-4 py-2.5 text-sm text-blue-600 font-black hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-t border-border disabled:opacity-50"
+                                                    onMouseDown={() => handleCreateTag()}
+                                                >
+                                                    + Crear &ldquo;{tagSearch.trim()}&rdquo;
+                                                </button>
+                                            )}
+                                            {tags.filter(t => t.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes(tagSearch.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase())).length === 0 && !tagSearch.trim() && (
+                                                <p className="px-4 py-3 text-xs text-gray-400">Escribe para buscar una etiqueta</p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
-                                <div className="flex flex-wrap gap-3 mt-4">
-                                    {tags.map(tag => (
-                                        <label 
-                                            key={tag.id} 
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-bold cursor-pointer transition-all ${
-                                                formData.tagIds.includes(tag.id) 
-                                                    ? 'bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-500/50 dark:text-emerald-400 shadow-sm' 
-                                                    : 'bg-input border-border text-foreground hover:border-emerald-300'
-                                            }`}
-                                        >
-                                            <input 
-                                                type="checkbox" 
-                                                className="hidden"
-                                                checked={formData.tagIds.includes(tag.id)}
-                                                onChange={(e) => {
-                                                    const newTagsList = e.target.checked 
-                                                        ? [...formData.tagIds, tag.id] 
-                                                        : formData.tagIds.filter(id => id !== tag.id);
-                                                    setFormData({ ...formData, tagIds: newTagsList });
-                                                }}
-                                            />
-                                            #{tag.name}
-                                        </label>
-                                    ))}
-                                    {tags.length === 0 && (
-                                        <p className="text-[10px] text-gray-400 font-medium italic">No hay etiquetas creadas aún.</p>
+                                <div className="flex flex-wrap gap-2 mt-4">
+                                    {formData.tagIds.length === 0 && (
+                                        <p className="text-[10px] text-gray-400 font-medium italic">No has seleccionado etiquetas todavía.</p>
                                     )}
+                                    {formData.tagIds.map(id => {
+                                        const tag = tags.find(t => t.id === id);
+                                        if (!tag) return null;
+                                        return (
+                                            <span
+                                                key={id}
+                                                className="flex items-center gap-2 px-3 py-1.5 rounded-2xl border text-xs font-bold bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-500/50 dark:text-emerald-400"
+                                            >
+                                                #{tag.name}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleTag(id)}
+                                                    className="text-emerald-700/70 hover:text-emerald-900 dark:text-emerald-400/70 dark:hover:text-emerald-300 font-black"
+                                                    aria-label="Quitar etiqueta"
+                                                >×</button>
+                                            </span>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>

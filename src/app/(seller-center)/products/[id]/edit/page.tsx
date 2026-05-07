@@ -78,7 +78,6 @@ export default function EditProductPage() {
     });
 
     const [newOptionName, setNewOptionName] = useState('');
-    const [newTag, setNewTag] = useState('');
     const [isCreatingTag, setIsCreatingTag] = useState(false);
 
     // Combobox state for Marca
@@ -91,21 +90,37 @@ export default function EditProductPage() {
     const [supplierOpen, setSupplierOpen] = useState(false);
     const supplierRef = useRef<HTMLDivElement>(null);
 
-    const handleCreateTag = async () => {
-        if (!newTag.trim()) return;
+    // Combobox state for Etiquetas
+    const [tagSearch, setTagSearch] = useState('');
+    const [tagOpen, setTagOpen] = useState(false);
+    const tagRef = useRef<HTMLDivElement>(null);
+
+    const handleCreateTag = async (name?: string) => {
+        const value = (name ?? tagSearch).trim();
+        if (!value) return;
         setIsCreatingTag(true);
-        const res = await createTag(newTag.trim());
+        const res = await createTag(value);
         if (res.success && res.tag) {
             setTags(prev => [...prev, res.tag]);
             setFormData(prev => ({
                 ...prev,
-                tagIds: [...prev.tagIds, res.tag.id]
+                tagIds: prev.tagIds.includes(res.tag.id) ? prev.tagIds : [...prev.tagIds, res.tag.id]
             }));
-            setNewTag('');
+            setTagSearch('');
+            setTagOpen(false);
         } else {
             alert(res.error || 'Error al crear la etiqueta');
         }
         setIsCreatingTag(false);
+    };
+
+    const toggleTag = (tagId: string) => {
+        setFormData(prev => ({
+            ...prev,
+            tagIds: prev.tagIds.includes(tagId)
+                ? prev.tagIds.filter(id => id !== tagId)
+                : [...prev.tagIds, tagId]
+        }));
     };
 
     useEffect(() => {
@@ -740,54 +755,96 @@ export default function EditProductPage() {
                                 />
                             </div>
 
-                            <div className="space-y-3 pt-6 border-t border-border">
+                            <div className="space-y-4 pt-6 border-t border-border" ref={tagRef}>
                                 <label className="text-xs font-black uppercase tracking-widest text-gray-400">Etiquetas / Tags</label>
-                                {/* Inline tag creation */}
-                                <div className="flex gap-2">
+                                <p className="text-xs text-gray-500 mb-4">Busca una etiqueta existente o crea una nueva.</p>
+
+                                <div className="relative">
                                     <input
                                         type="text"
-                                        placeholder="Nueva etiqueta..."
-                                        className="flex-1 px-4 py-2 bg-input border border-border rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/50 outline-none transition"
-                                        value={newTag}
-                                        onChange={(e) => setNewTag(e.target.value)}
+                                        placeholder="Buscar o crear etiqueta..."
+                                        className="w-full px-5 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground"
+                                        value={tagSearch}
+                                        onChange={(e) => { setTagSearch(e.target.value); setTagOpen(true); }}
+                                        onFocus={() => setTagOpen(true)}
+                                        onBlur={() => setTimeout(() => setTagOpen(false), 150)}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter') {
                                                 e.preventDefault();
-                                                handleCreateTag();
+                                                const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+                                                const match = tags.find(t => norm(t.name) === norm(tagSearch.trim()));
+                                                if (match) {
+                                                    if (!formData.tagIds.includes(match.id)) toggleTag(match.id);
+                                                    setTagSearch('');
+                                                    setTagOpen(false);
+                                                } else if (tagSearch.trim()) {
+                                                    handleCreateTag();
+                                                }
                                             }
                                         }}
                                     />
-                                    <button
-                                        type="button"
-                                        onClick={handleCreateTag}
-                                        disabled={isCreatingTag || !newTag.trim()}
-                                        className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition disabled:opacity-50 shadow-lg shadow-emerald-500/20"
-                                    >
-                                        {isCreatingTag ? '...' : '+ Crear'}
-                                    </button>
-                                </div>
-                                {/* Existing tags */}
-                                <div className="flex flex-wrap gap-3">
-                                    {tags.map(tag => (
-                                        <label 
-                                            key={tag.id} 
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-bold cursor-pointer transition-all ${formData.tagIds.includes(tag.id) ? 'bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-500/50 dark:text-emerald-400' : 'bg-input border-border text-foreground hover:border-emerald-300'}`}
-                                        >
-                                            <input 
-                                                type="checkbox" 
-                                                className="hidden"
-                                                checked={formData.tagIds.includes(tag.id)}
-                                                onChange={(e) => {
-                                                    const newTags = e.target.checked ? [...formData.tagIds, tag.id] : formData.tagIds.filter(id => id !== tag.id);
-                                                    setFormData({ ...formData, tagIds: newTags });
-                                                }}
-                                            />
-                                            #{tag.name}
-                                        </label>
-                                    ))}
-                                    {tags.length === 0 && (
-                                        <p className="text-xs text-gray-400 italic">No hay etiquetas. Crea una arriba.</p>
+                                    {tagOpen && (
+                                        <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                                            {tags
+                                                .filter(t => t.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes(tagSearch.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()))
+                                                .map(tag => {
+                                                    const selected = formData.tagIds.includes(tag.id);
+                                                    return (
+                                                        <button
+                                                            key={tag.id}
+                                                            type="button"
+                                                            className={`w-full text-left px-4 py-2.5 text-sm transition-colors font-medium flex items-center justify-between ${selected ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'hover:bg-blue-50 dark:hover:bg-blue-900/20 text-foreground'}`}
+                                                            onMouseDown={() => {
+                                                                toggleTag(tag.id);
+                                                                setTagSearch('');
+                                                                setTagOpen(false);
+                                                            }}
+                                                        >
+                                                            <span>#{tag.name}</span>
+                                                            {selected && <span className="text-xs font-bold">✓</span>}
+                                                        </button>
+                                                    );
+                                                })
+                                            }
+                                            {tagSearch.trim() && !tags.some(t => t.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() === tagSearch.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()) && (
+                                                <button
+                                                    type="button"
+                                                    disabled={isCreatingTag}
+                                                    className="w-full text-left px-4 py-2.5 text-sm text-blue-600 font-black hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors border-t border-border disabled:opacity-50"
+                                                    onMouseDown={() => handleCreateTag()}
+                                                >
+                                                    + Crear &ldquo;{tagSearch.trim()}&rdquo;
+                                                </button>
+                                            )}
+                                            {tags.filter(t => t.name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes(tagSearch.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase())).length === 0 && !tagSearch.trim() && (
+                                                <p className="px-4 py-3 text-xs text-gray-400">Escribe para buscar una etiqueta</p>
+                                            )}
+                                        </div>
                                     )}
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 mt-4">
+                                    {formData.tagIds.length === 0 && (
+                                        <p className="text-[10px] text-gray-400 font-medium italic">No has seleccionado etiquetas todavía.</p>
+                                    )}
+                                    {formData.tagIds.map(id => {
+                                        const tag = tags.find(t => t.id === id);
+                                        if (!tag) return null;
+                                        return (
+                                            <span
+                                                key={id}
+                                                className="flex items-center gap-2 px-3 py-1.5 rounded-2xl border text-xs font-bold bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-500/50 dark:text-emerald-400"
+                                            >
+                                                #{tag.name}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleTag(id)}
+                                                    className="text-emerald-700/70 hover:text-emerald-900 dark:text-emerald-400/70 dark:hover:text-emerald-300 font-black"
+                                                    aria-label="Quitar etiqueta"
+                                                >×</button>
+                                            </span>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>
