@@ -257,6 +257,34 @@ export async function deleteFloorSalesperson(id: string) {
     }
 }
 
+// ─── Borrar permanentemente vendedor de piso desactivado ──────────────────
+// Solo funciona si está desactivado. Limpia la referencia en ventas históricas
+// (se pierde el historial de comisiones) y borra el registro.
+export async function permanentlyDeleteFloorSalesperson(id: string) {
+    try {
+        const user = await getSessionUser();
+        if (!user || user.role !== "SELLER") return { success: false, error: "No autorizado" };
+
+        const sp = await (prisma as any).salesperson.findFirst({
+            where: { id, sellerId: user.id, isActive: false },
+        });
+        if (!sp) return { success: false, error: "Solo se pueden eliminar vendedores de piso desactivados" };
+
+        await prisma.$transaction(async (tx: any) => {
+            await tx.sale.updateMany({
+                where: { soldBySalespersonId: id },
+                data: { soldBySalespersonId: null },
+            });
+            await tx.salesperson.delete({ where: { id } });
+        });
+
+        revalidatePath("/settings/team");
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message || "No se pudo eliminar el vendedor de piso" };
+    }
+}
+
 // ─── Borrar permanentemente cajero desactivado ─────────────────────────────
 export async function permanentlyDeleteCashier(cashierId: string) {
     try {

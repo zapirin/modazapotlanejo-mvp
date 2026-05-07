@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import {
     getSellerCashiers, createCashier, updateCashier, deleteCashier, permanentlyDeleteCashier,
-    getFloorSalespeople, createFloorSalesperson, updateFloorSalesperson, deleteFloorSalesperson,
+    getFloorSalespeople, createFloorSalesperson, updateFloorSalesperson, deleteFloorSalesperson, permanentlyDeleteFloorSalesperson,
 } from "./actions";
 import { getLocationsSettings } from "../actions";
 import { getSessionUser } from "@/app/actions/auth";
@@ -395,14 +395,25 @@ export default function TeamPage() {
                                                                 Desactivar
                                                             </button>
                                                         ) : (
-                                                            <button onClick={async () => {
-                                                                const res = await updateFloorSalesperson(sp.id, { isActive: true });
-                                                                if (res.success) { toast.success('Vendedor reactivado'); loadData(); }
-                                                                else toast.error(res.error || 'Error');
-                                                            }}
-                                                                className="px-3 py-1.5 text-xs font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl hover:bg-emerald-100 transition">
-                                                                ✓ Reactivar
-                                                            </button>
+                                                            <>
+                                                                <button onClick={async () => {
+                                                                    const res = await updateFloorSalesperson(sp.id, { isActive: true });
+                                                                    if (res.success) { toast.success('Vendedor reactivado'); loadData(); }
+                                                                    else toast.error(res.error || 'Error');
+                                                                }}
+                                                                    className="px-3 py-1.5 text-xs font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl hover:bg-emerald-100 transition">
+                                                                    ✓ Reactivar
+                                                                </button>
+                                                                <button onClick={async () => {
+                                                                    if (!confirm(`¿Eliminar permanentemente a ${sp.name}?\n\nSe perderá el historial de comisiones de este vendedor (sus ventas viejas quedarán sin vendedor asignado).\n\nEsta acción no se puede deshacer.`)) return;
+                                                                    const res = await permanentlyDeleteFloorSalesperson(sp.id);
+                                                                    if (res.success) { toast.success('Vendedor eliminado permanentemente'); loadData(); }
+                                                                    else toast.error(res.error || 'Error');
+                                                                }}
+                                                                    className="px-3 py-1.5 text-xs font-black text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl hover:bg-red-100 transition">
+                                                                    🗑 Eliminar
+                                                                </button>
+                                                            </>
                                                         )}
                                                     </div>
                                                 </div>
