@@ -902,7 +902,7 @@ export default function InventoryPage() {
                         </div>
                         
                         <div className="p-6 max-h-[60vh] overflow-y-auto">
-                            <p className="text-xs text-blue-600 font-bold uppercase tracking-widest mb-4">Ingresa la cantidad final exacta (Caja Registradora) para cada bodega</p>
+                            <p className="text-xs text-blue-600 font-bold uppercase tracking-widest mb-4">Ingresa la cantidad final exacta (Caja Registradora) para cada sucursal</p>
                             
                             <div className="overflow-x-auto rounded-2xl border border-border shadow-sm">
                                 <table className="w-full text-left text-sm bg-card">
