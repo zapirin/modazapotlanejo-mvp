@@ -147,6 +147,7 @@ model User {
   minOrderAmount            Float?
   logoUrl                   String?
   posEnabled                Boolean                @default(true)
+  posTestMode               Boolean                @default(false)
   canOpenDrawer             Boolean?
   maxProducts               Int?
   posRequested              Boolean                @default(false)

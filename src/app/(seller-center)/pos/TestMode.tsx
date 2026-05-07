@@ -1,35 +1,81 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { getPosTestMode, setPosTestMode as setPosTestModeAction } from "./actions";
 
-const KEY = "pos_test_mode";
+const CACHE_KEY = "pos_test_mode_cache";
 
-export function isTestModeActive(): boolean {
+// Cache local del flag — solo para evitar parpadeo del banner mientras llega el fetch del servidor.
+// La fuente de verdad es la base de datos (User.posTestMode del seller).
+function readCache(): boolean {
     if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(KEY) === "true";
+    return window.localStorage.getItem(CACHE_KEY) === "true";
 }
 
-export function setTestModeActive(active: boolean) {
+function writeCache(active: boolean) {
     if (typeof window === "undefined") return;
-    if (active) window.localStorage.setItem(KEY, "true");
-    else window.localStorage.removeItem(KEY);
-    window.dispatchEvent(new Event("pos_test_mode_change"));
+    if (active) window.localStorage.setItem(CACHE_KEY, "true");
+    else window.localStorage.removeItem(CACHE_KEY);
 }
 
-export function useTestMode(): [boolean, (active: boolean) => void] {
-    const [active, setActive] = useState(false);
-    useEffect(() => {
-        setActive(isTestModeActive());
-        const handler = () => setActive(isTestModeActive());
-        window.addEventListener("pos_test_mode_change", handler);
-        window.addEventListener("storage", handler);
-        return () => {
-            window.removeEventListener("pos_test_mode_change", handler);
-            window.removeEventListener("storage", handler);
-        };
+// Lectura sincrónica para acciones del POS que necesitan decidir entre fake* y real.
+// Devuelve el último valor cacheado del servidor.
+export function isTestModeActive(): boolean {
+    return readCache();
+}
+
+export function useTestMode(): [boolean, (active: boolean) => Promise<void>, boolean] {
+    const [active, setActive] = useState<boolean>(readCache());
+    const [loading, setLoading] = useState(false);
+    const mounted = useRef(true);
+
+    const refresh = useCallback(async () => {
+        try {
+            const res = await getPosTestMode();
+            if (!mounted.current) return;
+            writeCache(res.active);
+            setActive(res.active);
+            window.dispatchEvent(new Event("pos_test_mode_change"));
+        } catch {
+            // silencio: dejamos el cache
+        }
     }, []);
-    const toggle = useCallback((value: boolean) => setTestModeActive(value), []);
-    return [active, toggle];
+
+    useEffect(() => {
+        mounted.current = true;
+        refresh();
+        const onFocus = () => refresh();
+        const onChange = () => setActive(readCache());
+        window.addEventListener("focus", onFocus);
+        window.addEventListener("pos_test_mode_change", onChange);
+        window.addEventListener("storage", onChange);
+        const interval = setInterval(refresh, 60000);
+        return () => {
+            mounted.current = false;
+            window.removeEventListener("focus", onFocus);
+            window.removeEventListener("pos_test_mode_change", onChange);
+            window.removeEventListener("storage", onChange);
+            clearInterval(interval);
+        };
+    }, [refresh]);
+
+    const toggle = useCallback(async (value: boolean) => {
+        setLoading(true);
+        try {
+            const res = await setPosTestModeAction(value);
+            if (res.success) {
+                writeCache(value);
+                setActive(value);
+                window.dispatchEvent(new Event("pos_test_mode_change"));
+            } else {
+                throw new Error(res.error || "Error");
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    return [active, toggle, loading];
 }
 
 let testCounter = 1;
@@ -80,32 +126,5 @@ export function TestModeBanner() {
         <div className="fixed top-0 left-0 right-0 z-[60] bg-gradient-to-r from-amber-500 to-orange-500 text-white text-center py-1.5 px-4 text-xs font-black uppercase tracking-widest shadow-lg">
             🧪 Modo Prueba activo — ninguna venta, traspaso ni movimiento de caja se guardará
         </div>
-    );
-}
-
-export function TestModeToggleButton() {
-    const [active, setActive] = useTestMode();
-    const handleClick = () => {
-        if (!active) {
-            const ok = window.confirm(
-                "¿Activar Modo Prueba?\n\nMientras esté activo, las ventas, traspasos y movimientos de caja NO se guardarán en la base de datos. Útil para entrenamiento.\n\nApágalo cuando termines para volver a operar normal."
-            );
-            if (ok) setActive(true);
-        } else {
-            setActive(false);
-        }
-    };
-    return (
-        <button
-            onClick={handleClick}
-            title={active ? "Desactivar Modo Prueba" : "Activar Modo Prueba (entrenamiento)"}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
-                active
-                    ? "bg-amber-500 text-white shadow-md hover:bg-amber-600"
-                    : "bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700"
-            }`}
-        >
-            🧪 {active ? "Modo Prueba ON" : "Modo Prueba"}
-        </button>
     );
 }

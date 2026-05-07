@@ -390,3 +390,43 @@ export async function checkSellerPOSAccess() {
     });
     return { posEnabled: seller?.posEnabled ?? false };
 }
+
+// Resuelve el sellerId al que pertenece el usuario actual (seller directo o cajero/manager)
+async function resolveSellerIdForUser(user: any): Promise<string | null> {
+    if (!user) return null;
+    if (user.role === 'SELLER') return user.id;
+    if (user.role === 'ADMIN') return user.id;
+    // CASHIER / MANAGER — usar managedBySellerId
+    const u = await (prisma.user as any).findUnique({
+        where: { id: user.id },
+        select: { managedBySellerId: true }
+    });
+    return u?.managedBySellerId || null;
+}
+
+// Lee el flag de Modo Prueba del seller dueño del POS donde opera el usuario actual
+export async function getPosTestMode(): Promise<{ active: boolean }> {
+    const user = await getSessionUser();
+    if (!user) return { active: false };
+    const sellerId = await resolveSellerIdForUser(user);
+    if (!sellerId) return { active: false };
+    const seller = await (prisma.user as any).findUnique({
+        where: { id: sellerId },
+        select: { posTestMode: true }
+    });
+    return { active: !!seller?.posTestMode };
+}
+
+// Solo SELLER/ADMIN puede activar/desactivar Modo Prueba para su tienda
+export async function setPosTestMode(active: boolean) {
+    const user = await getSessionUser();
+    if (!user) return { success: false, error: "No autorizado" };
+    if (user.role !== 'SELLER' && user.role !== 'ADMIN') {
+        return { success: false, error: "Solo el vendedor puede cambiar el Modo Prueba" };
+    }
+    await (prisma.user as any).update({
+        where: { id: user.id },
+        data: { posTestMode: !!active }
+    });
+    return { success: true, active: !!active };
+}

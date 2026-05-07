@@ -9,7 +9,7 @@ import { processImage } from '@/lib/imageUtils';
 import { useTestMode } from '../../pos/TestMode';
 
 export default function ProfilePage() {
-    const [testMode, setTestMode] = useTestMode();
+    const [testMode, setTestMode, testModeLoading] = useTestMode();
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -149,21 +149,30 @@ export default function ProfilePage() {
                                 Mientras esté activa, las ventas, apartados, traspasos y movimientos de caja se simulan y <strong>no se guardan</strong>.
                                 Apágala antes de operar normalmente.
                             </p>
-                            <p className="text-[10px] text-gray-400 mt-2">El modo se aplica solo a este navegador.</p>
+                            <p className="text-[10px] text-gray-400 mt-2">El modo se aplica a toda tu tienda: tú y todos tus cajeros, en cualquier navegador.</p>
                         </div>
                         <button
                             type="button"
-                            onClick={() => {
-                                if (!testMode) {
-                                    const ok = window.confirm('¿Activar Modo Prueba?\n\nLas ventas, traspasos y movimientos de caja NO se guardarán en la base de datos. Útil para entrenamiento.');
-                                    if (ok) setTestMode(true);
-                                } else {
-                                    setTestMode(false);
+                            disabled={testModeLoading}
+                            onClick={async () => {
+                                try {
+                                    if (!testMode) {
+                                        const ok = window.confirm('¿Activar Modo Prueba para toda tu tienda?\n\nTodos tus cajeros, en cualquier navegador, entrarán en modo prueba.\nLas ventas, traspasos y movimientos de caja NO se guardarán en la base de datos.');
+                                        if (ok) {
+                                            await setTestMode(true);
+                                            setMessage({ type: 'success', text: 'Modo Prueba ACTIVADO para toda tu tienda.' });
+                                        }
+                                    } else {
+                                        await setTestMode(false);
+                                        setMessage({ type: 'success', text: 'Modo Prueba desactivado. La tienda vuelve a operar normalmente.' });
+                                    }
+                                } catch (e: any) {
+                                    setMessage({ type: 'error', text: e?.message || 'No se pudo cambiar el Modo Prueba' });
                                 }
                             }}
                             role="switch"
                             aria-checked={testMode}
-                            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors shrink-0 ${testMode ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-700'}`}
+                            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors shrink-0 disabled:opacity-50 ${testMode ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-700'}`}
                         >
                             <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${testMode ? 'translate-x-6' : 'translate-x-1'}`} />
                         </button>
