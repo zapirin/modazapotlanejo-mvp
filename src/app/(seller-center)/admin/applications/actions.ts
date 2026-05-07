@@ -49,6 +49,7 @@ export async function updateApplicationStatus(id: string, status: 'APPROVED' | '
             const tempPassword = Math.random().toString(36).slice(-8);
             const passwordHash = hashPassword(tempPassword);
 
+            const isBasicoPlan = (application as any).planName === 'Básico' || !(application as any).planName;
             await prisma.$transaction(async (tx) => {
                 // 1. Create User
                 const slug = await uniqueSlug(application.storeName || application.contactName, tx);
@@ -62,6 +63,9 @@ export async function updateApplicationStatus(id: string, status: 'APPROVED' | '
                         sellerSlug: slug,
                         phone: application.phone || null,
                         whatsapp: application.phone || null,
+                        // Plan Básico = sin POS por defecto. Admin puede activarlo despues desde
+                        // /admin/marketplace si quiere darle POS a un vendedor de plan gratis.
+                        posEnabled: !isBasicoPlan,
                     }
                 });
 
@@ -167,7 +171,7 @@ export async function createSellerManually(data: {
                     sellerSlug: slug,
                     phone: data.phone || null,
                     whatsapp: data.phone || null,
-                    posEnabled: true,
+                    posEnabled: data.planName !== 'Básico',
                     planName: data.planName,
                     maxLocations: permissions.maxLocations,
                     maxCashiers: permissions.maxCashiers,

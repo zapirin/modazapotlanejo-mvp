@@ -88,7 +88,7 @@ export default function SellerRegistrationForm({ plans, domain }: { plans: any[]
                 <div className="space-y-4">
                     <div className="text-center space-y-1">
                         <h3 className="text-2xl font-black uppercase tracking-tight text-foreground">Elige tu Plan</h3>
-                        <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Todos incluyen POS · Inventario · Catálogo online · Analítica</p>
+                        <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Catálogo online · Inventario · Analítica · POS (planes de paga)</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {(plans || []).filter((plan: any) => !plan.hidden).map((plan: any) => (
@@ -107,10 +107,15 @@ export default function SellerRegistrationForm({ plans, domain }: { plans: any[]
                                     </span>
                                 </div>
                                 <div className="space-y-1.5 text-[11px] font-bold text-white/90">
-                                    <p>🏬 {plan.locations} sucursal{plan.locations > 1 ? 'es' : ''}</p>
-                                    <p>👤 {plan.cashiers} cajero{plan.cashiers > 1 ? 's' : ''}</p>
+                                    {/* Plan con POS: muestra sucursales/cajeros. Default por priceNum si admin no marcó la bandera. */}
+                                    {(plan.includesPos === true || (plan.includesPos === undefined && (plan.priceNum ?? 0) > 0)) && (
+                                        <>
+                                            <p>🏬 {plan.locations} sucursal{plan.locations > 1 ? 'es' : ''}</p>
+                                            <p>👤 {plan.cashiers} cajero{plan.cashiers > 1 ? 's' : ''}</p>
+                                        </>
+                                    )}
                                     <p>📦 {plan.products === 0 ? 'Ilimitados' : plan.products} productos</p>
-                                    {(plan.features || ['POS + Inventario + Catálogo online', 'Analítica de ventas']).map((f: string, fi: number) => (
+                                    {(plan.features || ['Catálogo online', 'Analítica de ventas']).map((f: string, fi: number) => (
                                         <p key={fi}>✓ {f}</p>
                                     ))}
                                 </div>
