@@ -332,9 +332,26 @@ export default function CartPage() {
             for (const [sellerId, group] of sellerGroups) {
                 const discountResult = getGroupDiscount(sellerId, group);
                 const coupon = appliedCoupons.get(sellerId);
+
+                // Distribuir el descuento por volumen en el precio unitario de los items
+                // sueltos para que OrderItem.price refleje lo que realmente pagó el cliente.
+                const looseTotal = discountResult?.looseTotal || 0;
+                const volumeDiscount = discountResult?.discount || 0;
+                const priceMultiplier = (looseTotal > 0 && volumeDiscount > 0)
+                    ? (looseTotal - volumeDiscount) / looseTotal
+                    : 1;
+
+                const adjustedItems = group.items.map((item: any) => {
+                    const isLoose = !item.sellByPackage;
+                    const adjustedPrice = (isLoose && priceMultiplier !== 1)
+                        ? Math.round(item.price * priceMultiplier * 100) / 100
+                        : item.price;
+                    return { ...item, price: adjustedPrice };
+                });
+
                 const result = await createOrder({
                     sellerId,
-                    items: group.items.map((item: any) => ({
+                    items: adjustedItems.map((item: any) => ({
                         variantId: item.variantId,
                         quantity: item.quantity,
                         price: item.price,
@@ -344,7 +361,7 @@ export default function CartPage() {
                     })),
                     notes: pickupMode ? '📍 RECOGER EN TIENDA DEL VENDEDOR' : (notes || undefined),
                     priceTierId: discountResult?.tier?.id || undefined,
-                    discount: (discountResult?.discount || 0) + (coupon?.discountAmount || 0),
+                    discount: (coupon?.discountAmount || 0),
                     status: 'PENDING_PAYMENT',
                     shippingAddressId: pickupMode ? undefined : (selectedAddressId || undefined),
                     shippingCost: (pickupMode || hasFreeShippingCoupon) ? 0 : (selectedRate?.totalPrice || 0),
@@ -364,7 +381,7 @@ export default function CartPage() {
                     if (result.orderNumber) realOrderNumbers.push(result.orderNumber);
                     // Incrementar uso del cupón si se aplicó
                     if (coupon?.id) await incrementCouponUsage(coupon.id);
-                    group.items.forEach((item: any) => {
+                    adjustedItems.forEach((item: any) => {
                         allItems.push({
                             productName: item.productName,
                             quantity: item.quantity,
