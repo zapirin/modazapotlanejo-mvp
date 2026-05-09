@@ -838,30 +838,31 @@ function POSContent() {
 
     const calculateSubtotal = () => cart.reduce((acc, item) => acc + (item.price * (item.quantity || 0)), 0);
 
-    const calculateTotal = () => {
+    // Subtotal neto firmado: positivo = cliente paga, negativo = se le devuelve.
+    // Permite carritos mixtos (devolución + venta nueva) y decide la naturaleza
+    // de la transacción por el signo del neto, no por el toggle de modo entrada.
+    const calculateNetSubtotal = () => {
         let subtotal = calculateSubtotal();
-
-        // Descuento manual global
         if (globalDiscount) {
-            if (globalDiscount.type === 'percent') {
-                const percentDiscAmount = subtotal * (globalDiscount.value / 100);
-                subtotal -= percentDiscAmount;
-            } else if (globalDiscount.type === 'fixed') {
-                subtotal -= globalDiscount.value;
-            }
+            if (globalDiscount.type === 'percent') subtotal -= subtotal * (globalDiscount.value / 100);
+            else if (globalDiscount.type === 'fixed') subtotal -= globalDiscount.value;
         }
-
-        // 3. Loyalty Points Discount (POS, solo Client registrado)
-        if (loyaltyInfo && loyaltyPointsToRedeem > 0 && selectedClient && !isReturnMode) {
+        // Loyalty solo aplica si el cliente termina pagando (neto positivo)
+        if (loyaltyInfo && loyaltyPointsToRedeem > 0 && selectedClient && subtotal > 0) {
             const loyaltyDisc = Math.floor((loyaltyPointsToRedeem / loyaltyInfo.redeemRate) * 100) / 100;
             subtotal -= loyaltyDisc;
         }
-
-        return isReturnMode ? Math.abs(subtotal) : Math.max(0, subtotal);
+        return subtotal;
     };
 
+    // ¿La transacción es una devolución neta? Decide por el signo del subtotal.
+    // Independiente del toggle isReturnMode (que solo controla el signo al escanear).
+    const isNetReturn = calculateNetSubtotal() < 0;
+
+    const calculateTotal = () => Math.abs(calculateNetSubtotal());
+
     const calculateBalance = () => {
-        if (isReturnMode) return 0; // En devolución no hay saldo pendiente del cliente
+        if (isNetReturn) return 0; // En devolución neta no hay saldo pendiente del cliente
         const paid = partialPayments.reduce((acc, p) => acc + p.amount, 0);
         return Math.max(0, calculateTotal() - paid);
     };
@@ -947,7 +948,7 @@ function POSContent() {
                 paymentMethodName: selectedPaymentMethod,
                 clientId: selectedClient?.id || null,
                 priceTierId: selectedTier?.id || null,
-                isReturn: isReturnMode,
+                isReturn: isNetReturn,
                 cashSessionId: currentSession?.id || null,
                 partialPayments: paymentsToUse.length > 0 ? paymentsToUse : null,
                 soldBySalespersonId: selectedSalesperson?.id || null,
@@ -1005,7 +1006,7 @@ function POSContent() {
                 const nonCashPartials = explicitReceivedAmount !== undefined
                     ? paymentsToUse.filter(p => !p.method.toLowerCase().includes('efectivo')).reduce((a, p) => a + p.amount, 0)
                     : paymentsToUse.reduce((a, p) => a + p.amount, 0);
-                const changeDue = !isReturnMode && wasCash
+                const changeDue = !isNetReturn && wasCash
                     ? Math.max(0, (cashReceived + nonCashPartials) - totalAtSale)
                     : 0;
 
@@ -1022,7 +1023,7 @@ function POSContent() {
                     tierName: selectedTier ? selectedTier.name : 'Precio Público',
                     clientName: selectedClient ? selectedClient.name : 'Venta de Mostrador',
                     salespersonName: selectedSalesperson ? selectedSalesperson.name : null,
-                    isReturn: isReturnMode,
+                    isReturn: isNetReturn,
                     receivedAmount: explicitReceivedAmount !== undefined
                         ? explicitReceivedAmount
                         : (wasCash ? (parseFloat(receivedAmount) || 0) : null),
@@ -2327,7 +2328,7 @@ function POSContent() {
                         </button>
 
                         {/* Loyalty: canje de puntos */}
-                        {loyaltyInfo && selectedClient && !isReturnMode && (() => {
+                        {loyaltyInfo && selectedClient && !isNetReturn && (() => {
                             const canRedeem = loyaltyInfo.balance >= loyaltyInfo.minRedeemPoints && loyaltyInfo.balance > 0;
                             const subtotalNoLoyalty = (() => {
                                 let s = calculateSubtotal();
@@ -2474,7 +2475,7 @@ function POSContent() {
                         <p className="text-gray-400 font-bold text-[10px] uppercase tracking-widest">Método de Pago</p>
 
                         {/* Input de Efectivo / Abono — ARRIBA del grid para verlo de inmediato */}
-                        {!isReturnMode && calculateBalance() > 0 && (
+                        {!isNetReturn && calculateBalance() > 0 && (
                             <div className="flex gap-2 animate-in slide-in-from-top-2 duration-200">
                                 <div className="relative flex-1">
                                     <span className="absolute left-3 top-2.5 text-gray-400 font-bold text-sm">$</span>
@@ -2499,7 +2500,7 @@ function POSContent() {
                         )}
 
                         {/* Cambio en vivo — se muestra apenas el efectivo recibido excede el saldo pendiente */}
-                        {!isReturnMode && selectedPaymentMethod?.toLowerCase().includes('efectivo') && (() => {
+                        {!isNetReturn && selectedPaymentMethod?.toLowerCase().includes('efectivo') && (() => {
                             const partialSum = partialPayments.reduce((a, p) => a + p.amount, 0);
                             const received = parseFloat(receivedAmount) || 0;
                             const total = calculateTotal();
@@ -2558,8 +2559,8 @@ function POSContent() {
                             })}
                         </div>
 
-                        {/* Modo devolución: mostrar monto a devolver */}
-                        {isReturnMode && calculateTotal() > 0 && (
+                        {/* Devolución neta: mostrar monto a devolver */}
+                        {isNetReturn && calculateTotal() > 0 && (
                             <div className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl space-y-2 animate-in slide-in-from-top-2">
                                 <div className="flex justify-between items-center">
                                     <span className="text-xs font-black uppercase tracking-widest text-orange-700 dark:text-orange-400">💰 Monto a devolver</span>
@@ -2637,7 +2638,7 @@ function POSContent() {
                             isProcessing || 
                             (!isTransferMode && !currentSession && globalConfig?.requireCashControl !== false) ||
                             (isTransferMode && (!transferSourceId || !transferDestId)) || 
-                            (!isReturnMode && !isTransferMode && calculateBalance() > 0 && (parseFloat(receivedAmount) || 0) < calculateBalance())
+                            (!isNetReturn && !isTransferMode && calculateBalance() > 0 && (parseFloat(receivedAmount) || 0) < calculateBalance())
                         }
                         className={`w-full py-5 font-black rounded-2xl shadow-xl hover:-translate-y-1 transition-all disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none uppercase tracking-widest relative overflow-hidden ${isTransferMode ? 'bg-purple-600 text-white' : 'bg-foreground text-background dark:bg-white dark:text-black'}`}
                     >
@@ -2651,7 +2652,7 @@ function POSContent() {
                         ) : editSaleId ? (
                             'Guardar Cambios'
                         ) : (
-                            `Procesar ${isReturnMode ? 'Devolución' : 'Venta'}`
+                            `Procesar ${isNetReturn ? 'Devolución' : 'Venta'}`
                         )}
                     </button>
 
