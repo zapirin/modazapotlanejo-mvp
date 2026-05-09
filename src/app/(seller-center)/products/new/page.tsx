@@ -372,6 +372,12 @@ export default function NewProductPage() {
                     <div className={`h-1.5 w-8 lg:w-16 rounded-full transition-all ${step >= 3 ? 'bg-blue-600' : 'bg-gray-100 dark:bg-gray-800'}`}></div>
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black transition-all ${step >= 3 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>3</div>
                 </div>
+
+                {step >= 2 && formData.name?.trim() && (
+                    <p className="mt-6 text-center text-sm font-bold text-gray-500 dark:text-gray-400">
+                        Creando: <span className="text-foreground font-black">{formData.name}</span>
+                    </p>
+                )}
             </div>
 
             <div className="bg-card rounded-3xl shadow-2xl border border-border overflow-hidden min-h-[500px] flex flex-col transition-all duration-300">
