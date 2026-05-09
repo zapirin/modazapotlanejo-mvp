@@ -617,8 +617,13 @@ export default function InventoryPage() {
                             placeholder="Buscar por nombre o modelo..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-12 pr-4 py-3 bg-input border border-border rounded-2xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground font-medium"
+                            className="w-full pl-12 pr-10 py-3 bg-input border border-border rounded-2xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground font-medium"
                         />
+                        {searchQuery && (
+                            <button type="button" onClick={() => setSearchQuery('')}
+                                aria-label="Limpiar búsqueda"
+                                className="absolute right-4 top-3 text-gray-400 hover:text-gray-600 font-bold text-lg">×</button>
+                        )}
                     </div>
                     <button
                         onClick={() => setIsFiltersOpen(!isFiltersOpen)}
