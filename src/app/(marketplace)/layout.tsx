@@ -122,7 +122,8 @@ export default async function MarketplaceLayout({
                 {children}
             </main>
             
-            {/* Global Trust Banner */}
+            {/* Global Trust Banner — solo marketplace (Stripe + multi-vendor). Single-vendor stores no lo muestran. */}
+            {!brand.isSingleVendor && (
             <div className="bg-white dark:bg-card border-t border-border py-10 mt-12">
                 <div className="max-w-7xl mx-auto px-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -150,6 +151,7 @@ export default async function MarketplaceLayout({
                     </div>
                 </div>
             </div>
+            )}
 
             <footer className="bg-gray-50 dark:bg-gray-900 border-t border-border py-12">
                 <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-10">
