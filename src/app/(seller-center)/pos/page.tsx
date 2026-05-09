@@ -2455,6 +2455,25 @@ function POSContent() {
                                 <p className="text-gray-400 font-black text-xs uppercase tracking-widest text-left">Total a Cobrar</p>
                                 <p className="text-5xl font-black text-blue-600 dark:text-blue-400 tracking-tighter">${calculateTotal().toFixed(2)}</p>
                             </div>
+                            {/* Abonos realizados — visibles sin scroll */}
+                            {partialPayments.length > 0 && (
+                                <div className="px-4 py-3 border-t border-border bg-gray-50/50 dark:bg-black/20 space-y-2">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Abonos Realizados</p>
+                                    {partialPayments.map((p, i) => (
+                                        <div key={i} className="flex justify-between items-center text-xs bg-white dark:bg-card p-2 rounded-lg border border-border shadow-sm">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-bold text-blue-600">{p.method}</span>
+                                                <span className="font-black">{formatCurrency(p.amount)}</span>
+                                            </div>
+                                            <button onClick={() => handleRemovePartialPayment(i)} className="text-gray-400 hover:text-red-500 font-bold px-1">×</button>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-between items-center pt-1 text-emerald-600">
+                                        <span className="text-xs font-black uppercase tracking-wider">Restante</span>
+                                        <span className="text-base font-black">{formatCurrency(calculateBalance())}</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
@@ -2591,33 +2610,10 @@ function POSContent() {
                             </div>
                         )}
 
-                        {/* Lista de Abonos */}
-                        {partialPayments.length > 0 && (
-                            <div className="space-y-2 pt-2 border-t border-dashed border-border">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Abonos Realizados</p>
-                                {partialPayments.map((p, i) => (
-                                    <div key={i} className="flex justify-between items-center text-xs bg-white dark:bg-card p-2 rounded-lg border border-border shadow-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-bold text-blue-600">{p.method}</span>
-                                            <span className="font-black">{formatCurrency(p.amount)}</span>
-                                        </div>
-                                        <button onClick={() => handleRemovePartialPayment(i)} className="text-gray-400 hover:text-red-500 font-bold px-1">×</button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
                         <div className="flex justify-between items-center pt-2">
                             <span className="text-lg font-black text-foreground uppercase tracking-tight">Total a Pagar</span>
                             <span className="text-2xl font-black text-blue-600 tracking-tighter">{formatCurrency(calculateTotal())}</span>
                         </div>
-
-                        {partialPayments.length > 0 && (
-                            <div className="flex justify-between items-center pt-1 text-emerald-600">
-                                <span className="text-sm font-bold uppercase">Restante</span>
-                                <span className="text-lg font-black">{formatCurrency(calculateBalance())}</span>
-                            </div>
-                        )}
                     </div>
 
                     <button
