@@ -22,6 +22,7 @@ export async function getProducts(filters: {
     sellerId?: string;
     color?: string;
     size?: string;
+    tag?: string;
 }) {
     try {
         const where: AnyMap = { isOnline: true, isActive: true };
@@ -41,6 +42,10 @@ export async function getProducts(filters: {
 
         if (filters.brand) {
             where.brandId = filters.brand;
+        }
+
+        if (filters.tag) {
+            where.tags = { some: { id: filters.tag } };
         }
 
         if (filters.seller) {
@@ -465,7 +470,7 @@ export async function getAvailableVariantOptions(sellerId?: string) {
     try {
         const productWhere: AnyMap = { isOnline: true, isActive: true };
         if (sellerId) productWhere.sellerId = sellerId;
-        const [colors, sizes] = await Promise.all([
+        const [colors, sizes, tags] = await Promise.all([
             prisma.variant.findMany({
                 where: { color: { not: null }, product: productWhere },
                 select: { color: true },
@@ -478,12 +483,18 @@ export async function getAvailableVariantOptions(sellerId?: string) {
                 distinct: ['size'],
                 orderBy: { size: 'asc' },
             }),
+            prisma.tag.findMany({
+                where: { products: { some: productWhere } },
+                select: { id: true, name: true },
+                orderBy: { name: 'asc' },
+            }),
         ]);
         return {
             colors: colors.map((v: AnyMap) => v.color!).filter(Boolean),
             sizes:  sizes.map((v: AnyMap) => v.size!).filter(Boolean),
+            tags:   tags.map((t: AnyMap) => ({ id: t.id, name: t.name })),
         };
-    } catch { return { colors: [], sizes: [] }; }
+    } catch { return { colors: [], sizes: [], tags: [] }; }
 }
 
 export async function getSellerTransferSettings(sellerId: string): Promise<{

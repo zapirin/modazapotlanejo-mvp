@@ -87,6 +87,7 @@ export default async function CatalogPage({
     const priceType = (params.priceType as 'all' | 'wholesale' | 'retail') || 'all';
     const color = typeof params.color === 'string' ? params.color : undefined;
     const size  = typeof params.size  === 'string' ? params.size  : undefined;
+    const tag   = typeof params.tag   === 'string' ? params.tag   : undefined;
     const page = typeof params.page === 'string' ? parseInt(params.page) : 1;
     const pageSize = 24;
     const offset = (page - 1) * pageSize;
@@ -94,7 +95,7 @@ export default async function CatalogPage({
     const sellerId = brandConfig.sellerId || undefined;
 
     const [result, categories, brands, user, variantOptions, mktSettings] = await Promise.all([
-        getProducts({ category, subcategory, brand, search, sort, minPrice, maxPrice, onlyWithStock, priceType, color, size, offset, limit: pageSize, sellerId }),
+        getProducts({ category, subcategory, brand, search, sort, minPrice, maxPrice, onlyWithStock, priceType, color, size, tag, offset, limit: pageSize, sellerId }),
         getCategories(sellerId),
         getBrands(sellerId),
         getSessionUser(),
@@ -112,6 +113,7 @@ export default async function CatalogPage({
             brands={brands}
             availableColors={variantOptions.colors}
             availableSizes={variantOptions.sizes}
+            availableTags={(variantOptions as any).tags || []}
             sellerId={sellerId}
             // @ts-ignore
             isWholesale={!!user?.isWholesale}

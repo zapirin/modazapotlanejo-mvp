@@ -15,6 +15,7 @@ export default function CatalogClient({
     brands,
     availableColors = [],
     availableSizes  = [],
+    availableTags   = [],
     sellerId,
     isWholesale = false,
     isLoggedIn  = false,
@@ -28,6 +29,7 @@ export default function CatalogClient({
     brands:          any[];
     availableColors?: string[];
     availableSizes?:  string[];
+    availableTags?:   { id: string; name: string }[];
     sellerId?:        string;
     isWholesale?: boolean;
     isLoggedIn?:  boolean;
@@ -43,6 +45,10 @@ export default function CatalogClient({
     const [search,       setSearch]       = useState(searchParams.get('search') || '');
     const [showMobileFilters, setShowMobileFilters] = useState(false);
     const [isCategoriesOpen,  setIsCategoriesOpen]  = useState(!!searchParams.get('category'));
+    const [isBrandsOpen,      setIsBrandsOpen]      = useState(!!searchParams.get('brand'));
+    const [isSizesOpen,       setIsSizesOpen]       = useState(!!searchParams.get('size'));
+    const [isColorsOpen,      setIsColorsOpen]      = useState(!!searchParams.get('color'));
+    const [isTagsOpen,        setIsTagsOpen]        = useState(!!searchParams.get('tag'));
     const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
         [searchParams.get('category') || '']: true,
     });
@@ -51,6 +57,9 @@ export default function CatalogClient({
     const selectedCategory    = searchParams.get('category')    || '';
     const selectedSubcategory = searchParams.get('subcategory') || '';
     const selectedBrand       = searchParams.get('brand')       || '';
+    const selectedSize        = searchParams.get('size')        || '';
+    const selectedColor       = searchParams.get('color')       || '';
+    const selectedTag         = searchParams.get('tag')         || '';
     const selectedSort        = searchParams.get('sort')        || '';
     const onlyWithStock       = searchParams.get('onlyWithStock') === 'true';
     const priceType           = searchParams.get('priceType')   || 'all';
@@ -73,6 +82,7 @@ export default function CatalogClient({
     const clearAllFilters = () => { setSearch(''); router.push('/catalog'); };
 
     const hasActiveFilters = selectedCategory || selectedBrand || selectedSubcategory ||
+        selectedSize || selectedColor || selectedTag ||
         searchParams.get('search') || searchParams.get('minPrice') ||
         searchParams.get('maxPrice') || onlyWithStock || priceType !== 'all';
 
@@ -85,6 +95,9 @@ export default function CatalogClient({
                 category:     selectedCategory    || undefined,
                 subcategory:  selectedSubcategory || undefined,
                 brand:        selectedBrand       || undefined,
+                size:         selectedSize        || undefined,
+                color:        selectedColor       || undefined,
+                tag:          selectedTag         || undefined,
                 search:       searchParams.get('search') || undefined,
                 sort:         selectedSort        || undefined,
                 minPrice:     searchParams.get('minPrice') ? parseFloat(searchParams.get('minPrice')!) : undefined,
@@ -234,14 +247,78 @@ export default function CatalogClient({
 
                 {/* Marcas */}
                 {brands.length > 0 && (
-                    <div className="space-y-3">
-                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Marcas</h3>
-                        <div className="flex flex-wrap gap-2">
+                    <div className="space-y-2">
+                        <button onClick={() => setIsBrandsOpen(!isBrandsOpen)}
+                            className="w-full flex items-center justify-between group">
+                            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">Marcas</h3>
+                            <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isBrandsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div className={`flex flex-wrap gap-2 overflow-hidden transition-all duration-300 ${isBrandsOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
                             {brands.map((brand: any) => (
                                 <button key={brand.id}
                                     onClick={() => handleFilterChange('brand', selectedBrand === brand.id ? '' : brand.id)}
                                     className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${selectedBrand === brand.id ? 'bg-foreground text-background border-foreground' : 'bg-transparent border-border text-gray-400 hover:border-gray-400'}`}>
                                     {brand.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Tallas */}
+                {availableSizes.length > 0 && (
+                    <div className="space-y-2">
+                        <button onClick={() => setIsSizesOpen(!isSizesOpen)}
+                            className="w-full flex items-center justify-between group">
+                            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">Tallas</h3>
+                            <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isSizesOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div className={`flex flex-wrap gap-2 overflow-hidden transition-all duration-300 ${isSizesOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                            {availableSizes.map((sz) => (
+                                <button key={sz}
+                                    onClick={() => handleFilterChange('size', selectedSize === sz ? '' : sz)}
+                                    className={`min-w-[42px] px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${selectedSize === sz ? 'bg-foreground text-background border-foreground' : 'bg-transparent border-border text-gray-400 hover:border-gray-400'}`}>
+                                    {sz}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Colores */}
+                {availableColors.length > 0 && (
+                    <div className="space-y-2">
+                        <button onClick={() => setIsColorsOpen(!isColorsOpen)}
+                            className="w-full flex items-center justify-between group">
+                            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">Colores</h3>
+                            <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isColorsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div className={`flex flex-wrap gap-2 overflow-hidden transition-all duration-300 ${isColorsOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                            {availableColors.map((col) => (
+                                <button key={col}
+                                    onClick={() => handleFilterChange('color', selectedColor === col ? '' : col)}
+                                    className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${selectedColor === col ? 'bg-foreground text-background border-foreground' : 'bg-transparent border-border text-gray-400 hover:border-gray-400'}`}>
+                                    {col}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Etiquetas */}
+                {availableTags.length > 0 && (
+                    <div className="space-y-2">
+                        <button onClick={() => setIsTagsOpen(!isTagsOpen)}
+                            className="w-full flex items-center justify-between group">
+                            <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">Etiquetas</h3>
+                            <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isTagsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                        <div className={`flex flex-wrap gap-2 overflow-hidden transition-all duration-300 ${isTagsOpen ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                            {availableTags.map((t) => (
+                                <button key={t.id}
+                                    onClick={() => handleFilterChange('tag', selectedTag === t.id ? '' : t.id)}
+                                    className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${selectedTag === t.id ? 'bg-foreground text-background border-foreground' : 'bg-transparent border-border text-gray-400 hover:border-gray-400'}`}>
+                                    {t.name}
                                 </button>
                             ))}
                         </div>
