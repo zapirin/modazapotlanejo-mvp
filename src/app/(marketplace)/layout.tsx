@@ -1,5 +1,6 @@
 import React from 'react';
 import Navbar from './Navbar';
+import AnnouncementBar from './AnnouncementBar';
 import Providers from './Providers';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -117,8 +118,13 @@ export default async function MarketplaceLayout({
     return (
         <Providers>
         <div className="min-h-screen bg-background" style={{'--brand-50': COLOR_MAP[brandPrimaryColor]?.c50 || COLOR_MAP.blue.c50, '--brand-100': COLOR_MAP[brandPrimaryColor]?.c100 || COLOR_MAP.blue.c100, '--brand-200': COLOR_MAP[brandPrimaryColor]?.c200 || COLOR_MAP.blue.c200, '--brand-500': COLOR_MAP[brandPrimaryColor]?.c500 || COLOR_MAP.blue.c500, '--brand-600': COLOR_MAP[brandPrimaryColor]?.c600 || COLOR_MAP.blue.c600, '--brand-700': COLOR_MAP[brandPrimaryColor]?.c700 || COLOR_MAP.blue.c700} as React.CSSProperties}>
-            <Navbar brandConfig={brand} user={user} categories={categories} brands={brandsData} />
-            <main className="pt-28">
+            <AnnouncementBar
+                enabled={(brand as any).announcementEnabled}
+                text={(brand as any).announcementText}
+                mode={(brand as any).announcementMode}
+            />
+            <Navbar brandConfig={brand} user={user} categories={categories} brands={brandsData} announcementVisible={!!(brand as any).announcementEnabled && !!(brand as any).announcementText?.trim()} />
+            <main className={(brand as any).announcementEnabled && (brand as any).announcementText?.trim() ? 'pt-36' : 'pt-28'}>
                 {children}
             </main>
             

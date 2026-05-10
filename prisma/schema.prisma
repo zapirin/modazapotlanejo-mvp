@@ -69,6 +69,9 @@ model BrandConfig {
   featuredCategories String[]
   isActive           Boolean  @default(true)
   showPricesPublicly Boolean  @default(true)
+  announcementEnabled Boolean @default(false)
+  announcementText    String?
+  announcementMode    String  @default("marquee")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }

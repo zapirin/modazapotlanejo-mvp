@@ -9,16 +9,18 @@ import { useCart } from '@/lib/CartContext';
 import { useRecentlyViewed } from '@/lib/RecentlyViewedContext';
 import { getUnreadCount } from '@/app/actions/messages';
 
-export default function Navbar({ 
-    brandConfig, 
+export default function Navbar({
+    brandConfig,
     user,
     categories = [],
-    brands = []
-}: { 
-    brandConfig: BrandConfig, 
+    brands = [],
+    announcementVisible = false
+}: {
+    brandConfig: BrandConfig,
     user: any,
     categories?: any[],
-    brands?: any[]
+    brands?: any[],
+    announcementVisible?: boolean
 }) {
     const pathname = usePathname();
     const router = useRouter();
@@ -104,9 +106,10 @@ export default function Navbar({
     return (
         <>
             <nav 
-                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+                style={{ top: announcementVisible ? 32 : 0 }}
+                className={`fixed left-0 right-0 z-50 transition-all duration-300 ${
                     scrolled || mobileMenuOpen || searchOpen
-                        ? 'bg-white/80 dark:bg-gray-950/80 backdrop-blur-md shadow-sm border-b border-border py-3' 
+                        ? 'bg-white/80 dark:bg-gray-950/80 backdrop-blur-md shadow-sm border-b border-border py-3'
                         : 'bg-transparent py-4'
                 }`}
             >

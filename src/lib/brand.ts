@@ -163,5 +163,8 @@ export function mergeBrandWithDB(base: BrandConfig, dbBrand: DBBrandConfig | nul
             url: dbBrand.logoUrl || base.logo.url,
             text: dbBrand.name ? dbBrand.name.toUpperCase() : base.logo.text,
         },
-    };
+        announcementEnabled: (dbBrand as any).announcementEnabled ?? false,
+        announcementText: (dbBrand as any).announcementText ?? null,
+        announcementMode: (dbBrand as any).announcementMode ?? 'marquee',
+    } as any;
 }

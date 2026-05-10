@@ -476,6 +476,9 @@ export async function updateBrandConfig(domain: string, data: {
     isSingleVendor?: boolean;
     sellerId?: string;
     showPricesPublicly?: boolean;
+    announcementEnabled?: boolean;
+    announcementText?: string | null;
+    announcementMode?: string;
 }) {
     try {
         await checkAdmin();

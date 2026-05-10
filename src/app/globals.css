@@ -80,3 +80,10 @@ input::placeholder, textarea::placeholder {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
+
+.announcement-marquee {
+  display: inline-flex;
+  animation: marquee 25s linear infinite;
+  will-change: transform;
+}
+.announcement-marquee:hover { animation-play-state: paused; }

@@ -1734,6 +1734,46 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                         </select>
                                     </div>
                                 </div>
+
+                                {/* Listón / banner de anuncio en el top */}
+                                <div className="bg-gray-50 dark:bg-gray-900/40 border border-border rounded-2xl p-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-xs font-black uppercase tracking-widest text-foreground">📢 Listón de Anuncio</p>
+                                            <p className="text-[10px] text-gray-400 font-medium mt-0.5">Aparece en la parte superior del marketplace.</p>
+                                        </div>
+                                        <button type="button"
+                                            onClick={() => setBrands(prev => prev.map((b, i) => i === idx ? { ...b, announcementEnabled: !b.announcementEnabled } : b))}
+                                            role="switch"
+                                            aria-checked={!!brand.announcementEnabled}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${brand.announcementEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-700'}`}>
+                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${brand.announcementEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        rows={2}
+                                        value={brand.announcementText || ''}
+                                        onChange={e => setBrands(prev => prev.map((b, i) => i === idx ? { ...b, announcementText: e.target.value } : b))}
+                                        placeholder="Ej: Felicidades a todas las madres en su día"
+                                        className="w-full px-3 py-2 bg-input border border-border rounded-xl text-sm font-medium resize-none focus:ring-2 focus:ring-blue-500 outline-none" />
+                                    <div className="flex items-center gap-3">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="radio" name={`annMode-${brand.domain}`} value="static"
+                                                checked={(brand.announcementMode || 'marquee') === 'static'}
+                                                onChange={() => setBrands(prev => prev.map((b, i) => i === idx ? { ...b, announcementMode: 'static' } : b))}
+                                                className="accent-blue-600" />
+                                            <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Fijo</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="radio" name={`annMode-${brand.domain}`} value="marquee"
+                                                checked={(brand.announcementMode || 'marquee') === 'marquee'}
+                                                onChange={() => setBrands(prev => prev.map((b, i) => i === idx ? { ...b, announcementMode: 'marquee' } : b))}
+                                                className="accent-blue-600" />
+                                            <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Deslizable (derecha → izquierda)</span>
+                                        </label>
+                                    </div>
+                                </div>
+
                                 <button onClick={async () => {
                                     setSavingBrand(brand.domain);
                                     try {
@@ -1743,7 +1783,10 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                             description: brand.description,
                                             logoUrl: brand.logoUrl,
                                             heroImages: brand.heroImages || [],
-                                            primaryColor: brand.primaryColor
+                                            primaryColor: brand.primaryColor,
+                                            announcementEnabled: !!brand.announcementEnabled,
+                                            announcementText: brand.announcementText || null,
+                                            announcementMode: brand.announcementMode || 'marquee',
                                         });
                                         if (res.success) toast.success(`Configuración guardada para ${brand.name}`);
                                         else toast.error(res.error || 'Error al guardar');
