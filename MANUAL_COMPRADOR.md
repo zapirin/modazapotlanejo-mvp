@@ -37,6 +37,12 @@ Corazón ❤ en cada producto. Lo guarda en **Mi Cuenta → Wishlist** para volv
 ## 6. Compra Protegida (solo marketplace multi-vendor)
 Si pagas con tarjeta en modazapotlanejo.com o zonadelvestir.com, el dinero queda retenido hasta que recibas tu pedido. **No aplica** en kalexafashion.com (acuerdo directo con el vendedor; pagas con tarjeta directo a la tienda).
 
+## 6.1 Modo claro / oscuro
+El sitio arranca siempre en **modo claro**. Si prefieres oscuro, usa el botón ☀️/🌙 en la barra superior y queda guardado para futuras visitas a ese dominio.
+
+## 6.2 Listón de avisos
+Si ves una franja delgada de colores con un texto arriba (a veces deslizándose de derecha a izquierda), es un **anuncio** del operador del marketplace o del vendedor. Solo informativo; pulsar la franja no hace nada — el contenido está en el texto.
+
 ## 7. Mi Cuenta
 - **Datos personales**: nombre, correo, teléfono.
 - **Direcciones**: agrega y edita direcciones de envío. Una marcada como predeterminada se usa al hacer checkout.

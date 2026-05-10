@@ -1,6 +1,6 @@
 # Manual del Vendedor (dueño de tienda)
 
-Para dueños de tienda registrados en modazapotlanejo.com / zonadelvestir.com / kalexafashion.com.
+Para dueños de tienda registrados en modazapotlanejo.com / zonadelvestir.com /
 
 ## 1. Registrarte y empezar
 1. Entra a `/register/seller` y elige un plan (Básico es gratis siempre).
@@ -10,17 +10,17 @@ Para dueños de tienda registrados en modazapotlanejo.com / zonadelvestir.com / 
 > El plan **Básico** es solo marketplace (catálogo + analítica básica) y NO incluye POS. Los planes de paga (Estándar / Pro / Empresarial) sí incluyen POS, sucursales y cajeros. El admin puede activarte el POS manualmente aunque estés en Básico.
 
 ## 2. Configurar tu tienda
-- **Configuración → Tienda y facturación**: nombre comercial, logo, dirección, CP de envío, RFC, política de devoluciones.
-- **Configuración → Sucursales**: agrega cada sucursal/almacén físico. Estas son las "bodegas" donde se descuenta el inventario.
+- **Configuración → Tienda y facturación**: nombre comercial, logo, dirección, Código Postal, RFC, política de devoluciones.
+- **Configuración → Sucursales**: agrega cada sucursal/almacén físico. Estas son las "tiendas" o "bodegas" donde se descuenta el inventario.
 - **Configuración → Métodos de pago**: define cuáles aparecen en el POS (Efectivo, Clip, Zettle, Transferencia, etc.).
 - **Configuración → Niveles de precio**: descuentos automáticos por volumen (ej. de 6+ piezas baja a $X).
-- **Configuración → Denominaciones**: monedas/billetes para el conteo del corte Z.
+- **Configuración → Denominaciones**: monedas/billetes para el conteo de abrir caja y del corte Z.
 
 ## 3. Subir productos
 1. **Productos → + Nuevo Modelo**. Stepper de 3 pasos:
    - **Paso 1**: nombre, marca, proveedor, categoría, descripción, etiquetas, fotos, precio público y mayoreo.
-   - **Paso 2**: composición de mayoreo (Corrida, Paquete, Caja) y atributos (talla, color, etc.).
-   - **Paso 3**: stock inicial por sucursal y combinación.
+   - **Paso 2**: Atributos (talla, color, etc.).
+   - **Paso 3**: stock inicial por sucursal y combinación de composición de mayoreo (Corrida, Paquete, Caja).
 2. En los pasos 2 y 3 se ve el nombre del producto arriba para identificarlo.
 3. Al guardar, el producto entra al catálogo del marketplace y al POS.
 4. Para duplicar un producto similar usa el botón "Duplicar" en la lista.
@@ -58,6 +58,9 @@ Para borrar permanentemente un cajero o vendedor de piso desactivado: el botón 
 
 ## 11. Inventario
 **Inventario**: vista por producto con stock por sucursal. Click en una celda abre el modal de ajuste, donde ingresas la cantidad final exacta para cada sucursal. Búsqueda por nombre o modelo con botón "x" para limpiar.
+
+## 11.1 Listón de anuncio en mi página pública
+**Configuración → Tienda y facturación → 📢 Listón de Anuncio**: barra delgada arriba de tu página de vendedor en el marketplace (la que ven los compradores al entrar a tu tienda). Toggle ON/OFF, texto libre y modo **Fijo** o **Deslizable** (derecha → izquierda). Útil para promociones o avisos puntuales.
 
 ## 12. Calificaciones y mensajes
 - **Calificaciones**: las reseñas que tus compradores te dejaron.

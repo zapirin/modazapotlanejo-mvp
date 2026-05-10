@@ -39,9 +39,18 @@ Al pulsar **💾 Guardar Planes** los cambios se reflejan en `/register/seller`.
   - Ocultan automáticamente avisos del marketplace ("Compra Protegida", "Vendedores Verificados", "Pagos 100% Seguros") porque esos son específicos del marketplace multi-vendor con Stripe.
 
 ## 6. Configuración global del marketplace
-**Admin → Marketplace → Configuración**:
-- Visibilidad de precios sin login (toggle global y por marca/dominio).
-- Feature flags y otros ajustes.
+**Admin → Marketplace → Sitio**:
+- Logo, título, etiqueta de vendedores, URLs legales.
+- Color de marca por dominio (modazapotlanejo y zonadelvestir).
+- Visibilidad de precios sin login (toggle global y por marca/dominio). Aplica al catálogo y a la página pública de cada vendedor.
+- **Listón de Anuncio por Sitio** (ver siguiente sección).
+
+## 6.1 Listón de Anuncio
+Barra delgada arriba del marketplace para avisos puntuales (ej. "Felicidades a todas las madres en su día"). Cada dominio se administra por separado:
+
+- **modazapotlanejo.com y zonadelvestir.com**: Admin → Marketplace → **Sitio** → "Listón de Anuncio por Sitio". Bloque por dominio con toggle, textarea y radio **Fijo / Deslizable** (de derecha a izquierda). Botón "💾 Guardar Listón" independiente.
+- **kalexafashion.com y marcas independientes**: Admin → Marketplace → **Marcas** → tarjeta de la marca → bloque "📢 Listón de Anuncio" con los mismos controles. Se guarda al pulsar "💾 Guardar Configuración de Marca".
+- **Por vendedor en su página pública**: cada vendedor configura su propio listón desde su panel (no admin), aparece solo en `/vendor/<slug>`.
 
 ## 7. Comisiones del marketplace
 **Reportes → Comisiones del Marketplace**: vista admin que muestra cuánto cobraste de comisión a cada vendedor en el periodo.
