@@ -213,6 +213,9 @@ pm2 logs modazapo --lines 50 --nostream | tail -30
 - Centrado de categorías en Landing Page y sección de Categorías
 - **Cupones de descuento** por vendedor en el carrito
 - **Marcas sin productos ocultas**: el menú superior y el sidebar del catálogo solo muestran marcas con ≥1 producto activo/online (en los 3 dominios)
+- **Filtros del catálogo (sidebar) colapsables**: Categorías, Marcas, Tallas, Colores y Etiquetas. Las tres últimas son chips que filtran por `?size=`, `?color=` y `?tag=`. Combinables entre sí.
+- **Descuento por volumen aplicado al precio unitario** en pedidos: el descuento ya no se guarda solo a nivel de orden — se incrusta en el precio de cada `OrderItem` para que correos y dashboard muestren los precios reales cobrados.
+- **Avisos del marketplace ocultos en single-vendor**: el banner del footer (Compra Protegida + Vendedores Verificados + Pagos 100% Seguros) y el cuadro verde de Compra Protegida en detalle de producto no aparecen cuando `brand.isSingleVendor` (kalexafashion.com).
 
 ### Envíos (Skydropx)
 - Cotización de envío en el carrito al seleccionar dirección
@@ -231,6 +234,8 @@ pm2 logs modazapo --lines 50 --nostream | tail -30
 - Branding correcto en correos de bienvenida a vendedores
 - **Mensualidad (fixedFee)** editable por vendedor en panel Admin → Marketplace (junto a la comisión)
 - Panel de vendedores con grid 4 columnas (sm:2, lg:4)
+- **Editor de planes con casilla "Incluye POS"** (Admin → Marketplace → 💼 Planes): cada plan puede marcarse como "solo marketplace" o "incluye POS". El plan Básico por default no incluye POS y el Seller arranca con `posEnabled: false`. Admin puede activarlo manualmente desde la pestaña de vendedores en cualquier momento.
+- **Aprobación de aplicación respeta `includesPos`**: al aprobar una solicitud, el sistema busca el plan en `MarketplaceSettings.plans` y aplica `posEnabled` según el flag (fallback: si planName === 'Básico' o vacío, sin POS).
 
 ### Registro de Vendedor
 - Campo "Calle y Número" ahora es **obligatorio**
@@ -270,6 +275,11 @@ pm2 logs modazapo --lines 50 --nostream | tail -30
 - **Bug fix**: ventas suspendidas reanudadas ahora se eliminan correctamente (el problema era que `deleteSuspendedSale` bloqueaba a cajeros — ahora usa `clearResumedSale`)
 - **Corte Z → auto-logout**: al cerrar sesión de caja se desloguea automáticamente; el monto contado queda en `localStorage` para pre-llenarlo al abrir la siguiente sesión
 - **Bug fix cambio en efectivo**: el toast verde de "Cambio" ahora muestra la resta correcta (pagado − total) y no el monto bruto escrito. El bug era un doble conteo cuando se procesaba un pago parcial automático (`explicitReceivedAmount` + `partialSumAtSale` se sumaban dos veces)
+- **Modo Prueba compartido por seller (DB-backed)**: campo `User.posTestMode` en schema. Cuando el seller lo activa desde Configuración → Mi Perfil, todos sus cajeros (en cualquier navegador/dispositivo) entran en modo simulación. Las acciones del POS usan helpers `fakeSaleResult/fakeOk/fakeSession/fakeTransfer` y NO tocan la DB. Hook `useTestMode` en `pos/TestMode.tsx` hace fetch del flag al montar, al volver a foco y cada 60s. Toggle en `settings/profile/page.tsx` llama a `setPosTestMode` server action.
+- **Toggle de tema oscuro en sidebar de cajero**: botón 🌙/☀️ debajo de "Reportes" en el sidebar minimal del cajero (`SidebarLayout.tsx`).
+- **Devolución vs Venta determinada por neto firmado**: el toggle `isReturnMode` controla solo el signo al escanear (siguiente artículo con cantidad −1). La naturaleza real de la transacción (venta o devolución) la decide `isNetReturn = calculateNetSubtotal() < 0`. Esto permite carritos mixtos: si cliente trae 1 artículo a devolver y se lleva 3 nuevos, el POS muestra "Total a Cobrar" y procesa como Venta porque el neto es positivo.
+- **Lista de abonos en card superior**: la lista de pagos parciales y el "Restante" ahora aparecen dentro del card de "TOTAL A COBRAR" en la parte alta del panel derecho del POS (visible sin scroll). El card inferior solo muestra Subtotal/Descuento/Total a Pagar.
+- **TZ del servidor en `America/Mexico_City`**: variable `TZ` aplicada al proceso PM2 (`pm2 restart modazapo --update-env` con `TZ` env). Cualquier `new Date()` server-side y formatos de fecha trabajan en hora de México por defecto. La DB sigue almacenando timestamps en UTC.
 
 ### Reportes
 - Tab **Ventas**: filtros por periodo, sucursal y producto; accesible a cajeros con `canViewReports`
@@ -295,6 +305,10 @@ pm2 logs modazapo --lines 50 --nostream | tail -30
 - **Búsqueda sin acentos en marcas y proveedores** al crear/editar producto: normalización NFD
 - **Generación de etiquetas / códigos de barras** (Code 128 y QR): botón en lista de productos. Code 128 ahora centrado con márgenes en los 4 lados; barras más altas (`height: 70`) y más angostas (`width: 1.2`) para mejor legibilidad
 - **Orden de tallas en detalle de producto** (marketplace): respeta el orden definido en `variantOptions.values` en lugar del orden aleatorio del Set
+- **Combobox de etiquetas con autocompletado**: al crear/editar producto, el campo Etiquetas autocompleta con tags existentes y permite crear uno nuevo si no hay match. Mismo patrón que Marcas/Proveedores. Aplica en `/products/new` y `/products/[id]/edit`.
+- **Nombre del producto visible en pasos 2 y 3** del stepper de creación/edición: bajo el indicador de paso aparece "Creando: <nombre>" o "Editando: <nombre>" para identificar el producto sin volver al paso 1.
+- **Botón "x" en buscador**: tanto `/products` como `/inventory` tienen un botón limpiar al final del campo de búsqueda (aparece solo cuando hay texto).
+- **Eliminar permanentemente vendedor de piso desactivado** (`Configuración → Equipo`): botón "🗑 Eliminar" aparece solo en vendedores ya desactivados. La acción `permanentlyDeleteFloorSalesperson` limpia `soldBySalespersonId = null` en ventas históricas y borra el registro. Las ventas viejas pierden el nombre del vendedor pero conservan monto, productos, fecha, etc.
 
 ### Navegación
 - **404 → Home**: cualquier URL inexistente redirige automáticamente al home (`/`) en los 3 dominios, en lugar de mostrar la página de error de Next.js (`src/app/not-found.tsx`)
