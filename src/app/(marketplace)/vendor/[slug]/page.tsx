@@ -8,6 +8,7 @@ import { notFound } from 'next/navigation';
 import SellerReviews from '@/components/SellerReviews';
 import { headers } from 'next/headers';
 import { getBrandConfig, getCanonicalBase } from '@/lib/brand';
+import { getMarketplaceSettings } from '@/app/actions/marketplace';
 import type { Metadata } from 'next';
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -62,7 +63,7 @@ export default async function VendorPage({
     const vendor = await getVendorBySlug(resolvedParams.slug);
     if (!vendor) notFound();
 
-    const [products, categories, user, vendorBrands] = await Promise.all([
+    const [products, categories, user, vendorBrands, mktSettings] = await Promise.all([
         getVendorProducts(vendor.id, {
             category: resolvedSearch.category,
             subcategory: resolvedSearch.subcategory,
@@ -71,8 +72,18 @@ export default async function VendorPage({
         getCategories(vendor.id),
         getSessionUser(),
         getVendorBrands(vendor.id),
+        getMarketplaceSettings(),
     ]);
     const isLoggedIn = !!user;
+
+    // Resolver visibilidad pública de precios: si el admin habilitó "mostrar precios sin login"
+    // (global o por marca/dominio), respetar esa configuración aunque el visitante no este logueado.
+    const _hostForPrice = ((await headers()).get('host') || '').split(',')[0].trim().replace(/^https?:\/\//, '').split(':')[0].toLowerCase();
+    const _brandEntry = (mktSettings?.data as any)?.brandsConfig?.find((b: any) => _hostForPrice.includes(b.domain.split('.')[0]));
+    const showPricesPublicly = _brandEntry
+        ? _brandEntry.showPricesPublicly !== false
+        : (mktSettings?.data as any)?.showPricesPublicly !== false;
+    const canShowPrice = isLoggedIn || showPricesPublicly;
 
     const sortOptions = [
         { value: '', label: 'Más Recientes' },
@@ -257,7 +268,7 @@ export default async function VendorPage({
                                     </div>
                                     <div className="space-y-1">
                                         <h4 className="font-bold text-sm tracking-tight group-hover:text-blue-600 transition-colors uppercase">{product.name}</h4>
-                                        {isLoggedIn ? (
+                                        {canShowPrice ? (
                                             <p className="text-blue-600 font-black text-lg">${product.price.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
                                         ) : (
                                             <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Inicia sesión para ver precio</p>
