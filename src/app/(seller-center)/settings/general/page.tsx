@@ -38,6 +38,12 @@ export default function GeneralSettingsPage() {
     const [transferInstructions, setTransferInstructions] = useState('');
     const [savingTransfer, setSavingTransfer] = useState(false);
 
+    // Listón de anuncio en página pública del vendedor
+    const [annEnabled, setAnnEnabled] = useState(false);
+    const [annText, setAnnText] = useState('');
+    const [annMode, setAnnMode] = useState<'static' | 'marquee'>('marquee');
+    const [savingAnn, setSavingAnn] = useState(false);
+
     // Stripe Connect
     const [stripeStatus, setStripeStatus] = useState<string | null>(null);
     const [connectingStripe, setConnectingStripe] = useState(false);
@@ -65,6 +71,9 @@ export default function GeneralSettingsPage() {
             setTransferCLABE(res.data.transferCLABE || '');
             setTransferAccountNumber(res.data.transferAccountNumber || '');
             setTransferInstructions(res.data.transferInstructions || '');
+            setAnnEnabled(!!(res.data as any).announcementEnabled);
+            setAnnText((res.data as any).announcementText || '');
+            setAnnMode(((res.data as any).announcementMode as any) || 'marquee');
         }
         const cashRes = await getRequireCashSession();
         setRequireCashSession(cashRes.requireCashSession);
@@ -461,6 +470,68 @@ export default function GeneralSettingsPage() {
                             className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition disabled:opacity-50"
                         >
                             {savingTransfer ? 'Guardando...' : '🏦 Guardar Datos de Transferencia'}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Listón de Anuncio en mi página pública */}
+                <div className="bg-card rounded-3xl p-8 shadow-sm border border-border space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h2 className="text-xl font-black text-foreground">📢 Listón de Anuncio</h2>
+                            <p className="text-sm text-gray-500 mt-1">Aparece arriba de tu página pública del marketplace (la que ven los compradores al entrar a tu tienda).</p>
+                        </div>
+                        <button type="button"
+                            onClick={() => setAnnEnabled(v => !v)}
+                            role="switch"
+                            aria-checked={annEnabled}
+                            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors shrink-0 ${annEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-700'}`}>
+                            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${annEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                    </div>
+                    <textarea
+                        rows={2}
+                        value={annText}
+                        onChange={e => setAnnText(e.target.value)}
+                        placeholder="Ej: Envío gratis en compras mayores a $1,500"
+                        className="w-full px-4 py-3 bg-input border border-border rounded-xl font-medium resize-none focus:ring-2 focus:ring-blue-500/50 outline-none" />
+                    <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="ownAnnMode" value="static"
+                                checked={annMode === 'static'}
+                                onChange={() => setAnnMode('static')}
+                                className="accent-blue-600" />
+                            <span className="text-sm font-bold text-gray-600 dark:text-gray-300">Fijo</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="ownAnnMode" value="marquee"
+                                checked={annMode === 'marquee'}
+                                onChange={() => setAnnMode('marquee')}
+                                className="accent-blue-600" />
+                            <span className="text-sm font-bold text-gray-600 dark:text-gray-300">Deslizable (derecha → izquierda)</span>
+                        </label>
+                    </div>
+                    <div className="flex justify-end">
+                        <button type="button"
+                            disabled={savingAnn}
+                            onClick={async () => {
+                                setSavingAnn(true);
+                                try {
+                                    const res = await updateStoreSettings({
+                                        announcementEnabled: annEnabled,
+                                        announcementText: annText || null,
+                                        announcementMode: annMode,
+                                    });
+                                    if ((res as any).success) toast.success('Listón guardado');
+                                    else toast.error((res as any).error || 'Error al guardar');
+                                } catch (e: any) {
+                                    toast.error('Error: ' + e.message);
+                                } finally {
+                                    setSavingAnn(false);
+                                }
+                            }}
+                            className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition disabled:opacity-50">
+                            {savingAnn ? 'Guardando...' : '💾 Guardar Listón'}
                         </button>
                     </div>
                 </div>

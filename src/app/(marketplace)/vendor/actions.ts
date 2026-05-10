@@ -40,12 +40,13 @@ export async function getVendorBySlug(slug: string) {
                 logoUrl: true,
                 phone: true,
                 whatsapp: true,
+                storeSettings: { select: { announcementEnabled: true, announcementText: true, announcementMode: true } as any },
                 _count: {
                     select: {
                         ownedProducts: { where: { isOnline: true, isActive: true } }
                     }
                 }
-            }
+            } as any
         });
         return vendor;
     } catch (error) {

@@ -26,6 +26,9 @@ model StoreSettings {
   transferCLABE         String?
   transferAccountNumber String?
   transferInstructions  String?
+  announcementEnabled   Boolean  @default(false)
+  announcementText      String?
+  announcementMode      String   @default("marquee")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
   sellerId              String?  @unique

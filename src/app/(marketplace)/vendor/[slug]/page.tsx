@@ -106,6 +106,24 @@ export default async function VendorPage({
         <>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(vendorJsonLd) }} />
         <div className="pb-20">
+            {/* Listón de Anuncio del Vendedor */}
+            {(() => {
+                const ann = (vendor as any).storeSettings;
+                if (!ann?.announcementEnabled || !ann?.announcementText?.trim()) return null;
+                const isMarquee = (ann.announcementMode || 'marquee') === 'marquee';
+                return (
+                    <div className="bg-gradient-to-r from-[var(--brand-600)] to-[var(--brand-700)] text-white text-xs sm:text-sm font-bold tracking-wide shadow-md overflow-hidden h-9 flex items-center">
+                        {isMarquee ? (
+                            <div className="announcement-marquee whitespace-nowrap">
+                                <span className="px-12">{ann.announcementText}</span>
+                                <span className="px-12" aria-hidden="true">{ann.announcementText}</span>
+                            </div>
+                        ) : (
+                            <p className="w-full text-center px-4 truncate">{ann.announcementText}</p>
+                        )}
+                    </div>
+                );
+            })()}
             {/* Vendor Header / Banner */}
             <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-blue-900 text-white">
                 <div className="max-w-7xl mx-auto px-6 py-12">

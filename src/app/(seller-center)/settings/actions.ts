@@ -92,6 +92,9 @@ export async function updateStoreSettings(data: {
     transferCLABE?: string;
     transferAccountNumber?: string;
     transferInstructions?: string;
+    announcementEnabled?: boolean;
+    announcementText?: string | null;
+    announcementMode?: string;
 }) {
     try {
         const { sellerId } = await getSellerFilter();
