@@ -174,6 +174,21 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
         'zonadelvestir.com': (initialSettings?.brandColors as any)?.['zonadelvestir.com'] || 'violet',
     });
     const [brands, setBrands] = useState<any[]>(initialSettings?.brandsConfig || []);
+    // Listones por sitio principal (modazapotlanejo.com y zonadelvestir.com).
+    // Se almacenan en BrandConfig vía updateBrandConfig (upsert crea el registro).
+    const [siteAnnouncements, setSiteAnnouncements] = useState<Record<string, { enabled: boolean; text: string; mode: 'static' | 'marquee' }>>(() => {
+        const init: Record<string, any> = {};
+        for (const d of ['modazapotlanejo.com', 'zonadelvestir.com']) {
+            const found = (initialSettings?.brandsConfig || []).find((b: any) => b.domain === d);
+            init[d] = {
+                enabled: !!(found?.announcementEnabled),
+                text: found?.announcementText || '',
+                mode: (found?.announcementMode as any) || 'marquee',
+            };
+        }
+        return init;
+    });
+    const [savingSiteAnn, setSavingSiteAnn] = useState<string | null>(null);
     const [brandMetrics, setBrandMetrics] = useState<Record<string, { sellers: number; products: number }>>({});
     const [editingBrand, setEditingBrand] = useState<any>(null);
     const [showPricesPublicly, setShowPricesPublicly] = useState<boolean>(initialSettings?.showPricesPublicly !== false);
@@ -594,6 +609,81 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                     </div>
                                 </div>
                             ))}
+                        </div>
+
+                        {/* Listón de anuncio por sitio principal */}
+                        <div className="space-y-4 p-5 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-border">
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">📢 Listón de Anuncio por Sitio</label>
+                                <p className="text-xs text-gray-400 mt-1">Aparece en la parte superior del marketplace. Cada sitio tiene su propio mensaje y modo (Fijo o Deslizable).</p>
+                            </div>
+                            {([
+                                { domain: 'modazapotlanejo.com', label: 'Moda Zapotlanejo' },
+                                { domain: 'zonadelvestir.com',   label: 'Zona del Vestir' },
+                            ]).map(site => {
+                                const ann = siteAnnouncements[site.domain] || { enabled: false, text: '', mode: 'marquee' };
+                                return (
+                                    <div key={site.domain} className="space-y-3 p-4 bg-card border border-border rounded-xl">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-xs font-black text-foreground">{site.label}</p>
+                                                <p className="text-[10px] text-gray-400 font-medium">{site.domain}</p>
+                                            </div>
+                                            <button type="button"
+                                                onClick={() => setSiteAnnouncements(prev => ({ ...prev, [site.domain]: { ...ann, enabled: !ann.enabled } }))}
+                                                role="switch"
+                                                aria-checked={ann.enabled}
+                                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${ann.enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-700'}`}>
+                                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${ann.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                                            </button>
+                                        </div>
+                                        <textarea
+                                            rows={2}
+                                            value={ann.text}
+                                            onChange={e => setSiteAnnouncements(prev => ({ ...prev, [site.domain]: { ...ann, text: e.target.value } }))}
+                                            placeholder='Ej: Felicidades a todas las madres en su día'
+                                            className="w-full px-3 py-2 bg-input border border-border rounded-xl text-sm font-medium resize-none focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        <div className="flex items-center gap-3">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input type="radio" name={`siteAnnMode-${site.domain}`} value="static"
+                                                    checked={ann.mode === 'static'}
+                                                    onChange={() => setSiteAnnouncements(prev => ({ ...prev, [site.domain]: { ...ann, mode: 'static' } }))}
+                                                    className="accent-blue-600" />
+                                                <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Fijo</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input type="radio" name={`siteAnnMode-${site.domain}`} value="marquee"
+                                                    checked={ann.mode === 'marquee'}
+                                                    onChange={() => setSiteAnnouncements(prev => ({ ...prev, [site.domain]: { ...ann, mode: 'marquee' } }))}
+                                                    className="accent-blue-600" />
+                                                <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Deslizable (derecha → izquierda)</span>
+                                            </label>
+                                        </div>
+                                        <button type="button"
+                                            disabled={savingSiteAnn === site.domain}
+                                            onClick={async () => {
+                                                setSavingSiteAnn(site.domain);
+                                                try {
+                                                    const res = await updateBrandConfig(site.domain, {
+                                                        name: site.label,
+                                                        announcementEnabled: ann.enabled,
+                                                        announcementText: ann.text || null,
+                                                        announcementMode: ann.mode,
+                                                    });
+                                                    if (res.success) toast.success(`Listón guardado para ${site.label}`);
+                                                    else toast.error(res.error || 'Error al guardar');
+                                                } catch (e: any) {
+                                                    toast.error('Error: ' + e.message);
+                                                } finally {
+                                                    setSavingSiteAnn(null);
+                                                }
+                                            }}
+                                            className="w-full py-2 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition disabled:opacity-50">
+                                            {savingSiteAnn === site.domain ? 'Guardando...' : '💾 Guardar Listón'}
+                                        </button>
+                                    </div>
+                                );
+                            })}
                         </div>
 
                         {/* URLs legales */}
@@ -1587,7 +1677,9 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                         </button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {brands.map((brand: any, idx: number) => (
+                        {brands
+                            .filter((brand: any) => brand.domain !== 'modazapotlanejo.com' && brand.domain !== 'zonadelvestir.com')
+                            .map((brand: any, idx: number) => (
                             <div key={brand.domain} className="bg-card border border-border rounded-2xl p-6 space-y-4">
                                 {/* Preview header */}
                                 <div className={`p-4 rounded-2xl ${brand.primaryColor === 'violet' ? 'bg-violet-600' : brand.primaryColor === 'emerald' ? 'bg-emerald-600' : brand.primaryColor === 'amber' ? 'bg-amber-600' : brand.primaryColor === 'rose' ? 'bg-rose-600' : 'bg-blue-600'} text-white`}>
