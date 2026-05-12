@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { getSessionUser } from '@/app/actions/auth';
 import { getDenominations, seedDefaultDenominations } from '../settings/denominations/actions';
-import { savePendingSale, getPendingSales, markSaleSynced, markSaleSyncError, countPendingSales } from '@/lib/posOfflineStore';
+import { savePendingSale, getPendingSales, markSaleSynced, markSaleSyncError, countPendingSales, saveProductsCache, getProductsCache, searchProductsOffline, filterProductsByCategoryOffline } from '@/lib/posOfflineStore';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { searchProducts, getPriceTiers, getPaymentMethods, getPOSCategories, getProductsByCategory, processSale, getSuspendedSales, suspendSale, deleteSuspendedSale, createLayaway, getSaleById, updateSale } from '../products/new/actions';
+import { searchProducts, getPriceTiers, getPaymentMethods, getPOSCategories, getProductsByCategory, getAllPOSProducts, processSale, getSuspendedSales, suspendSale, deleteSuspendedSale, createLayaway, getSaleById, updateSale } from '../products/new/actions';
 import { getCurrentCashSession, openCashSession, addCashMovement, closeCashSession, createTransfer, getAllowedLocations, checkSellerPOSAccess, getSalesBySession, getSalespersons, getTransferById } from './actions';
 import TransferTicket from './TransferTicket';
 import { getStoreSettings, getLocationsSettings, getRequireSalesperson } from '../settings/actions';
@@ -338,6 +338,25 @@ function POSContent() {
         if (isOnline && pendingCount > 0) {
             syncPendingSales();
         }
+    }, [isOnline]);
+
+    // Hidratar cache local de productos POS para uso offline.
+    // Se ejecuta al cargar el POS (si hay conexion) y cada vez que volvemos a estar online.
+    useEffect(() => {
+        if (!isOnline) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const products = await getAllPOSProducts();
+                if (cancelled) return;
+                if (Array.isArray(products) && products.length > 0) {
+                    await saveProductsCache(products as any[]);
+                }
+            } catch (e) {
+                console.error('Error hidratando cache de productos POS:', e);
+            }
+        })();
+        return () => { cancelled = true; };
     }, [isOnline]);
 
     const syncPendingSales = async () => {
@@ -703,12 +722,19 @@ function POSContent() {
     }, [clientSearchQuery]);
 
     const handleSearch = async () => {
-        // Implementamos la búsqueda de forma segura
+        // Online: pegar al servidor. Offline o si el servidor falla: buscar en cache local.
+        if (!isOnline) {
+            const cache = await getProductsCache();
+            setSearchResults(searchProductsOffline(searchQuery, cache?.products || []));
+            return;
+        }
         try {
             const results = await searchProducts(searchQuery);
             setSearchResults(results);
         } catch (error) {
-            console.error("Error searching in POS", error);
+            console.error("Error searching in POS, fallback a cache offline:", error);
+            const cache = await getProductsCache();
+            setSearchResults(searchProductsOffline(searchQuery, cache?.products || []));
         }
     };
 
@@ -1503,11 +1529,17 @@ function POSContent() {
                                             key={cat.id}
                                             onClick={async () => {
                                                 setSelectedCategory(cat);
+                                                if (!isOnline) {
+                                                    const cache = await getProductsCache();
+                                                    setCategoryProducts(filterProductsByCategoryOffline(cat.id, cache?.products || []));
+                                                    return;
+                                                }
                                                 try {
-                                                    const res = await getProductsByCategory(cat.id); 
+                                                    const res = await getProductsByCategory(cat.id);
                                                     setCategoryProducts(res);
                                                 } catch (e) {
-                                                    setCategoryProducts([]);
+                                                    const cache = await getProductsCache();
+                                                    setCategoryProducts(filterProductsByCategoryOffline(cat.id, cache?.products || []));
                                                 }
                                             }}
                                             className="bg-white dark:bg-gray-800/50 p-4 rounded-xl border border-border hover:border-blue-500 hover:shadow-lg transition-all h-28 flex flex-col items-center justify-center gap-2 group"

@@ -155,7 +155,11 @@ async function openProductsDB(): Promise<IDBDatabase> {
     });
 }
 
-export async function saveProductsCache(products: CachedProduct[]): Promise<void> {
+// Cache acepta cualquier shape para conservar la forma exacta que devuelve
+// el server action (variants con color/size/attributes/inventoryLevels, etc.)
+// y que los consumidores online/offline reciban el mismo objeto.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function saveProductsCache(products: any[]): Promise<void> {
     try {
         const db = await openProductsDB();
         return new Promise((resolve, reject) => {
@@ -170,7 +174,8 @@ export async function saveProductsCache(products: CachedProduct[]): Promise<void
     }
 }
 
-export async function getProductsCache(): Promise<{ products: CachedProduct[]; updatedAt: number } | null> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getProductsCache(): Promise<{ products: any[]; updatedAt: number } | null> {
     try {
         const db = await openProductsDB();
         return new Promise((resolve, reject) => {
@@ -185,17 +190,23 @@ export async function getProductsCache(): Promise<{ products: CachedProduct[]; u
     }
 }
 
-export function searchProductsOffline(query: string, cache: CachedProduct[]): CachedProduct[] {
+// Búsqueda sin acentos en local (igual que el servidor con translate())
+const normalize = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function searchProductsOffline(query: string, cache: any[]): any[] {
     if (!query) return cache.slice(0, 30);
-    const q = query.toLowerCase();
-    return cache.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        (p.sku && p.sku.toLowerCase().includes(q)) ||
-        p.variants.some(v => v.sku && v.sku.toLowerCase().includes(q))
-    ).slice(0, 20);
+    const q = normalize(query);
+    return cache.filter((p: any) => {
+        if (normalize(p.name).includes(q)) return true;
+        if (p.sku && normalize(p.sku).includes(q)) return true;
+        if (Array.isArray(p.variants) && p.variants.some((v: any) => v.sku && normalize(v.sku).includes(q))) return true;
+        return false;
+    }).slice(0, 20);
 }
 
-export function filterProductsByCategory(categoryName: string, cache: CachedProduct[]): CachedProduct[] {
-    if (!categoryName) return cache.slice(0, 50);
-    return cache.filter(p => p.category?.name === categoryName).slice(0, 50);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function filterProductsByCategoryOffline(categoryId: string, cache: any[]): any[] {
+    if (!categoryId) return cache.slice(0, 50);
+    return cache.filter((p: any) => p.categoryId === categoryId || p.category?.id === categoryId).slice(0, 50);
 }
