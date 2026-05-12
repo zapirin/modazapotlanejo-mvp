@@ -1191,12 +1191,27 @@ function POSContent() {
     };
 
     const resumeSuspendedSale = async (sale: any) => {
+        // El precio guardado (i.price) ya tiene aplicado el nivel de precio del momento.
+        // Al restaurar el tier, el useEffect recalcula price = tierAdjustPrice(originalPrice, tier),
+        // asi que originalPrice debe ser el precio ANTES del descuento del tier para no
+        // descontar dos veces. Reconstruimos el original "des-aplicando" el tier guardado.
+        const savedTier = sale.priceTierId ? priceTiers.find((t: any) => t.id === sale.priceTierId) : null;
+        const unapplyTier = (priceWithTier: number, tier: any): number => {
+            if (!tier) return priceWithTier;
+            if (tier.discountPercentage && tier.discountPercentage < 100) {
+                return Math.round((priceWithTier / (1 - tier.discountPercentage / 100)) * 100) / 100;
+            }
+            if (tier.defaultPriceMinusFixed) {
+                return priceWithTier + tier.defaultPriceMinusFixed;
+            }
+            return priceWithTier;
+        };
         // Load the suspended items back into the cart
         const restoredCart = sale.items.map((i: any) => ({
             id: i.variant.product.id,
             name: `${i.variant.product.name} - ${formatVariantName(i.variant)}`,
             price: i.price,
-            originalPrice: i.price,
+            originalPrice: unapplyTier(i.price, savedTier),
             stock: i.variant.stock, // Warning: Should fetch current stock, but MVP
             sku: i.variant.sku,
             variantId: i.variant.id,
