@@ -23,6 +23,7 @@ export async function getProducts(filters: {
     color?: string;
     size?: string;
     tag?: string;
+    hideOutOfStock?: boolean;
 }) {
     try {
         const where: AnyMap = { isOnline: true, isActive: true };
@@ -84,7 +85,7 @@ export async function getProducts(filters: {
 
         // Filtro por variante: stock, color, talla (unificados para no conflicto)
         const variantFilter: AnyMap = {};
-        if (filters.onlyWithStock) variantFilter.stock = { gt: 0 };
+        if (filters.onlyWithStock || filters.hideOutOfStock) variantFilter.stock = { gt: 0 };
         if (filters.color) variantFilter.color = { contains: filters.color, mode: 'insensitive' };
         if (filters.size)  variantFilter.size  = { contains: filters.size,  mode: 'insensitive' };
         if (Object.keys(variantFilter).length > 0) {

@@ -321,6 +321,7 @@ export async function updateMarketplaceSettingsFull(data: {
     photographyEnabled?: boolean;
     brandColors?: Record<string, string>;
     showPricesPublicly?: boolean;
+    hideOutOfStock?: boolean;
 }) {
     try {
         await checkAdmin();
@@ -479,6 +480,7 @@ export async function updateBrandConfig(domain: string, data: {
     announcementEnabled?: boolean;
     announcementText?: string | null;
     announcementMode?: string;
+    hideOutOfStock?: boolean | null;
 }) {
     try {
         await checkAdmin();

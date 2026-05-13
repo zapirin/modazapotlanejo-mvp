@@ -166,5 +166,6 @@ export function mergeBrandWithDB(base: BrandConfig, dbBrand: DBBrandConfig | nul
         announcementEnabled: (dbBrand as any).announcementEnabled ?? false,
         announcementText: (dbBrand as any).announcementText ?? null,
         announcementMode: (dbBrand as any).announcementMode ?? 'marquee',
+        hideOutOfStock: (dbBrand as any).hideOutOfStock ?? null,
     } as any;
 }

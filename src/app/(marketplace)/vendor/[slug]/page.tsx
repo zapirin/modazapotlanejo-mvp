@@ -63,23 +63,28 @@ export default async function VendorPage({
     const vendor = await getVendorBySlug(resolvedParams.slug);
     if (!vendor) notFound();
 
-    const [products, categories, user, vendorBrands, mktSettings] = await Promise.all([
+    const mktSettings = await getMarketplaceSettings();
+    const _hostForFlags = ((await headers()).get('host') || '').split(',')[0].trim().replace(/^https?:\/\//, '').split(':')[0].toLowerCase();
+    const _brandEntry = (mktSettings?.data as any)?.brandsConfig?.find((b: any) => _hostForFlags.includes(b.domain.split('.')[0]));
+    const _hideOutOfStock = _brandEntry?.hideOutOfStock != null
+        ? !!_brandEntry.hideOutOfStock
+        : !!(mktSettings?.data as any)?.hideOutOfStock;
+
+    const [products, categories, user, vendorBrands] = await Promise.all([
         getVendorProducts(vendor.id, {
             category: resolvedSearch.category,
             subcategory: resolvedSearch.subcategory,
             sort: resolvedSearch.sort,
+            hideOutOfStock: _hideOutOfStock,
         }),
         getCategories(vendor.id),
         getSessionUser(),
         getVendorBrands(vendor.id),
-        getMarketplaceSettings(),
     ]);
     const isLoggedIn = !!user;
 
     // Resolver visibilidad pública de precios: si el admin habilitó "mostrar precios sin login"
     // (global o por marca/dominio), respetar esa configuración aunque el visitante no este logueado.
-    const _hostForPrice = ((await headers()).get('host') || '').split(',')[0].trim().replace(/^https?:\/\//, '').split(':')[0].toLowerCase();
-    const _brandEntry = (mktSettings?.data as any)?.brandsConfig?.find((b: any) => _hostForPrice.includes(b.domain.split('.')[0]));
     const showPricesPublicly = _brandEntry
         ? _brandEntry.showPricesPublicly !== false
         : (mktSettings?.data as any)?.showPricesPublicly !== false;

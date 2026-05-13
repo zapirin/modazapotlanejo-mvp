@@ -192,6 +192,16 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     const [brandMetrics, setBrandMetrics] = useState<Record<string, { sellers: number; products: number }>>({});
     const [editingBrand, setEditingBrand] = useState<any>(null);
     const [showPricesPublicly, setShowPricesPublicly] = useState<boolean>(initialSettings?.showPricesPublicly !== false);
+    // Ocultar productos sin stock: global + override por dominio (null = seguir global)
+    const [hideOutOfStockGlobal, setHideOutOfStockGlobal] = useState<boolean>(!!(initialSettings as any)?.hideOutOfStock);
+    const [hideOutOfStockByDomain, setHideOutOfStockByDomain] = useState<Record<string, boolean | null>>(() => {
+        const init: Record<string, boolean | null> = {};
+        for (const d of ['modazapotlanejo.com', 'zonadelvestir.com', 'kalexafashion.com']) {
+            const found = (initialSettings?.brandsConfig || []).find((b: any) => b.domain === d);
+            init[d] = found && (found as any).hideOutOfStock != null ? !!(found as any).hideOutOfStock : null;
+        }
+        return init;
+    });
     const _kalexaCfg = initialSettings?.brandsConfig?.find((b: any) => b.domain.includes('kalexa'));
     const [showPricesPubliclyKalexa, setShowPricesPubliclyKalexa] = useState<boolean>(_kalexaCfg?.showPricesPublicly !== false);
     const [photographyEnabled, setPhotographyEnabled] = useState(initialSettings?.photographyEnabled !== false);
@@ -785,6 +795,62 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                                     <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${showPricesPubliclyKalexa ? 'left-7' : 'left-1'}`} />
                                 </button>
                             </div>
+                        </div>
+
+                        {/* ── Disponibilidad: ocultar productos sin stock ── */}
+                        <div className="space-y-3 pt-2 border-t border-border">
+                            <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Disponibilidad en el Catálogo</h3>
+                            <p className="text-xs text-gray-500">Decide si los productos sin stock aparecen en el catálogo del marketplace y en la página pública de cada vendedor.</p>
+
+                            {/* Global */}
+                            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-border">
+                                <div>
+                                    <p className="text-sm font-black">🌍 Global (todos los dominios)</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">{hideOutOfStockGlobal ? 'Productos sin stock ocultos' : 'Se muestran todos, incluyendo sin stock'}</p>
+                                </div>
+                                <button onClick={async () => {
+                                    const next = !hideOutOfStockGlobal;
+                                    setHideOutOfStockGlobal(next);
+                                    const res = await updateMarketplaceSettingsFull({ hideOutOfStock: next });
+                                    if (res.success) toast.success(next ? 'Productos sin stock ocultos (global)' : 'Mostrando todos los productos (global)');
+                                    else { setHideOutOfStockGlobal(!next); toast.error(res.error || 'Error'); }
+                                }} className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ${hideOutOfStockGlobal ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-700'}`}>
+                                    <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${hideOutOfStockGlobal ? 'left-7' : 'left-1'}`} />
+                                </button>
+                            </div>
+
+                            {/* Por dominio (tri-state: null = seguir global) */}
+                            {([
+                                { domain: 'modazapotlanejo.com', label: 'Moda Zapotlanejo' },
+                                { domain: 'zonadelvestir.com',   label: 'Zona del Vestir' },
+                                { domain: 'kalexafashion.com',   label: 'Kalexa Fashion' },
+                            ]).map(site => {
+                                const val = hideOutOfStockByDomain[site.domain];
+                                const sel = val === null ? 'inherit' : val ? 'hide' : 'show';
+                                return (
+                                    <div key={site.domain} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-border">
+                                        <div>
+                                            <p className="text-sm font-black">{site.label}</p>
+                                            <p className="text-xs text-gray-400 mt-0.5">{site.domain}</p>
+                                        </div>
+                                        <select value={sel}
+                                            onChange={async (e) => {
+                                                const choice = e.target.value;
+                                                const newVal: boolean | null = choice === 'inherit' ? null : choice === 'hide';
+                                                const prev = hideOutOfStockByDomain[site.domain];
+                                                setHideOutOfStockByDomain(p => ({ ...p, [site.domain]: newVal }));
+                                                const res = await updateBrandConfig(site.domain, { name: site.label, hideOutOfStock: newVal });
+                                                if (res.success) toast.success(`Disponibilidad actualizada para ${site.label}`);
+                                                else { setHideOutOfStockByDomain(p => ({ ...p, [site.domain]: prev })); toast.error(res.error || 'Error'); }
+                                            }}
+                                            className="px-3 py-2 bg-input border border-border rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none">
+                                            <option value="inherit">Seguir global</option>
+                                            <option value="hide">Ocultar sin stock</option>
+                                            <option value="show">Mostrar todos</option>
+                                        </select>
+                                    </div>
+                                );
+                            })}
                         </div>
 
                         <button onClick={handleSaveSite} disabled={loading}

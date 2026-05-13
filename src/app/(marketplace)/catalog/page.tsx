@@ -94,13 +94,20 @@ export default async function CatalogPage({
 
     const sellerId = brandConfig.sellerId || undefined;
 
-    const [result, categories, brands, user, variantOptions, mktSettings] = await Promise.all([
-        getProducts({ category, subcategory, brand, search, sort, minPrice, maxPrice, onlyWithStock, priceType, color, size, tag, offset, limit: pageSize, sellerId }),
+    // Resolver flag de "ocultar productos sin stock" antes de getProducts:
+    // primero el override por dominio (BrandConfig.hideOutOfStock), luego el global.
+    const mktSettings = await getMarketplaceSettings();
+    const _brandEntryStock = (mktSettings?.data as any)?.brandsConfig?.find((b: any) => host.includes(b.domain.split('.')[0]));
+    const _hideOutOfStock = _brandEntryStock?.hideOutOfStock != null
+        ? !!_brandEntryStock.hideOutOfStock
+        : !!(mktSettings?.data as any)?.hideOutOfStock;
+
+    const [result, categories, brands, user, variantOptions] = await Promise.all([
+        getProducts({ category, subcategory, brand, search, sort, minPrice, maxPrice, onlyWithStock, priceType, color, size, tag, hideOutOfStock: _hideOutOfStock, offset, limit: pageSize, sellerId }),
         getCategories(sellerId),
         getBrands(sellerId),
         getSessionUser(),
         getAvailableVariantOptions(sellerId),
-        getMarketplaceSettings(),
     ]);
 
     return (

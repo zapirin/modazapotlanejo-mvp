@@ -55,10 +55,11 @@ export async function getVendorBySlug(slug: string) {
     }
 }
 
-export async function getVendorProducts(vendorId: string, filters?: { 
+export async function getVendorProducts(vendorId: string, filters?: {
     category?: string;
     subcategory?: string;
     sort?: string;
+    hideOutOfStock?: boolean;
 }) {
     try {
         const where: any = { sellerId: vendorId, isOnline: true, isActive: true };
@@ -68,6 +69,9 @@ export async function getVendorProducts(vendorId: string, filters?: {
         }
         if (filters?.subcategory) {
             where.subcategory = { slug: filters.subcategory };
+        }
+        if (filters?.hideOutOfStock) {
+            where.variants = { some: { stock: { gt: 0 } } };
         }
 
         let orderBy: any = { createdAt: 'desc' };

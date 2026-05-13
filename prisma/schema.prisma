@@ -52,6 +52,7 @@ model MarketplaceSettings {
   photographyEnabled Boolean  @default(true)
   brandColors        Json?
   showPricesPublicly Boolean  @default(true)
+  hideOutOfStock     Boolean  @default(false)
   updatedAt          DateTime @updatedAt
 }
 
@@ -72,6 +73,7 @@ model BrandConfig {
   featuredCategories String[]
   isActive           Boolean  @default(true)
   showPricesPublicly Boolean  @default(true)
+  hideOutOfStock      Boolean?
   announcementEnabled Boolean @default(false)
   announcementText    String?
   announcementMode    String  @default("marquee")
