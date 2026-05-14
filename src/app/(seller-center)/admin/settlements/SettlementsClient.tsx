@@ -168,13 +168,33 @@ export default function SettlementsClient({ initialData }: { initialData: Seller
 
                             <div className="space-y-3">
                                 <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-2">Detalle de Órdenes ({selectedSeller.orders.length})</h4>
-                                <div className="max-h-40 overflow-y-auto space-y-2 pr-2 custom-scrollbar text-xs">
-                                    {selectedSeller.orders.map((order: any) => (
-                                        <div key={order.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-900/30 rounded-xl border border-border/50">
-                                            <span>#{order.orderNumber}</span>
-                                            <span className="font-bold text-foreground">${order.sellerEarnings.toLocaleString('es-MX')}</span>
-                                        </div>
-                                    ))}
+                                <p className="text-[10px] text-gray-500 ml-2 leading-relaxed">
+                                    Stripe: marketplace paga al vendedor. Transferencia/Efectivo: vendedor ya cobró y debe al marketplace solo la comisión.
+                                </p>
+                                <div className="max-h-48 overflow-y-auto space-y-2 pr-2 custom-scrollbar text-xs">
+                                    {selectedSeller.orders.map((order: any) => {
+                                        const pm = (order.paymentMethod || '').toLowerCase();
+                                        const isDirect = ['transferencia', 'efectivo', 'depósito', 'deposito', 'transfer', 'cash'].some(m => pm.includes(m));
+                                        const contribution = isDirect ? -order.commissionAmount : order.sellerEarnings;
+                                        const label = isDirect ? 'Comisión a cobrar' : 'A pagar al vendedor';
+                                        return (
+                                            <div key={order.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-900/30 rounded-xl border border-border/50">
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold">#{order.orderNumber}</span>
+                                                    <span className="text-[10px] text-gray-400 font-medium">{order.paymentMethod || 'Sin método'} · {label}</span>
+                                                </div>
+                                                <span className={`font-bold ${contribution < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                                    {contribution < 0 ? '−' : '+'}${Math.abs(contribution).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className="flex justify-between items-center p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl text-xs">
+                                    <span className="font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Neto</span>
+                                    <span className="font-black text-blue-700 dark:text-blue-300">
+                                        {selectedSeller.totalPending < 0 ? '−' : '+'}${Math.abs(selectedSeller.totalPending).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                    </span>
                                 </div>
                             </div>
                         </div>
