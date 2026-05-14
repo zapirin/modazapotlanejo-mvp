@@ -167,7 +167,7 @@ export default async function LandingPage() {
         <div className="flex flex-col">
 
             {/* ── HERO ── */}
-            <section className="relative min-h-[95vh] flex items-center overflow-hidden" suppressHydrationWarning>
+            <section className="relative aspect-[16/9] min-h-[70vh] max-h-[95vh] flex items-center overflow-hidden" suppressHydrationWarning>
                 <HeroSlider
                     images={heroImages}
                     gradient="linear-gradient(to bottom right, #0f172a, #1e3a8a, #312e81)"
