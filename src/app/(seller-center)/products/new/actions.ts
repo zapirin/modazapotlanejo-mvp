@@ -668,7 +668,18 @@ export async function processSale(data: {
 }) {
     try {
         const user = await getSessionUser();
-        const locationId = user?.locationId || null;
+        let locationId = user?.locationId || null;
+
+        // Para SELLER con multiples sucursales, user.locationId suele ser null o
+        // estar desactualizado. Tomar la ubicacion real de la sesion de caja activa
+        // para que la venta se atribuya a la sucursal correcta.
+        if (!locationId && data.cashSessionId) {
+            const sess = await prisma.cashRegisterSession.findUnique({
+                where: { id: data.cashSessionId },
+                select: { locationId: true }
+            });
+            if (sess?.locationId) locationId = sess.locationId;
+        }
 
         // Owner logic — resolver el vendedor correcto para todos los roles:
         // SELLER → su propio id

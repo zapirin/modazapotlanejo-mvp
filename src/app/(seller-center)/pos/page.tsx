@@ -526,6 +526,10 @@ function POSContent() {
                 if (activeSession.openedById === sessionUser?.id) {
                     // Misma sesión del mismo cajero — continuar
                     setCurrentSession(activeSession);
+                    // Sincronizar selectedLocationId con la sesión activa para evitar
+                    // mis-atribuir ventas cuando el seller tiene varias sucursales y
+                    // sesiones abiertas en varias.
+                    if (activeSession.locationId) setSelectedLocationId(activeSession.locationId);
                 } else {
                     // Sesión abierta por otro cajero
                     setOtherCashierSession(activeSession);
@@ -1323,7 +1327,7 @@ function POSContent() {
             setCashReason('');
             // Reload session (skip in test mode — no real session in DB)
             if (!isTestModeActive()) {
-                const updated = await getCurrentCashSession();
+                const updated = await getCurrentCashSession(currentSession.locationId || undefined);
                 setCurrentSession(updated);
             }
             toast.success("Movimiento registrado");
