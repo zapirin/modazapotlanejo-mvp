@@ -217,26 +217,38 @@ export async function getZCutsReport({ startDate, endDate, locationId }: ReportD
 
             const byPayment: Record<string, { name: string; amount: number; count: number; tickets: any[] }> = {};
             session.sales.forEach((sale: any) => {
-                const pmName = sale.paymentMethod?.name || 'Sin método';
-                if (!byPayment[pmName]) byPayment[pmName] = { name: pmName, amount: 0, count: 0, tickets: [] };
-                byPayment[pmName].amount += sale.total;
-                byPayment[pmName].count++;
-                byPayment[pmName].tickets.push({
+                const ticketInfo = {
                     id: sale.id,
                     receiptNumber: sale.receiptNumber,
                     total: sale.total,
                     createdAt: sale.createdAt,
                     clientName: sale.client?.name || null,
                     soldByName: sale.soldBy?.name || null,
-                });
+                };
+                const split = sale.paymentSplit ? (() => { try { return JSON.parse(sale.paymentSplit); } catch { return null; } })() : null;
+                if (split?.length > 0) {
+                    split.forEach((p: any) => {
+                        const name = p.method || 'Sin método';
+                        if (!byPayment[name]) byPayment[name] = { name, amount: 0, count: 0, tickets: [] };
+                        byPayment[name].amount += p.amount;
+                        byPayment[name].count++;
+                        byPayment[name].tickets.push(ticketInfo);
+                    });
+                } else {
+                    const pmName = sale.paymentMethod?.name || 'Sin método';
+                    if (!byPayment[pmName]) byPayment[pmName] = { name: pmName, amount: 0, count: 0, tickets: [] };
+                    byPayment[pmName].amount += sale.total;
+                    byPayment[pmName].count++;
+                    byPayment[pmName].tickets.push(ticketInfo);
+                }
             });
 
             const totalIn  = session.movements.filter(m => m.type === 'IN').reduce((sum, m) => sum + m.amount, 0);
             const totalOut = session.movements.filter(m => m.type === 'OUT').reduce((sum, m) => sum + m.amount, 0);
 
-            const cashSales = session.sales
-                .filter(s => (s.paymentMethod?.name || '').toLowerCase().includes('efectivo'))
-                .reduce((sum, s) => sum + s.total, 0);
+            const cashSales = Object.entries(byPayment)
+                .filter(([name]) => name.toLowerCase().includes('efectivo'))
+                .reduce((sum, [, v]) => sum + v.amount, 0);
 
             const expectedBalance = session.openingBalance + cashSales + totalIn - totalOut;
             const difference = (session.closingBalance ?? 0) - expectedBalance;
