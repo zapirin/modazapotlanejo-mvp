@@ -294,6 +294,7 @@ model Variant {
   size               String?
   attributes         Json?
   stock              Int                 @default(0)
+  targetStockPerLocation Int             @default(1)
   sku                String?             @unique
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt

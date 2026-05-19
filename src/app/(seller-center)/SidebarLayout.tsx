@@ -407,6 +407,7 @@ export default function SidebarLayout({
                               { href: '/inventory', label: 'Todos los Productos' },
                               { href: '/products', label: '✏️ Gestión de Productos' },
                               { href: '/products/new', label: 'Nuevo Producto' },
+                              { href: '/inventory/restock', label: '🔄 Resurtido desde Bodega' },
                               { href: '/inventory/brands', label: 'Marcas' },
                               { href: '/inventory/categories', label: 'Categorías' },
                               { href: '/inventory/tags', label: 'Etiquetas' },
