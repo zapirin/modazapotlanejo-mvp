@@ -1912,7 +1912,20 @@ function POSContent() {
                                             }} className="w-full text-left px-4 py-4 text-xs font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 flex items-center gap-3 transition-colors">
                                                 🖨️ Tickets del Día
                                             </button>
-                                            <button onClick={() => { setShowTicketOptions(false); if (currentSession) { setDenCounts({}); setCashAmount(''); setShowZReportModal(true); } else toast.warning("Abre la caja primero"); }} className="w-full text-left px-4 py-4 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-3 transition-colors">
+                                            <button onClick={async () => {
+                                                setShowTicketOptions(false);
+                                                if (!currentSession) { toast.warning("Abre la caja primero"); return; }
+                                                // Refrescar la sesion con las ventas mas recientes antes de mostrar el corte:
+                                                // el estado local no se actualiza tras cada venta, asi que sin esto el modal
+                                                // podria mostrar tickets/montos desactualizados y generar un sobrante falso.
+                                                if (!isTestModeActive()) {
+                                                    const fresh = await getCurrentCashSession(currentSession.locationId || undefined);
+                                                    if (fresh) setCurrentSession(fresh);
+                                                }
+                                                setDenCounts({});
+                                                setCashAmount('');
+                                                setShowZReportModal(true);
+                                            }} className="w-full text-left px-4 py-4 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-3 transition-colors">
                                                 🧾 Corte Z
                                             </button>
                                         </div>
