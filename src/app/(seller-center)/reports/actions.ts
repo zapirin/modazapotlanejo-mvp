@@ -343,7 +343,13 @@ export async function getCommissionReport({ startDate, endDate, locationId }: {
                 total: true,
                 createdAt: true,
                 soldBySalespersonId: true,
-                items: { select: { quantity: true } },
+                items: {
+                    select: {
+                        quantity: true,
+                        price: true,
+                        variant: { select: { product: { select: { cost: true } } } },
+                    },
+                },
                 location: { select: { id: true, name: true } },
             },
             orderBy: { createdAt: 'asc' },
@@ -394,6 +400,14 @@ export async function getCommissionReport({ startDate, endDate, locationId }: {
             entry.totalPieces += pieces;
             if (entry.commissionType === 'FIXED_PER_PIECE') {
                 entry.commissionAmount += pieces * entry.commissionValue;
+            } else if (entry.commissionType === 'PERCENT_PROFIT') {
+                // Utilidad por item = (precio - costo) * cantidad. Si el producto no tiene costo, contribuye 0.
+                const profit = (sale.items as any[]).reduce((sum: number, i: any) => {
+                    const cost = i.variant?.product?.cost ?? null;
+                    if (cost == null) return sum;
+                    return sum + Math.max(0, i.price - cost) * i.quantity;
+                }, 0);
+                entry.commissionAmount += (profit * entry.commissionValue) / 100;
             } else {
                 entry.commissionAmount += (sale.total * entry.commissionValue) / 100;
             }

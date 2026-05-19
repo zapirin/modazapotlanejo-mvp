@@ -514,7 +514,9 @@ export default function ReportsPage() {
                                                         <span className="px-3 py-1 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-full text-xs font-black">
                                                             {row.commissionType === 'FIXED_PER_PIECE'
                                                                 ? `$${row.commissionValue}/pza`
-                                                                : `${row.commissionValue}%`}
+                                                                : row.commissionType === 'PERCENT_PROFIT'
+                                                                    ? `${row.commissionValue}% util.`
+                                                                    : `${row.commissionValue}%`}
                                                         </span>
                                                     </td>
                                                     <td className="text-right px-6 py-4 font-black text-emerald-600 dark:text-emerald-400 tabular-nums">

@@ -377,7 +377,9 @@ export default function TeamPage() {
                                                                 <p className="text-xs text-purple-600 font-black">
                                                                     {sp.commissionType === "FIXED_PER_PIECE"
                                                                         ? `$${sp.commissionValue} / pieza`
-                                                                        : `${sp.commissionValue}% comisión`}
+                                                                        : sp.commissionType === "PERCENT_PROFIT"
+                                                                            ? `${sp.commissionValue}% sobre utilidad`
+                                                                            : `${sp.commissionValue}% sobre venta`}
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -584,35 +586,44 @@ export default function TeamPage() {
                             <div className="space-y-3">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Comisión</label>
                                 {/* Toggle tipo */}
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2">
                                     <button type="button"
                                         onClick={() => setSpForm(p => ({ ...p, commissionType: "PERCENT" }))}
                                         className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide border-2 transition ${spForm.commissionType === "PERCENT" ? "border-purple-600 bg-purple-50 dark:bg-purple-900/20 text-purple-700" : "border-border text-gray-400 hover:border-gray-300"}`}>
-                                        % Porcentaje
+                                        % Venta
                                     </button>
                                     <button type="button"
                                         onClick={() => setSpForm(p => ({ ...p, commissionType: "FIXED_PER_PIECE" }))}
                                         className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide border-2 transition ${spForm.commissionType === "FIXED_PER_PIECE" ? "border-purple-600 bg-purple-50 dark:bg-purple-900/20 text-purple-700" : "border-border text-gray-400 hover:border-gray-300"}`}>
-                                        $ Fijo por pieza
+                                        $ Por pieza
+                                    </button>
+                                    <button type="button"
+                                        onClick={() => setSpForm(p => ({ ...p, commissionType: "PERCENT_PROFIT" }))}
+                                        className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide border-2 transition ${spForm.commissionType === "PERCENT_PROFIT" ? "border-purple-600 bg-purple-50 dark:bg-purple-900/20 text-purple-700" : "border-border text-gray-400 hover:border-gray-300"}`}>
+                                        % Utilidad
                                     </button>
                                 </div>
                                 {/* Valor */}
                                 <div className="relative">
-                                    {spForm.commissionType === "PERCENT" ? (
-                                        <>
-                                            <input type="number" min="0" max="100" step="0.5" value={spForm.commissionValue}
-                                                onChange={e => setSpForm(p => ({ ...p, commissionValue: Number(e.target.value) }))}
-                                                className="w-full px-4 py-3 bg-input border border-border rounded-xl font-bold focus:ring-2 focus:ring-purple-500/50 outline-none pr-10" />
-                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-purple-500 font-black">%</span>
-                                            <p className="text-[10px] text-gray-400 mt-1">Ej: 5% → en una venta de $1,000 = $50 de comisión</p>
-                                        </>
-                                    ) : (
+                                    {spForm.commissionType === "FIXED_PER_PIECE" ? (
                                         <>
                                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-500 font-black">$</span>
                                             <input type="number" min="0" step="0.50" value={spForm.commissionValue}
                                                 onChange={e => setSpForm(p => ({ ...p, commissionValue: Number(e.target.value) }))}
                                                 className="w-full pl-8 pr-4 py-3 bg-input border border-border rounded-xl font-bold focus:ring-2 focus:ring-purple-500/50 outline-none" />
                                             <p className="text-[10px] text-gray-400 mt-1">Ej: $5 → si vendió 20 piezas = $100 de comisión</p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <input type="number" min="0" max="100" step="0.5" value={spForm.commissionValue}
+                                                onChange={e => setSpForm(p => ({ ...p, commissionValue: Number(e.target.value) }))}
+                                                className="w-full px-4 py-3 bg-input border border-border rounded-xl font-bold focus:ring-2 focus:ring-purple-500/50 outline-none pr-10" />
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-purple-500 font-black">%</span>
+                                            {spForm.commissionType === "PERCENT" ? (
+                                                <p className="text-[10px] text-gray-400 mt-1">Ej: 5% → en una venta de $1,000 = $50 de comisión</p>
+                                            ) : (
+                                                <p className="text-[10px] text-gray-400 mt-1">Ej: 10% sobre utilidad → si vendió un artículo de $500 con costo $300, utilidad = $200, comisión = $20. Requiere que los productos tengan costo configurado.</p>
+                                            )}
                                         </>
                                     )}
                                 </div>
