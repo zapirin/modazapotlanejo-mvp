@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { Prisma } from '@/generated/client';
 import { getSessionUser } from '@/app/actions/auth';
-import { sendLowInventoryAlert } from "@/lib/email/templates";
+import { sendLowInventoryAlert, sendDigitalTicketEmail } from "@/lib/email/templates";
 import { earnPoints, redeemPoints, pointsToMXN, getProgram } from "@/lib/loyalty";
 
 // ---------------------------------------------------------------------------
@@ -1006,6 +1006,86 @@ export async function getSaleById(saleId: string) {
     } catch (error) {
         console.error("Error fetching sale:", error);
         return null;
+    }
+}
+
+export async function sendDigitalTicketAction(saleId: string) {
+    try {
+        const sale = await prisma.sale.findUnique({
+            where: { id: saleId },
+            include: {
+                items: {
+                    include: {
+                        variant: {
+                            include: {
+                                product: true
+                            }
+                        }
+                    }
+                },
+                client: true,
+                paymentMethod: true,
+                location: true,
+            }
+        });
+
+        if (!sale) {
+            return { success: false, error: "Venta no encontrada." };
+        }
+
+        if (!sale.client) {
+            return { success: false, error: "Esta venta no tiene un cliente asignado." };
+        }
+
+        if (!sale.client.email) {
+            return { success: false, error: "El cliente no tiene un correo electrónico registrado." };
+        }
+
+        const itemsMapped = sale.items.map(item => ({
+            productName: item.variant?.product?.name || "Producto sin nombre",
+            quantity: item.quantity,
+            price: item.price,
+            color: item.variant?.color || null,
+            size: item.variant?.size || null
+        }));
+
+        let paymentMethodName = sale.paymentMethod?.name || "Otro";
+        if (sale.paymentSplit) {
+            try {
+                const splits = JSON.parse(sale.paymentSplit);
+                if (Array.isArray(splits) && splits.length > 0) {
+                    paymentMethodName = splits.map((s: any) => `${s.method} ($${s.amount.toFixed(2)})`).join(" / ");
+                }
+            } catch (e) {
+                console.error("Error parsing paymentSplit for email:", e);
+            }
+        }
+
+        const result = await sendDigitalTicketEmail({
+            email: sale.client.email,
+            clientName: sale.client.name,
+            receiptNumber: sale.receiptNumber,
+            items: itemsMapped,
+            subtotal: sale.subtotal,
+            discount: sale.discount,
+            loyaltyDiscount: sale.loyaltyDiscount,
+            total: sale.total,
+            paymentMethod: paymentMethodName,
+            locationName: sale.location?.name || null,
+            locationAddress: sale.location?.address || null,
+            ticketHeader: sale.location?.ticketHeader || null,
+            ticketFooter: sale.location?.ticketFooter || null,
+        });
+
+        if (result && (result as any).error) {
+            console.error("Resend API returned error:", (result as any).error);
+            return { success: false, error: `Error de envío: ${JSON.stringify((result as any).error)}` };
+        }
+
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error in sendDigitalTicketAction:", error);
+        return { success: false, error: error.message || "Ocurrió un error inesperado al enviar el ticket." };
     }
 }
 

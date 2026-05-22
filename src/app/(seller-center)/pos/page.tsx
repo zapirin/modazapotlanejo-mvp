@@ -6,7 +6,7 @@ import { getDenominations, seedDefaultDenominations } from '../settings/denomina
 import { savePendingSale, getPendingSales, markSaleSynced, markSaleSyncError, countPendingSales, saveProductsCache, getProductsCache, searchProductsOffline, filterProductsByCategoryOffline } from '@/lib/posOfflineStore';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { searchProducts, getPriceTiers, getPaymentMethods, getPOSCategories, getProductsByCategory, getAllPOSProducts, processSale, getSuspendedSales, suspendSale, deleteSuspendedSale, createLayaway, getSaleById, updateSale } from '../products/new/actions';
+import { searchProducts, getPriceTiers, getPaymentMethods, getPOSCategories, getProductsByCategory, getAllPOSProducts, processSale, getSuspendedSales, suspendSale, deleteSuspendedSale, createLayaway, getSaleById, updateSale, sendDigitalTicketAction } from '../products/new/actions';
 import { getCurrentCashSession, openCashSession, addCashMovement, closeCashSession, createTransfer, getAllowedLocations, checkSellerPOSAccess, getSalesBySession, getSalespersons, getTransferById } from './actions';
 import TransferTicket from './TransferTicket';
 import { getStoreSettings, getLocationsSettings, getRequireSalesperson } from '../settings/actions';
@@ -204,6 +204,14 @@ function POSContent() {
     // Receipt State
     const [showReceiptModal, setShowReceiptModal] = useState(false);
     const [showTicketOptions, setShowTicketOptions] = useState(false);
+
+    // Digital Ticket Sharing State
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [completedSaleId, setCompletedSaleId] = useState<string | null>(null);
+    const [shareEmail, setShareEmail] = useState(false);
+    const [shareWhatsApp, setShareWhatsApp] = useState(false);
+    const [isSendingTicket, setIsSendingTicket] = useState(false);
+    const [clientForShare, setClientForShare] = useState<any>(null);
     const [offlineSyncTime, setOfflineSyncTime] = useState<string>('');
     const printReceiptBtnRef = useRef<HTMLButtonElement>(null);
     useEffect(() => {
@@ -1060,6 +1068,10 @@ function POSContent() {
                     partialPayments: paymentsToUse.length > 0 ? paymentsToUse : null,
                 });
 
+                // Copiar referencia del cliente e id de venta antes de limpiar el estado
+                const clientObj = selectedClient ? { ...selectedClient } : null;
+                const saleIdObj = res.saleId;
+
                 clearCartStorage();
                 setCart([]);
                 setSelectedTier(null);
@@ -1072,7 +1084,17 @@ function POSContent() {
                 // Resetear método de pago a Efectivo
                 const efectivoAfterSale = paymentMethods.find((m: any) => m.name.toLowerCase().includes('efectivo'));
                 setSelectedPaymentMethod(efectivoAfterSale ? efectivoAfterSale.name : (paymentMethods[0]?.name || 'Efectivo'));
-                setShowReceiptModal(true);
+                
+                if (clientObj) {
+                    setClientForShare(clientObj);
+                    setCompletedSaleId(saleIdObj);
+                    setShareEmail(!!clientObj.email);
+                    setShareWhatsApp(!!clientObj.phone);
+                    setShowShareModal(true);
+                } else {
+                    setShowReceiptModal(true);
+                }
+
                 if (changeDue > 0) {
                     toast.success(`💵 Cambio: ${formatCurrency(changeDue)}`, { duration: 8000 });
                 }
@@ -1503,6 +1525,86 @@ function POSContent() {
         const mailto = `mailto:${sale.client.email}?subject=${subject}&body=${encodeURIComponent(body)}`;
         window.location.href = mailto;
     };
+
+    const handleOmitSharing = () => {
+        setShowShareModal(false);
+        setShowReceiptModal(true);
+        setTimeout(() => {
+            // Dar foco al botón de imprimir en el modal de ticket físico si existe
+            printReceiptBtnRef.current?.focus();
+        }, 100);
+    };
+
+    const handleConfirmSharing = async () => {
+        if (!completedSaleId || !clientForShare) {
+            handleOmitSharing();
+            return;
+        }
+
+        setIsSendingTicket(true);
+        let emailSent = false;
+        let waSent = false;
+
+        // 1. Enviar ticket por correo electrónico
+        if (shareEmail && clientForShare.email) {
+            try {
+                const res = await sendDigitalTicketAction(completedSaleId);
+                if (res.success) {
+                    emailSent = true;
+                } else {
+                    toast.error(`Error al enviar correo: ${res.error}`);
+                }
+            } catch (err: any) {
+                console.error("Error sending email:", err);
+                toast.error(`Error al enviar correo: ${err.message || err}`);
+            }
+        }
+
+        // 2. Preparar WhatsApp
+        if (shareWhatsApp && clientForShare.phone) {
+            try {
+                const sale = await getSaleById(completedSaleId);
+                if (sale) {
+                    handleShareWhatsApp(sale);
+                    waSent = true;
+                }
+            } catch (err) {
+                console.error("Error preparing WhatsApp:", err);
+            }
+        }
+
+        setIsSendingTicket(false);
+        setShowShareModal(false);
+        setShowReceiptModal(true);
+
+        if (emailSent && waSent) {
+            toast.success("📧 Correo enviado y 💬 WhatsApp preparado.");
+        } else if (emailSent) {
+            toast.success("📧 Ticket digital enviado por correo.");
+        } else if (waSent) {
+            toast.success("💬 WhatsApp del ticket preparado.");
+        }
+        
+        setTimeout(() => {
+            printReceiptBtnRef.current?.focus();
+        }, 100);
+    };
+
+    // Atajos de teclado para el modal de compartir (Enter para enviar, Esc para omitir)
+    useEffect(() => {
+        if (!showShareModal) return;
+        const handleShareKey = (e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleConfirmSharing();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                handleOmitSharing();
+            }
+        };
+        window.addEventListener('keydown', handleShareKey);
+        return () => window.removeEventListener('keydown', handleShareKey);
+    }, [showShareModal, completedSaleId, clientForShare, shareEmail, shareWhatsApp]);
 
     // Actualizar stock de variantes en tiempo real cuando cambia en otra sucursal
     const handleInventoryChange = useCallback((change: { variantId: string; locationId: string; stock: number }) => {
@@ -3696,6 +3798,145 @@ function POSContent() {
                                     )}
                                 </>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Digital Ticket Sharing Modal */}
+            {showShareModal && clientForShare && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-card/90 dark:bg-card/85 border border-border/80 backdrop-blur-lg w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden animate-in scale-in duration-200 flex flex-col">
+                        
+                        {/* Header with gradient */}
+                        <div className="relative p-6 text-center bg-gradient-to-r from-violet-600/10 via-fuchsia-600/10 to-pink-600/10 dark:from-violet-500/20 dark:via-fuchsia-500/20 dark:to-pink-500/20 border-b border-border/50">
+                            <div className="absolute top-4 right-4">
+                                <button 
+                                    onClick={handleOmitSharing} 
+                                    className="text-gray-400 hover:text-red-500 w-8 h-8 rounded-full hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center justify-center transition-all duration-200 active:scale-95"
+                                    title="Omitir (Esc)"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                            
+                            {/* Icon / Brand badge */}
+                            <div className="mx-auto w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-600 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-violet-500/30 mb-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-white animate-pulse">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                                </svg>
+                            </div>
+                            
+                            <h3 className="text-xl font-extrabold text-foreground tracking-tight">¿Deseas enviar el ticket de compra?</h3>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">ModaZapotlanejo · Venta Finalizada</p>
+                        </div>
+                        
+                        {/* Content */}
+                        <div className="p-6 space-y-5">
+                            {/* Client Summary */}
+                            <div className="bg-gray-50/50 dark:bg-gray-800/40 border border-border/60 rounded-2xl p-4 flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-600 dark:text-violet-400 font-bold text-lg shadow-inner">
+                                    {clientForShare.name ? clientForShare.name.charAt(0).toUpperCase() : 'C'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs text-gray-400 font-black uppercase tracking-wider">Cliente Seleccionado</p>
+                                    <p className="text-sm font-bold text-foreground truncate">{clientForShare.name}</p>
+                                </div>
+                            </div>
+
+                            {/* Share Options */}
+                            <div className="space-y-3">
+                                {/* Email Option */}
+                                <label className={`flex items-start gap-3 p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${
+                                    !clientForShare.email 
+                                        ? 'bg-gray-50/35 dark:bg-gray-900/10 border-border/30 opacity-50 cursor-not-allowed' 
+                                        : shareEmail 
+                                            ? 'bg-violet-50/30 dark:bg-violet-950/20 border-violet-500 dark:border-violet-500/80 shadow-sm shadow-violet-500/5' 
+                                            : 'bg-card border-border hover:border-violet-400/50 dark:hover:border-violet-500/40'
+                                }`}>
+                                    <input 
+                                        type="checkbox" 
+                                        disabled={!clientForShare.email}
+                                        checked={shareEmail}
+                                        onChange={(e) => setShareEmail(e.target.checked)}
+                                        className="mt-1 w-5 h-5 rounded-lg border-gray-300 text-violet-600 focus:ring-violet-500 dark:bg-gray-800 dark:border-gray-700 dark:focus:ring-offset-gray-900 transition-all cursor-pointer disabled:cursor-not-allowed"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="font-extrabold text-sm text-foreground">Enviar por Correo</span>
+                                            <span className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 px-1.5 py-0.5 rounded font-black uppercase">Email</span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                                            {clientForShare.email ? clientForShare.email : '(Sin correo registrado)'}
+                                        </p>
+                                    </div>
+                                </label>
+
+                                {/* WhatsApp Option */}
+                                <label className={`flex items-start gap-3 p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${
+                                    !clientForShare.phone 
+                                        ? 'bg-gray-50/35 dark:bg-gray-900/10 border-border/30 opacity-50 cursor-not-allowed' 
+                                        : shareWhatsApp 
+                                            ? 'bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-500 dark:border-emerald-500/80 shadow-sm shadow-emerald-500/5' 
+                                            : 'bg-card border-border hover:border-emerald-400/50 dark:hover:border-emerald-500/40'
+                                }`}>
+                                    <input 
+                                        type="checkbox" 
+                                        disabled={!clientForShare.phone}
+                                        checked={shareWhatsApp}
+                                        onChange={(e) => setShareWhatsApp(e.target.checked)}
+                                        className="mt-1 w-5 h-5 rounded-lg border-gray-300 text-emerald-600 focus:ring-emerald-500 dark:bg-gray-800 dark:border-gray-700 dark:focus:ring-offset-gray-900 transition-all cursor-pointer disabled:cursor-not-allowed"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="font-extrabold text-sm text-foreground">Enviar por WhatsApp</span>
+                                            <span className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded font-black uppercase">WhatsApp</span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                                            {clientForShare.phone ? clientForShare.phone : '(Sin teléfono registrado)'}
+                                        </p>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* Actions Footer */}
+                        <div className="p-6 bg-gray-50 dark:bg-gray-800/40 border-t border-border/50 flex flex-col gap-3">
+                            <div className="flex items-center gap-3">
+                                {/* Omitir / Cancel Button */}
+                                <button
+                                    onClick={handleOmitSharing}
+                                    className="flex-1 py-3 px-4 rounded-2xl font-bold text-sm bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-1.5 shadow-sm"
+                                >
+                                    <span>No enviar</span>
+                                    <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-sans font-semibold text-gray-400 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded shadow-sm">Esc</kbd>
+                                </button>
+
+                                {/* Send / Share Button */}
+                                <button
+                                    onClick={handleConfirmSharing}
+                                    disabled={isSendingTicket || (!shareEmail && !shareWhatsApp)}
+                                    className="flex-1 py-3 px-4 rounded-2xl font-bold text-sm bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-md shadow-violet-500/20 disabled:opacity-40 disabled:pointer-events-none disabled:shadow-none transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-1.5"
+                                >
+                                    {isSendingTicket ? (
+                                        <>
+                                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                            </svg>
+                                            <span>Enviando...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span>Enviar ticket</span>
+                                            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-sans font-semibold text-white/70 bg-white/20 border border-white/20 rounded shadow-sm">Enter</kbd>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-center text-gray-400 font-medium">
+                                Al omitir o enviar, se abrirá automáticamente el ticket físico para imprimir.
+                            </p>
                         </div>
                     </div>
                 </div>

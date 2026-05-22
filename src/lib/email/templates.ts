@@ -812,3 +812,167 @@ export async function sendOrderUpdatedToBuyer({
     html: baseLayout({ brandName, title: `Pedido #${orderNumber} actualizado`, body }),
   });
 }
+
+export async function sendDigitalTicketEmail({
+  email,
+  clientName,
+  receiptNumber,
+  items,
+  subtotal,
+  discount,
+  loyaltyDiscount,
+  total,
+  paymentMethod,
+  locationName,
+  locationAddress,
+  ticketHeader,
+  ticketFooter,
+}: {
+  email: string;
+  clientName: string;
+  receiptNumber: string | number;
+  items: {
+    productName: string;
+    quantity: number;
+    price: number;
+    color?: string | null;
+    size?: string | null;
+  }[];
+  subtotal: number;
+  discount: number;
+  loyaltyDiscount: number;
+  total: number;
+  paymentMethod: string;
+  locationName?: string | null;
+  locationAddress?: string | null;
+  ticketHeader?: string | null;
+  ticketFooter?: string | null;
+}) {
+  const brandName = 'ModaZapotlanejo';
+  const brandColor = '#7c3aed'; // A premium violet/indigo color
+
+  const itemsRows = items.map(item => `
+    <tr>
+      <td style="padding:12px 0;border-bottom:1px solid #f1f5f9;text-align:left;vertical-align:top;">
+        <p style="margin:0;font-size:14px;font-weight:600;color:#1e293b;">${item.productName}</p>
+        ${item.color || item.size ? `<p style="margin:2px 0 0;font-size:12px;color:#64748b;">${[item.color, item.size].filter(Boolean).join(' / ')}</p>` : ''}
+      </td>
+      <td style="padding:12px 0;border-bottom:1px solid #f1f5f9;text-align:center;vertical-align:top;font-size:14px;color:#475569;">
+        ${item.quantity}
+      </td>
+      <td style="padding:12px 0;border-bottom:1px solid #f1f5f9;text-align:right;vertical-align:top;font-size:14px;color:#475569;">
+        $${item.price.toFixed(2)}
+      </td>
+      <td style="padding:12px 0;border-bottom:1px solid #f1f5f9;text-align:right;vertical-align:top;font-size:14px;font-weight:600;color:#1e293b;">
+        $${(item.price * item.quantity).toFixed(2)}
+      </td>
+    </tr>
+  `).join('');
+
+  const body = `
+    <div style="text-align:center;margin-bottom:32px;">
+      <span style="background:#f3e8ff;color:#7c3aed;font-size:12px;font-weight:700;padding:6px 16px;border-radius:9999px;text-transform:uppercase;letter-spacing:1px;">
+        Ticket Digital
+      </span>
+      <h2 style="margin:16px 0 8px;font-size:24px;font-weight:800;color:#1e293b;">
+        ¡Gracias por tu compra!
+      </h2>
+      <p style="margin:0;font-size:15px;color:#64748b;">
+        Hola <strong>${clientName}</strong>, adjuntamos el desglose de tu compra en <strong>ModaZapotlanejo</strong>.
+      </p>
+    </div>
+
+    ${ticketHeader ? `
+      <div style="background:#f8fafc;border-left:4px solid #7c3aed;padding:12px 16px;margin-bottom:24px;font-size:13px;color:#475569;line-height:1.6;font-style:italic;">
+        ${ticketHeader.replace(/\n/g, '<br/>')}
+      </div>
+    ` : ''}
+
+    <div style="background:#f8fafc;border-radius:12px;padding:20px;margin-bottom:24px;border:1px solid #e2e8f0;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;color:#475569;line-height:1.6;">
+        <tr>
+          <td style="padding:4px 0;"><strong>No. de Ticket:</strong></td>
+          <td style="padding:4px 0;text-align:right;font-weight:600;color:#1e293b;">#PDV-${String(receiptNumber).padStart(6, '0')}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;"><strong>Fecha de Emisión:</strong></td>
+          <td style="padding:4px 0;text-align:right;font-weight:600;color:#1e293b;">${new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;"><strong>Método de Pago:</strong></td>
+          <td style="padding:4px 0;text-align:right;font-weight:600;color:#1e293b;">${paymentMethod}</td>
+        </tr>
+        ${locationName ? `
+        <tr>
+          <td style="padding:4px 0;vertical-align:top;"><strong>Sucursal:</strong></td>
+          <td style="padding:4px 0;text-align:right;font-weight:600;color:#1e293b;vertical-align:top;">
+            ${locationName}
+            ${locationAddress ? `<br/><span style="font-size:12px;font-weight:400;color:#64748b;">${locationAddress}</span>` : ''}
+          </td>
+        </tr>
+        ` : ''}
+      </table>
+    </div>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:24px 0;">
+      <thead>
+        <tr style="border-bottom:2px solid #e2e8f0;">
+          <th style="padding:8px 0;font-size:12px;font-weight:700;color:#64748b;text-align:left;text-transform:uppercase;">Producto</th>
+          <th style="padding:8px 0;font-size:12px;font-weight:700;color:#64748b;text-align:center;text-transform:uppercase;width:60px;">Cant</th>
+          <th style="padding:8px 0;font-size:12px;font-weight:700;color:#64748b;text-align:right;text-transform:uppercase;width:80px;">Precio</th>
+          <th style="padding:8px 0;font-size:12px;font-weight:700;color:#64748b;text-align:right;text-transform:uppercase;width:90px;">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsRows}
+      </tbody>
+    </table>
+
+    <div style="margin-left:auto;width:100%;max-width:280px;margin-top:24px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;color:#475569;line-height:2.0;">
+        <tr>
+          <td style="text-align:left;">Subtotal:</td>
+          <td style="text-align:right;font-weight:600;">$${subtotal.toFixed(2)}</td>
+        </tr>
+        ${discount > 0 ? `
+        <tr>
+          <td style="text-align:left;color:#dc2626;">Descuento:</td>
+          <td style="text-align:right;font-weight:600;color:#dc2626;">-$${discount.toFixed(2)}</td>
+        </tr>
+        ` : ''}
+        ${loyaltyDiscount > 0 ? `
+        <tr>
+          <td style="text-align:left;color:#16a34a;">Descto. Puntos:</td>
+          <td style="text-align:right;font-weight:600;color:#16a34a;">-$${loyaltyDiscount.toFixed(2)}</td>
+        </tr>
+        ` : ''}
+        <tr style="border-top:1px solid #e2e8f0;font-size:16px;font-weight:800;color:#1e293b;">
+          <td style="text-align:left;padding-top:8px;">Total:</td>
+          <td style="text-align:right;padding-top:8px;color:#7c3aed;">$${total.toFixed(2)}</td>
+        </tr>
+      </table>
+    </div>
+
+    ${ticketFooter ? `
+      ${divider}
+      <div style="text-align:center;font-size:13px;color:#64748b;line-height:1.6;white-space:pre-line;">
+        ${ticketFooter}
+      </div>
+    ` : ''}
+
+    ${divider}
+    <div style="text-align:center;">
+      <p style="margin:0 0 16px;font-size:14px;color:#64748b;">
+        ¿Quieres ver tus compras y dar seguimiento en línea?
+      </p>
+      ${ctaButton('Acceder a mi Cuenta', `${APP_URL}/acceso`, '#7c3aed')}
+    </div>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `🧾 Tu ticket de compra #${String(receiptNumber).padStart(6, '0')} — ModaZapotlanejo`,
+    html: baseLayout({ brandName, brandColor, title: `Ticket de Compra #${receiptNumber}`, body }),
+  });
+}
+
