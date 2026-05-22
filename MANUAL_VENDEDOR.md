@@ -3,7 +3,7 @@
 Para dueños de tienda registrados en modazapotlanejo.com / zonadelvestir.com /
 
 ## 1. Registrarte y empezar
-1. Entra a `/register/seller` y elige un plan (Básico es gratis siempre).
+1. Entra a `https://modazapotlanejo.com/register/seller` o `https://zonadelvestir.com/register/seller` y elige un plan (Básico es gratis siempre).
 2. El admin recibe tu solicitud y la aprueba; te llega un correo con tu contraseña temporal.
 3. Inicia sesión y cambia la contraseña en **Configuración → Mi Perfil**.
 

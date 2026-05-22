@@ -18,11 +18,11 @@ export default function ManualVendedorPage() {
           1. Registrarte y empezar
         </h2>
         <ol className="list-decimal list-outside ml-5 space-y-2 mb-6">
-          <li>Entra a <code className="bg-gray-100 text-pink-600 px-1.5 py-0.5 rounded text-sm font-mono">/register/seller</code> y elige un plan (Básico es gratis siempre).</li>
+          <li>Entra a <code className="bg-gray-100 text-pink-600 px-1.5 py-0.5 rounded text-sm font-mono">https://modazapotlanejo.com/register/seller</code> o <code className="bg-gray-100 text-pink-600 px-1.5 py-0.5 rounded text-sm font-mono">https://zonadelvestir.com/register/seller</code> y elige un plan (Básico es gratis siempre).</li>
           <li>El admin recibe tu solicitud y la aprueba; te llega un correo con tu contraseña temporal.</li>
           <li>Inicia sesión y cambia la contraseña en <strong>Configuración → Mi Perfil</strong>.</li>
         </ol>
-        
+
         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-md text-sm text-blue-800 mb-6">
           <p className="font-semibold mb-1">Nota sobre los planes:</p>
           <p>El plan <strong>Básico</strong> es solo marketplace (catálogo + analítica básica) y NO incluye POS. Los planes de paga (Estándar / Pro / Empresarial) sí incluyen POS, sucursales y cajeros. El admin puede activarte el POS manualmente aunque estés en Básico.</p>
@@ -40,7 +40,11 @@ export default function ManualVendedorPage() {
           <li><strong>Configuración → Niveles de precio:</strong> descuentos automáticos por volumen (ej. de 6+ piezas baja a $X).</li>
           <li><strong>Configuración → Denominaciones:</strong> monedas/billetes para el conteo de abrir caja y del corte Z.</li>
         </ul>
-        <ManualImagePlaceholder description="Captura del menú de configuración de la tienda mostrando las opciones principales." />
+        <ManualImagePlaceholder
+          description="Captura del menú de configuración..."
+          imagePath="/images/manuales/vendedor/tiendafacturacion.png"
+        />
+
       </section>
 
       <section>
@@ -67,7 +71,10 @@ export default function ManualVendedorPage() {
         <p className="mb-4">
           Al guardar, el producto entra al catálogo del marketplace y al POS. Para duplicar un producto similar usa el botón <strong>"Duplicar"</strong> en la lista.
         </p>
-        <ManualImagePlaceholder description="Captura del formulario de creación de producto (Paso 1 o Paso 2)." />
+        <ManualImagePlaceholder
+          description="Captura del menú de configuración..."
+          imagePath="/images/manuales/vendedor/nuevoproducto.png"
+        />
       </section>
 
       <section>
@@ -91,14 +98,14 @@ export default function ManualVendedorPage() {
         <div className="grid sm:grid-cols-2 gap-4 mb-6">
           <div className="border border-gray-200 rounded-lg p-5">
             <h3 className="font-bold text-blue-700 mb-2 flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2" /><line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" /><line x1="3" x2="21" y1="10" y2="10" /><path d="M8 14h.01" /><path d="M12 14h.01" /><path d="M16 14h.01" /><path d="M8 18h.01" /><path d="M12 18h.01" /><path d="M16 18h.01" /></svg>
               Cajeros
             </h3>
             <p className="text-sm">Tienen acceso al POS con tu tienda. Define qué sucursales pueden operar y qué permisos tienen (devoluciones, reportes, comisiones, cortes Z, crear productos).</p>
           </div>
           <div className="border border-gray-200 rounded-lg p-5">
             <h3 className="font-bold text-green-700 mb-2 flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
               Vendedores de Piso
             </h3>
             <p className="text-sm">Personas que cobran comisión por venta (no inician sesión). El POS los asigna a cada venta para registrar sus comisiones.</p>
@@ -120,7 +127,10 @@ export default function ManualVendedorPage() {
           <li><strong>Cortes Z:</strong> Cada sesión de caja cerrada con KPIs y desglose por método de pago.</li>
           <li><strong>Ganancias:</strong> Utilidad por producto (precio venta − costo).</li>
         </ul>
-        <ManualImagePlaceholder description="Captura de pantalla de la vista de Reportes o KPIs." />
+        <ManualImagePlaceholder
+          description="Captura del menú de configuración..."
+          imagePath="/images/manuales/vendedor/reportes.png"
+        />
       </section>
 
       <section>
@@ -167,7 +177,10 @@ export default function ManualVendedorPage() {
           <li>Enviar guía de Skydropx (si configuraste credenciales).</li>
         </ul>
         <p className="text-sm font-semibold">Al aceptar un pedido el inventario se descuenta automáticamente.</p>
-        <ManualImagePlaceholder description="Captura de la vista de un Pedido del Marketplace (detalle)." />
+        <ManualImagePlaceholder
+          description="Captura del menú de configuración..."
+          imagePath="/images/manuales/vendedor/pedido.png"
+        />
       </section>
 
       <section>
@@ -177,7 +190,7 @@ export default function ManualVendedorPage() {
         <p className="mb-4">
           Vista por producto con stock por sucursal. Haz clic en una celda para abrir el modal de ajuste, donde ingresas la cantidad final exacta para cada sucursal. Cuenta con búsqueda por nombre o modelo con botón "x" para limpiar.
         </p>
-        
+
         <h3 className="text-xl font-bold text-gray-800 mt-6 mb-3">11.1 Listón de anuncio en mi página pública</h3>
         <p className="mb-4">
           Ve a <strong>Configuración → Tienda y facturación → 📢 Listón de Anuncio</strong>.
