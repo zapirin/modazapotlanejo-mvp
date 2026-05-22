@@ -848,7 +848,7 @@ export async function sendDigitalTicketEmail({
   ticketHeader?: string | null;
   ticketFooter?: string | null;
 }) {
-  const brandName = 'ModaZapotlanejo';
+  const brandName = locationName || 'ModaZapotlanejo';
   const brandColor = '#7c3aed'; // A premium violet/indigo color
 
   const itemsRows = items.map(item => `
@@ -878,7 +878,7 @@ export async function sendDigitalTicketEmail({
         ¡Gracias por tu compra!
       </h2>
       <p style="margin:0;font-size:15px;color:#64748b;">
-        Hola <strong>${clientName}</strong>, adjuntamos el desglose de tu compra en <strong>ModaZapotlanejo</strong>.
+        Hola <strong>${clientName}</strong>, adjuntamos el desglose de tu compra en <strong>${brandName}</strong>.
       </p>
     </div>
 
@@ -971,7 +971,7 @@ export async function sendDigitalTicketEmail({
 
   return sendEmail({
     to: email,
-    subject: `🧾 Tu ticket de compra #${String(receiptNumber).padStart(6, '0')} — ModaZapotlanejo`,
+    subject: `🧾 Tu ticket de compra #${String(receiptNumber).padStart(6, '0')} — ${brandName}`,
     html: baseLayout({ brandName, brandColor, title: `Ticket de Compra #${receiptNumber}`, body }),
   });
 }

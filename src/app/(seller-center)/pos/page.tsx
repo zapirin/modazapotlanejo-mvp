@@ -1470,7 +1470,6 @@ function POSContent() {
         if (currentUser?.name) lines.push(`Cajero: ${currentUser.name}`);
         if (sale.salesperson?.name) lines.push(`Vendedor: ${sale.salesperson.name}`);
         lines.push(`Cliente: ${sale.client.name}`);
-        lines.push(`* COTIZACIÓN *`);
         lines.push(sep);
 
         sale.items.forEach((item: any) => {
