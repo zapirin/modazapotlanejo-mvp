@@ -43,7 +43,7 @@ export default async function CategoriesPage() {
                 <p className="text-blue-600 font-bold uppercase tracking-[0.3em] text-xs">Explora todo nuestro universo de moda</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+            <div className="flex flex-wrap justify-center gap-10 w-full">
                 {categories.map((category: any, idx: number) => {
                     const gradients = [
                         'from-rose-500 to-orange-500',
@@ -56,7 +56,7 @@ export default async function CategoriesPage() {
                     return (
                         <div 
                             key={category.id}
-                            className="space-y-4 animate-in fade-in zoom-in-95 duration-700"
+                            className="space-y-4 animate-in fade-in zoom-in-95 duration-700 w-full md:w-[calc(50%-1.25rem)] lg:w-[calc(33.333%-1.7rem)] min-w-[280px] max-w-[400px] flex-grow"
                             style={{ animationDelay: `${idx * 100}ms` }}
                         >
                             <Link 

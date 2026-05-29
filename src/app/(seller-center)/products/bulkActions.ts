@@ -1,12 +1,10 @@
 "use server";
 
-import { PrismaClient } from '../../../generated/client';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 
 import { getSessionUser } from '@/app/actions/auth';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 // Helper para validar vendedor
 async function getSellerId() {

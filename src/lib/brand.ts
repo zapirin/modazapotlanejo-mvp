@@ -135,8 +135,10 @@ interface DBBrandConfig {
 // Single-vendor stores keep their own canonical since they serve unique content.
 export function getCanonicalBase(host: string, brand: BrandConfig): string {
     if (brand.isSingleVendor) {
-        const protocol = host.includes('localhost') ? 'http' : 'https';
-        return `${protocol}://${host}`;
+        if (host.includes('localhost')) {
+            return `http://${host}`;
+        }
+        return `https://${brand.domain}`;
     }
     return 'https://modazapotlanejo.com';
 }

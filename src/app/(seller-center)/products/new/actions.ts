@@ -972,6 +972,28 @@ export async function deleteSale(saleId: string) {
                 });
             }
 
+            // 2.5 Revert Loyalty Points
+            const loyaltyTxns = await tx.loyaltyTransaction.findMany({
+                where: { saleId: sale.id }
+            });
+
+            for (const ltxn of loyaltyTxns) {
+                const account = await tx.loyaltyAccount.findUnique({
+                    where: { id: ltxn.accountId }
+                });
+                if (account) {
+                    const newBalance = Math.max(0, account.balance - ltxn.points);
+                    await tx.loyaltyAccount.update({
+                        where: { id: account.id },
+                        data: { balance: newBalance }
+                    });
+                }
+            }
+
+            await tx.loyaltyTransaction.deleteMany({
+                where: { saleId: sale.id }
+            });
+
             // 3. Mark as cancelled
             const updatedSale = await tx.sale.update({
                 where: { id: saleId },
@@ -1098,6 +1120,7 @@ export async function updateSale(saleId: string, data: {
     clientId?: string | null;
     priceTierId?: string | null;
     isReturn?: boolean;
+    loyaltyRedeemPoints?: number;
 }) {
     try {
         const user = await getSessionUser();
@@ -1168,6 +1191,28 @@ export async function updateSale(saleId: string, data: {
                 });
             }
 
+            // 3.5 Revert Old Loyalty Points
+            const oldLoyaltyTxns = await tx.loyaltyTransaction.findMany({
+                where: { saleId: oldSale.id }
+            });
+
+            for (const ltxn of oldLoyaltyTxns) {
+                const account = await tx.loyaltyAccount.findUnique({
+                    where: { id: ltxn.accountId }
+                });
+                if (account) {
+                    const newBalance = Math.max(0, account.balance - ltxn.points);
+                    await tx.loyaltyAccount.update({
+                        where: { id: account.id },
+                        data: { balance: newBalance }
+                    });
+                }
+            }
+
+            await tx.loyaltyTransaction.deleteMany({
+                where: { saleId: oldSale.id }
+            });
+
             // 4. Determine New Status & Apply changes
             let finalStatus = "COMPLETED";
             if (data.isReturn) finalStatus = "REFUNDED";
@@ -1178,6 +1223,16 @@ export async function updateSale(saleId: string, data: {
                 finalStatus = oldSale.status;
             }
 
+            // Calculate new loyalty discount
+            let loyaltyDiscount = 0;
+            const requestedRedeemPoints = Math.floor(data.loyaltyRedeemPoints || 0);
+            if (requestedRedeemPoints > 0 && data.clientId && sellerId) {
+                const program = await tx.loyaltyProgram.findUnique({ where: { sellerId } });
+                if (program?.isActive) {
+                    loyaltyDiscount = pointsToMXN(requestedRedeemPoints, program.redeemRate);
+                }
+            }
+
             // 5. Update Sale properties and replace Items
             const updatedSale = await tx.sale.update({
                 where: { id: saleId },
@@ -1185,6 +1240,7 @@ export async function updateSale(saleId: string, data: {
                     total: data.total,
                     subtotal: data.subtotal,
                     discount: data.discount,
+                    loyaltyDiscount: loyaltyDiscount,
                     paymentMethodId: paymentMethodId,
                     clientId: data.clientId || null,
                     priceTierId: data.priceTierId || null,
@@ -1242,6 +1298,35 @@ export async function updateSale(saleId: string, data: {
                 where: { id: updatedSale.id }
             });
         });
+
+        // 8. Process New Loyalty points (only if not a return/refund)
+        const requestedRedeemPoints = Math.floor(data.loyaltyRedeemPoints || 0);
+        if (result && data.clientId && sellerId && !data.isReturn) {
+            if (requestedRedeemPoints > 0) {
+                try {
+                    await redeemPoints({
+                        sellerId,
+                        customer: { posClientId: data.clientId },
+                        points: requestedRedeemPoints,
+                        saleId: result.id,
+                    });
+                } catch (e) {
+                    console.error("POS loyalty redeem failed:", e);
+                }
+            }
+            if (result.total > 0) {
+                try {
+                    await earnPoints({
+                        sellerId,
+                        customer: { posClientId: data.clientId },
+                        amountMXN: result.total,
+                        saleId: result.id,
+                    });
+                } catch (e) {
+                    console.error("POS loyalty earn failed:", e);
+                }
+            }
+        }
 
         revalidatePath("/pos");
         revalidatePath("/dashboard");

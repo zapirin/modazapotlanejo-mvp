@@ -477,6 +477,7 @@ export default function EditProductPage() {
                                         className="w-full px-5 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground placeholder:text-gray-400 uppercase"
                                         value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                        autoComplete="new-password"
                                     />
                                 </div>
                                 <div className="space-y-3">
@@ -490,6 +491,7 @@ export default function EditProductPage() {
                                         className="w-full px-5 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-blue-500/50 outline-none transition text-foreground placeholder:text-gray-400 font-mono font-bold tracking-widest uppercase"
                                         value={formData.sku}
                                         onChange={(e) => setFormData({ ...formData, sku: e.target.value.toUpperCase() })}
+                                        autoComplete="new-password"
                                     />
                                 </div>
                             </div>
@@ -511,6 +513,7 @@ export default function EditProductPage() {
                                             }}
                                             onFocus={() => setBrandOpen(true)}
                                             onBlur={() => setTimeout(() => setBrandOpen(false), 150)}
+                                            autoComplete="new-password"
                                         />
                                         {formData.brandId && (
                                             <span className="absolute right-3 top-3.5 text-blue-500 text-xs font-bold pointer-events-none">✓</span>
@@ -577,6 +580,7 @@ export default function EditProductPage() {
                                             }}
                                             onFocus={() => setSupplierOpen(true)}
                                             onBlur={() => setTimeout(() => setSupplierOpen(false), 150)}
+                                            autoComplete="new-password"
                                         />
                                         {formData.supplierId && (
                                             <span className="absolute right-3 top-3.5 text-blue-500 text-xs font-bold pointer-events-none">✓</span>
@@ -774,6 +778,7 @@ export default function EditProductPage() {
                                         onChange={(e) => { setTagSearch(e.target.value); setTagOpen(true); }}
                                         onFocus={() => setTagOpen(true)}
                                         onBlur={() => setTimeout(() => setTagOpen(false), 150)}
+                                        autoComplete="new-password"
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter') {
                                                 e.preventDefault();
@@ -880,6 +885,7 @@ export default function EditProductPage() {
                                                     setFormData({ ...formData, variantOptions: newOptions });
                                                 }}
                                                 placeholder="Nombre del Atributo"
+                                                autoComplete="new-password"
                                             />
                                             <button onClick={() => handleRemoveOption(optIdx)} className="text-red-500 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100 p-2">×</button>
                                         </div>
@@ -902,6 +908,7 @@ export default function EditProductPage() {
                                                         (e.target as HTMLInputElement).value = '';
                                                     }
                                                 }}
+                                                autoComplete="new-password"
                                             />
                                         </div>
                                     </div>
@@ -915,6 +922,7 @@ export default function EditProductPage() {
                                         value={newOptionName}
                                         onChange={(e) => setNewOptionName(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleAddOption()}
+                                        autoComplete="new-password"
                                     />
                                     <button onClick={handleAddOption} className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black transition hover:bg-blue-700 shadow-lg shadow-blue-500/20">Agregar Atributo</button>
                                 </div>

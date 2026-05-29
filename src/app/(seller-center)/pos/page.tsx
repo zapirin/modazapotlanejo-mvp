@@ -118,6 +118,7 @@ function POSContent() {
     // POS State
     const [cart, setCart] = useState<any[]>([]);
     const [selectedTier, setSelectedTier] = useState<any>(null);
+    const [isManualTier, setIsManualTier] = useState(false);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('Efectivo');
     const [receivedAmount, setReceivedAmount] = useState('');
     const [partialPayments, setPartialPayments] = useState<{ method: string, amount: number }[]>([]);
@@ -479,7 +480,11 @@ function POSContent() {
                         if (parsed.selectedClient) setSelectedClient(parsed.selectedClient);
                         if (parsed.selectedTier) {
                             const match = tiers.find((t: any) => t.id === parsed.selectedTier.id);
-                            setSelectedTier(match ?? parsed.selectedTier);
+                            const tierToUse = match ?? parsed.selectedTier;
+                            setSelectedTier(tierToUse);
+                            if (tierToUse && !tierToUse.autoApplyPOS) {
+                                setIsManualTier(true);
+                            }
                         }
                         if (parsed.globalDiscount) setGlobalDiscount(parsed.globalDiscount);
                         if (parsed.partialPayments?.length > 0) setPartialPayments(parsed.partialPayments);
@@ -562,7 +567,17 @@ function POSContent() {
                 if (sale) {
                     setOriginalSale(sale);
                     if (sale.client) setSelectedClient(sale.client);
-                    if (sale.priceTier) setSelectedTier(sale.priceTier);
+                    if (sale.priceTier) {
+                        setSelectedTier(sale.priceTier);
+                        if (!sale.priceTier.autoApplyPOS) {
+                            setIsManualTier(true);
+                        } else {
+                            setIsManualTier(false);
+                        }
+                    } else {
+                        setSelectedTier(null);
+                        setIsManualTier(false);
+                    }
                     if (sale.paymentMethod) setSelectedPaymentMethod(sale.paymentMethod.name);
 
                     setIsReturnMode(sale.status === 'REFUNDED');
@@ -615,6 +630,7 @@ function POSContent() {
     useEffect(() => {
         if (prevCartLenRef.current > 0 && cart.length === 0) {
             setSelectedTier(null);
+            setIsManualTier(false);
             setGlobalDiscount(null);
             setSelectedClient(null);
             setSelectedSalesperson(null);
@@ -627,6 +643,35 @@ function POSContent() {
         }
         prevCartLenRef.current = cart.length;
     }, [cart.length]);
+
+    // ── Auto-apply price tier based on total quantity in cart ──
+    useEffect(() => {
+        if (isManualTier) return;
+        if (priceTiers.length === 0) return;
+
+        const totalQty = cart.reduce((sum, item) => sum + Math.abs(item.quantity || 0), 0);
+
+        // Find all price tiers configured to auto-apply on the POS that are satisfied by totalQty
+        const eligibleTiers = priceTiers.filter((tier: any) => {
+            return tier.autoApplyPOS && typeof tier.minQuantity === 'number' && totalQty >= tier.minQuantity;
+        });
+
+        if (eligibleTiers.length > 0) {
+            // Find the tier with the highest minQuantity
+            const highestTier = eligibleTiers.reduce((prev: any, current: any) => {
+                return (current.minQuantity > prev.minQuantity) ? current : prev;
+            }, eligibleTiers[0]);
+
+            if (!selectedTier || selectedTier.id !== highestTier.id) {
+                setSelectedTier(highestTier);
+            }
+        } else {
+            // If we currently have an auto-applied tier, but totalQty falls below all auto-applied tiers, revert to public price (null)
+            if (selectedTier && selectedTier.autoApplyPOS) {
+                setSelectedTier(null);
+            }
+        }
+    }, [cart, priceTiers, isManualTier, selectedTier]);
 
     // Reset índice resaltado del buscador cuando cambian resultados
     useEffect(() => { setSearchHighlightIdx(0); }, [searchResults]);
@@ -1026,7 +1071,8 @@ function POSContent() {
                     paymentMethodName: saleData.paymentMethodName,
                     clientId: saleData.clientId,
                     priceTierId: saleData.priceTierId,
-                    isReturn: saleData.isReturn
+                    isReturn: saleData.isReturn,
+                    loyaltyRedeemPoints: saleData.loyaltyRedeemPoints
                 });
             } else {
                 res = await processSale(saleData);
@@ -1286,9 +1332,17 @@ function POSContent() {
         // Restore tier if it had one
         if (sale.priceTierId) {
             const tier = priceTiers.find(t => t.id === sale.priceTierId);
-            if (tier) setSelectedTier(tier);
+            if (tier) {
+                setSelectedTier(tier);
+                if (!tier.autoApplyPOS) {
+                    setIsManualTier(true);
+                } else {
+                    setIsManualTier(false);
+                }
+            }
         } else {
             setSelectedTier(null);
+            setIsManualTier(false);
         }
 
         // Restore Client if it had one
@@ -2515,7 +2569,11 @@ function POSContent() {
                                     <span className="text-gray-400 font-bold text-[10px] uppercase tracking-widest">Nivel de Precio Aplicado</span>
                                     <select
                                         value={selectedTier?.id || ''}
-                                        onChange={(e) => setSelectedTier(priceTiers.find(t => t.id === e.target.value) || null)}
+                                        onChange={(e) => {
+                                            const tier = priceTiers.find(t => t.id === e.target.value) || null;
+                                            setSelectedTier(tier);
+                                            setIsManualTier(true);
+                                        }}
                                         className="w-full p-3 bg-gray-50 dark:bg-gray-800 border border-border rounded-lg outline-none font-bold text-sm cursor-pointer hover:border-blue-500 transition-colors"
                                     >
                                         <option value="">Precio Público General</option>

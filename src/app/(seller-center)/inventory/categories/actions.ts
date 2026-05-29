@@ -29,7 +29,7 @@ export async function getCategories() {
     }
 }
 
-export async function createCategory(data: { name: string }) {
+export async function createCategory(data: { name: string; image?: string | null }) {
     try {
         const user = await getSessionUser();
         if (user?.role !== 'ADMIN') return { success: false, error: "No tienes permisos para realizar esta acción" };
@@ -52,7 +52,8 @@ export async function createCategory(data: { name: string }) {
         await prisma.category.create({
             data: {
                 name: data.name.trim(),
-                slug: tempSlug
+                slug: tempSlug,
+                image: data.image || null
             }
         });
 
@@ -63,7 +64,7 @@ export async function createCategory(data: { name: string }) {
     } 
 }
 
-export async function updateCategory(id: string, data: { name: string }) {
+export async function updateCategory(id: string, data: { name: string; image?: string | null }) {
     try {
         const user = await getSessionUser();
         if (user?.role !== 'ADMIN') return { success: false, error: "No tienes permisos para realizar esta acción" };
@@ -88,7 +89,8 @@ export async function updateCategory(id: string, data: { name: string }) {
             where: { id },
             data: {
                 name: data.name.trim(),
-                slug: tempSlug
+                slug: tempSlug,
+                image: data.image === "" ? null : data.image
             }
         });
 

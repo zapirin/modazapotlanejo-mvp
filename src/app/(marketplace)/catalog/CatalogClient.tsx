@@ -326,7 +326,7 @@ export default function CatalogClient({
                 )}
 
                 {/* Rango de precio */}
-                {isLoggedIn && (
+                {(isLoggedIn || showPricesWithoutLogin) && (
                     <div className="space-y-3">
                         <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Rango de Precio</h3>
                         <div className="flex gap-2 items-center">

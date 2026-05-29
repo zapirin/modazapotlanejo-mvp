@@ -304,7 +304,7 @@ export default async function LandingPage() {
                         Ver todas las categorías
                     </Link>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className="flex flex-wrap justify-center gap-4 w-full">
                     {[...filteredCategories].sort((a: any, b: any) => {
                         const ORDER = ['DAMAS', 'CABALLEROS', 'NIÑOS', 'ACCESORIOS', 'CALZADO'];
                         const ai = ORDER.indexOf(a.name?.toUpperCase());
@@ -317,7 +317,7 @@ export default async function LandingPage() {
                         const gradients = ['from-rose-500 to-orange-500', 'from-blue-500 to-indigo-500', 'from-emerald-500 to-teal-500', 'from-violet-500 to-purple-500'];
                         return (
                             <Link key={category.id} href={`/catalog?category=${category.slug}`}
-                                className="group relative h-56 rounded-3xl overflow-hidden bg-gray-100 dark:bg-gray-900 border border-border transition-all hover:scale-[1.02] hover:shadow-2xl">
+                                className="group relative h-56 rounded-3xl overflow-hidden bg-gray-100 dark:bg-gray-900 border border-border transition-all hover:scale-[1.02] hover:shadow-2xl w-[calc(50%-0.5rem)] sm:w-[calc(33.333%-0.75rem)] lg:w-[calc(20%-0.8rem)] min-w-[130px] sm:min-w-[200px] max-w-[320px] flex-grow">
                                 {category.image ? (
                                     <Image src={category.image} alt={category.name} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
                                 ) : (

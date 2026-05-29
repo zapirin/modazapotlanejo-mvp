@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { Dialog } from '@headlessui/react';
 import { getCategories, createCategory, updateCategory, deleteCategory, createSubcategory, updateSubcategory, deleteSubcategory } from "./actions";
 import { getSessionUser } from "@/app/actions/auth";
+import { validateImageFile } from "@/lib/uploadImage";
+import { processImage } from "@/lib/imageUtils";
 
 export default function CategoriesPage() {
     const [categories, setCategories] = useState<any[]>([]);
@@ -15,8 +17,9 @@ export default function CategoriesPage() {
     const [modalMode, setModalMode] = useState<'create' | 'edit' | 'createSub' | 'editSub'>('create');
     const [currentCategory, setCurrentCategory] = useState<any>(null);
     const [currentSubcategory, setCurrentSubcategory] = useState<any>(null);
-    const [formData, setFormData] = useState({ name: '' });
+    const [formData, setFormData] = useState({ name: '', image: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isUploadingImage, setIsUploadingImage] = useState(false);
     const [error, setError] = useState("");
     const [user, setUser] = useState<any>(null);
 
@@ -42,7 +45,7 @@ export default function CategoriesPage() {
 
     const openCreateModal = () => {
         setModalMode('create');
-        setFormData({ name: '' });
+        setFormData({ name: '', image: '' });
         setCurrentCategory(null);
         setError("");
         setIsModalOpen(true);
@@ -50,7 +53,7 @@ export default function CategoriesPage() {
 
     const openEditModal = (category: any) => {
         setModalMode('edit');
-        setFormData({ name: category.name });
+        setFormData({ name: category.name, image: category.image || '' });
         setCurrentCategory(category);
         setError("");
         setIsModalOpen(true);
@@ -58,7 +61,7 @@ export default function CategoriesPage() {
 
     const openCreateSubModal = (category: any) => {
         setModalMode('createSub');
-        setFormData({ name: '' });
+        setFormData({ name: '', image: '' });
         setCurrentCategory(category);
         setError("");
         setIsModalOpen(true);
@@ -66,10 +69,33 @@ export default function CategoriesPage() {
 
     const openEditSubModal = (sub: any) => {
         setModalMode('editSub');
-        setFormData({ name: sub.name });
+        setFormData({ name: sub.name, image: '' });
         setCurrentSubcategory(sub);
         setError("");
         setIsModalOpen(true);
+    };
+
+    const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const validation = validateImageFile(file);
+        if (!validation.valid) {
+            setError(validation.error!);
+            return;
+        }
+
+        setIsUploadingImage(true);
+        setError("");
+        try {
+            const { url } = await processImage(file, 'categories');
+            setFormData(prev => ({ ...prev, image: url }));
+        } catch (err: any) {
+            setError(err?.message || 'Error al procesar la imagen');
+        } finally {
+            setIsUploadingImage(false);
+        }
+        e.target.value = '';
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -154,6 +180,22 @@ export default function CategoriesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {filteredCategories.map(category => (
                         <div key={category.id} className="bg-card border border-border rounded-[2rem] p-8 shadow-sm hover:shadow-2xl transition-all group flex flex-col h-full bg-gradient-to-b from-card to-gray-50/30 dark:to-gray-900/10">
+                            {/* Image Header */}
+                            <div className="relative h-48 w-full rounded-2xl overflow-hidden mb-6 bg-gray-100 dark:bg-gray-950 border border-border">
+                                {category.image ? (
+                                    <img 
+                                        src={category.image} 
+                                        alt={category.name} 
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                    />
+                                ) : (
+                                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 text-xs font-semibold bg-gray-50 dark:bg-gray-900">
+                                        <span className="text-3xl mb-2">🖼️</span>
+                                        Sin imagen asignada
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="mb-6">
                                 <div className="flex justify-between items-start mb-4">
                                     <h3 className="font-black text-2xl text-foreground group-hover:text-blue-600 transition-colors uppercase tracking-tight">
@@ -241,6 +283,46 @@ export default function CategoriesPage() {
                                     className="w-full px-5 py-3 bg-input border-border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-foreground"
                                 />
                             </div>
+
+                            {(modalMode === 'create' || modalMode === 'edit') && (
+                                <div>
+                                    <label className="text-xs font-black uppercase tracking-widest text-gray-400 block mb-2">Imagen de la Categoría</label>
+                                    <div className="flex items-center gap-4">
+                                        {formData.image ? (
+                                            <div className="relative w-24 h-24 rounded-2xl overflow-hidden border border-border group shrink-0">
+                                                <img src={formData.image} alt="Vista previa" className="w-full h-full object-cover" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, image: '' })}
+                                                    className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-black uppercase tracking-widest transition-opacity"
+                                                >
+                                                    Eliminar
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-border flex items-center justify-center text-gray-400 text-2xl font-bold bg-gray-50/50 dark:bg-gray-800/50 shrink-0">
+                                                🖼️
+                                            </div>
+                                        )}
+                                        <div className="flex-1">
+                                            <input 
+                                                type="file" 
+                                                accept="image/*"
+                                                onChange={handleImageChange}
+                                                className="hidden" 
+                                                id="category-image-upload" 
+                                            />
+                                            <label 
+                                                htmlFor="category-image-upload"
+                                                className="inline-flex px-4 py-2.5 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded-xl font-bold text-[10px] uppercase tracking-widest cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/50 transition border border-blue-100 dark:border-blue-900"
+                                            >
+                                                {isUploadingImage ? 'Procesando...' : 'Seleccionar Imagen'}
+                                            </label>
+                                            <p className="text-[10px] text-gray-400 font-medium mt-2 leading-relaxed">Formatos recomendados: JPG, PNG, WebP. <br/>Tamaño máximo recomendado: 5MB.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="flex gap-4 pt-4">
                                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-2xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition">Cancelar</button>
