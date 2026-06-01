@@ -5,7 +5,7 @@ import { createCoupon, updateCoupon, deleteCoupon } from '@/app/actions/coupons'
 
 const EMPTY_FORM = {
     code: '',
-    discountType: 'PERCENTAGE' as 'PERCENTAGE' | 'FIXED' | 'FREE_SHIPPING',
+    discountType: 'PERCENTAGE' as 'PERCENTAGE' | 'FIXED' | 'FREE_SHIPPING' | 'PERCENTAGE_FREE_SHIPPING' | 'FIXED_FREE_SHIPPING',
     discountValue: '',
     minPurchase: '',
     maxUses: '',
@@ -157,9 +157,16 @@ export default function CouponsClient({ initialCoupons }: { initialCoupons: any[
                                         </td>
                                         <td className="px-4 py-4">
                                             <span className="font-black text-emerald-600 text-base">
-                                                {c.discountType === 'PERCENTAGE' ? `${c.discountValue}%` : c.discountType === 'FREE_SHIPPING' ? '🚚 Envío gratis' : `$${c.discountValue.toFixed(2)}`}
+                                                {c.discountType === 'PERCENTAGE' || c.discountType === 'PERCENTAGE_FREE_SHIPPING' ? `${c.discountValue}%` : c.discountType === 'FREE_SHIPPING' ? '🚚 Envío gratis' : `$${c.discountValue.toFixed(2)}`}
+                                                {(c.discountType === 'PERCENTAGE_FREE_SHIPPING' || c.discountType === 'FIXED_FREE_SHIPPING') && ' + 🚚'}
                                             </span>
-                                            <div className="text-[10px] text-gray-400 mt-0.5">{c.discountType === 'PERCENTAGE' ? 'Porcentaje' : c.discountType === 'FREE_SHIPPING' ? 'Envío gratis' : 'Monto fijo'}</div>
+                                            <div className="text-[10px] text-gray-400 mt-0.5">
+                                                {c.discountType === 'PERCENTAGE' ? 'Porcentaje' : 
+                                                 c.discountType === 'FREE_SHIPPING' ? 'Envío gratis' : 
+                                                 c.discountType === 'PERCENTAGE_FREE_SHIPPING' ? 'Porcentaje + Envío' :
+                                                 c.discountType === 'FIXED_FREE_SHIPPING' ? 'Monto fijo + Envío' : 
+                                                 'Monto fijo'}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-4 text-sm font-bold text-foreground">
                                             {c.minPurchase > 0 ? `$${c.minPurchase.toFixed(2)}` : '—'}
@@ -240,22 +247,24 @@ export default function CouponsClient({ initialCoupons }: { initialCoupons: any[
                                         <option value="PERCENTAGE">% Porcentaje</option>
                                         <option value="FIXED">$ Monto fijo</option>
                                         <option value="FREE_SHIPPING">🚚 Envío gratis</option>
+                                        <option value="PERCENTAGE_FREE_SHIPPING">% Porcentaje + 🚚 Envío gratis</option>
+                                        <option value="FIXED_FREE_SHIPPING">$ Monto fijo + 🚚 Envío gratis</option>
                                     </select>
                                 </div>
                                 {form.discountType !== 'FREE_SHIPPING' && (
                                 <div>
                                     <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-1.5">
-                                        {form.discountType === 'PERCENTAGE' ? 'Porcentaje (%)' : 'Monto ($)'} *
+                                        {form.discountType === 'PERCENTAGE' || form.discountType === 'PERCENTAGE_FREE_SHIPPING' ? 'Porcentaje (%)' : 'Monto ($)'} *
                                     </label>
                                     <input
                                         type="number"
                                         value={form.discountValue}
                                         onChange={e => setForm(f => ({ ...f, discountValue: e.target.value }))}
                                         min="0.01"
-                                        max={form.discountType === 'PERCENTAGE' ? '100' : undefined}
+                                        max={form.discountType === 'PERCENTAGE' || form.discountType === 'PERCENTAGE_FREE_SHIPPING' ? '100' : undefined}
                                         step="0.01"
                                         required
-                                        placeholder={form.discountType === 'PERCENTAGE' ? '20' : '50.00'}
+                                        placeholder={form.discountType === 'PERCENTAGE' || form.discountType === 'PERCENTAGE_FREE_SHIPPING' ? '20' : '50.00'}
                                         className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>

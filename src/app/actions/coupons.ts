@@ -17,7 +17,7 @@ export async function getSellerCoupons() {
 // ── SELLER: crear cupón ─────────────────────────────────────────────────────
 export async function createCoupon(data: {
     code: string;
-    discountType: 'PERCENTAGE' | 'FIXED' | 'FREE_SHIPPING';
+    discountType: 'PERCENTAGE' | 'FIXED' | 'FREE_SHIPPING' | 'PERCENTAGE_FREE_SHIPPING' | 'FIXED_FREE_SHIPPING';
     discountValue: number;
     minPurchase?: number;
     maxUses?: number | null;
@@ -33,7 +33,7 @@ export async function createCoupon(data: {
     if (!code) return { error: 'El código es requerido' };
     if (data.discountType !== 'FREE_SHIPPING' && data.discountValue <= 0)
         return { error: 'El descuento debe ser mayor a 0' };
-    if (data.discountType === 'PERCENTAGE' && data.discountValue > 100)
+    if ((data.discountType === 'PERCENTAGE' || data.discountType === 'PERCENTAGE_FREE_SHIPPING') && data.discountValue > 100)
         return { error: 'El porcentaje no puede ser mayor a 100' };
     if (data.discountType === 'FREE_SHIPPING') data.discountValue = 0;
 
@@ -63,7 +63,7 @@ export async function createCoupon(data: {
 // ── SELLER: actualizar cupón ────────────────────────────────────────────────
 export async function updateCoupon(id: string, data: {
     code?: string;
-    discountType?: 'PERCENTAGE' | 'FIXED' | 'FREE_SHIPPING';
+    discountType?: 'PERCENTAGE' | 'FIXED' | 'FREE_SHIPPING' | 'PERCENTAGE_FREE_SHIPPING' | 'FIXED_FREE_SHIPPING';
     discountValue?: number;
     minPurchase?: number;
     maxUses?: number | null;
@@ -152,6 +152,8 @@ export async function validateCoupon(code: string, sellerId: string, subtotal: n
         }
     }
 
+    const isFreeShipping = ['FREE_SHIPPING', 'PERCENTAGE_FREE_SHIPPING', 'FIXED_FREE_SHIPPING'].includes(coupon.discountType);
+
     if (coupon.discountType === 'FREE_SHIPPING') {
         return {
             success: true,
@@ -166,8 +168,8 @@ export async function validateCoupon(code: string, sellerId: string, subtotal: n
         };
     }
 
-    const discountAmount =
-        coupon.discountType === 'PERCENTAGE'
+    const isPercentage = coupon.discountType === 'PERCENTAGE' || coupon.discountType === 'PERCENTAGE_FREE_SHIPPING';
+    const discountAmount = isPercentage
             ? Math.min(subtotal * (coupon.discountValue / 100), subtotal)
             : Math.min(coupon.discountValue, subtotal);
 
@@ -179,7 +181,7 @@ export async function validateCoupon(code: string, sellerId: string, subtotal: n
             discountType: coupon.discountType,
             discountValue: coupon.discountValue,
             discountAmount,
-            freeShipping: false,
+            freeShipping: isFreeShipping,
         },
     };
 }

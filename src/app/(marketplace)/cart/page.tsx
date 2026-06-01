@@ -311,8 +311,11 @@ export default function CartPage() {
 
     const hasFreeShippingCoupon = Array.from(appliedCoupons.values()).some((c: any) => c.freeShipping);
     const totalCouponSavings = Array.from(appliedCoupons.values()).reduce((s, c: any) => {
-        if (c.freeShipping) return s + (selectedRate?.totalPrice || 0);
-        return s + c.discountAmount;
+        let savings = c.discountAmount || 0;
+        if (c.freeShipping) {
+            savings += (selectedRate?.totalPrice || 0);
+        }
+        return s + savings;
     }, 0);
 
     // Total final con envío
@@ -730,8 +733,15 @@ export default function CartPage() {
                                                     <div>
                                                         <p className="text-xs font-black text-green-700 dark:text-green-300 font-mono tracking-wider">{applied.code}</p>
                                                         <p className="text-[10px] text-green-600 font-bold">
-                                                            -{applied.discountType === 'PERCENTAGE' ? `${applied.discountValue}%` : `$${applied.discountValue.toFixed(2)}`}
-                                                            {' '}= -${applied.discountAmount.toFixed(2)}
+                                                            {applied.discountType === 'FREE_SHIPPING' ? (
+                                                                '🚚 Envío gratis'
+                                                            ) : (
+                                                                <>
+                                                                    -{applied.discountType === 'PERCENTAGE' || applied.discountType === 'PERCENTAGE_FREE_SHIPPING' ? `${applied.discountValue}%` : `$${applied.discountValue.toFixed(2)}`}
+                                                                    {' '}= -${applied.discountAmount.toFixed(2)}
+                                                                    {applied.freeShipping && ' + 🚚 Envío gratis'}
+                                                                </>
+                                                            )}
                                                         </p>
                                                     </div>
                                                     <button onClick={() => handleRemoveCoupon(sellerId)} className="text-green-400 hover:text-red-500 transition-colors text-xs font-bold px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">✕ Quitar</button>
