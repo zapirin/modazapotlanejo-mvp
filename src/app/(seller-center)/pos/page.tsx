@@ -1374,59 +1374,80 @@ function POSContent() {
     };
 
     const handleOpenSession = async () => {
+        if (isProcessing) return;
         const amount = parseFloat(cashAmount);
         if (isNaN(amount) || amount < 0) {
             toast.error("Ingrese un monto válido");
             return;
         }
-        const res = isTestModeActive() ? fakeSession(selectedLocationId) : await openCashSession(amount, selectedLocationId || undefined);
-        if (res.success) {
-            setCurrentSession(res.session);
-            setShowOpenSessionModal(false);
-            setCashAmount('');
-        } else {
-            toast.error(res.error || "No se pudo abrir la caja.");
+        setIsProcessing(true);
+        try {
+            const res = isTestModeActive() ? fakeSession(selectedLocationId) : await openCashSession(amount, selectedLocationId || undefined);
+            if (res.success) {
+                setCurrentSession(res.session);
+                setShowOpenSessionModal(false);
+                setCashAmount('');
+            } else {
+                toast.error(res.error || "No se pudo abrir la caja.");
+            }
+        } finally {
+            setIsProcessing(false);
         }
     };
 
     const handleAddMovement = async () => {
-        if (!currentSession) return;
+        if (!currentSession || isProcessing) return;
         const amount = parseFloat(cashAmount);
         if (isNaN(amount) || amount <= 0 || !cashReason) {
             toast.error("Complete los datos correctamente");
             return;
         }
-        const res = isTestModeActive() ? fakeOk() : await addCashMovement(currentSession.id, movementType, amount, cashReason);
-        if (res.success) {
-            setShowMovementModal(false);
-            setCashAmount('');
-            setCashReason('');
-            // Reload session (skip in test mode — no real session in DB)
-            if (!isTestModeActive()) {
-                const updated = await getCurrentCashSession(currentSession.locationId || undefined);
-                setCurrentSession(updated);
+        const confirmMsg = movementType === 'IN'
+            ? `¿Confirmas registrar un INGRESO de $${amount.toFixed(2)}?`
+            : `¿Confirmas registrar un EGRESO de $${amount.toFixed(2)}?`;
+        if (!confirm(confirmMsg)) return;
+        setIsProcessing(true);
+        try {
+            const res = isTestModeActive() ? fakeOk() : await addCashMovement(currentSession.id, movementType, amount, cashReason);
+            if (res.success) {
+                setShowMovementModal(false);
+                setCashAmount('');
+                setCashReason('');
+                // Reload session (skip in test mode — no real session in DB)
+                if (!isTestModeActive()) {
+                    const updated = await getCurrentCashSession(currentSession.locationId || undefined);
+                    setCurrentSession(updated);
+                }
+                toast.success("Movimiento registrado");
+            } else {
+                toast.error(res.error || "No se pudo registrar el movimiento.");
             }
-            toast.success("Movimiento registrado");
-        } else {
-            toast.error(res.error || "No se pudo registrar el movimiento.");
+        } finally {
+            setIsProcessing(false);
         }
     };
 
     const handleCloseSession = async () => {
-        if (!currentSession) return;
+        if (!currentSession || isProcessing) return;
         const amount = parseFloat(cashAmount);
         if (isNaN(amount) || amount < 0) {
             toast.error("Ingrese el conteo real en caja");
             return;
         }
-        const res = isTestModeActive() ? fakeOk() : await closeCashSession(currentSession.id, amount);
-        if (res.success) {
-            setCurrentSession(null);
-            setShowZReportModal(false);
-            setCashAmount('');
-            toast.success("Caja cerrada correctamente. Corte Z generado.");
-        } else {
-            toast.error(res.error || "No se pudo cerrar la caja.");
+        if (!confirm('¿Estás seguro de cerrar la caja y generar el Corte Z? Esta acción no se puede deshacer.')) return;
+        setIsProcessing(true);
+        try {
+            const res = isTestModeActive() ? fakeOk() : await closeCashSession(currentSession.id, amount);
+            if (res.success) {
+                setCurrentSession(null);
+                setShowZReportModal(false);
+                setCashAmount('');
+                toast.success("Caja cerrada correctamente. Corte Z generado.");
+            } else {
+                toast.error(res.error || "No se pudo cerrar la caja.");
+            }
+        } finally {
+            setIsProcessing(false);
         }
     };
 
@@ -3521,9 +3542,10 @@ function POSContent() {
                             <div className="p-6 border-t border-border bg-gray-50/50 dark:bg-gray-900/50 flex flex-col gap-3">
                                 <button
                                     type="submit"
-                                    className={`w-full px-4 py-3 text-white shadow-lg rounded-xl transition font-black uppercase tracking-wider ${movementType === 'IN' ? 'bg-green-600 hover:bg-green-700 shadow-green-500/30' : 'bg-red-600 hover:bg-red-700 shadow-red-500/30'}`}
+                                    disabled={isProcessing}
+                                    className={`w-full px-4 py-3 text-white shadow-lg rounded-xl transition font-black uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed ${movementType === 'IN' ? 'bg-green-600 hover:bg-green-700 shadow-green-500/30' : 'bg-red-600 hover:bg-red-700 shadow-red-500/30'}`}
                                 >
-                                    Registrar {movementType === 'IN' ? 'Ingreso' : 'Egreso'}
+                                    {isProcessing ? 'Registrando...' : `Registrar ${movementType === 'IN' ? 'Ingreso' : 'Egreso'}`}
                                 </button>
                             </div>
                         </form>
@@ -3701,14 +3723,39 @@ function POSContent() {
                                                     );
                                                 })}
                                             </tbody>
-                                            <tfoot className="bg-red-50 dark:bg-red-900/20 border-t-2 border-red-200 dark:border-red-800">
-                                                <tr>
-                                                    <td colSpan={2} className="px-3 py-3 font-black text-sm text-red-700 dark:text-red-300">Total Contado</td>
-                                                    <td className="px-3 py-3 text-right font-black text-lg text-red-700 dark:text-red-300">
-                                                        ${calcDenTotal(denCounts, denominations).toFixed(2)}
-                                                    </td>
-                                                </tr>
-                                            </tfoot>
+                                            {(() => {
+                                                const allSalesZ = currentSession.sales || [];
+                                                const completedZ = allSalesZ.filter((s: any) => s.status === 'COMPLETED');
+                                                const byMethodZ: Record<string, number> = {};
+                                                completedZ.forEach((s: any) => {
+                                                    const split = s.paymentSplit ? (() => { try { return JSON.parse(s.paymentSplit); } catch { return null; } })() : null;
+                                                    if (split?.length > 0) {
+                                                        split.forEach((p: any) => { byMethodZ[p.method] = (byMethodZ[p.method] || 0) + p.amount; });
+                                                    } else {
+                                                        const name = s.paymentMethod?.name || 'Efectivo';
+                                                        byMethodZ[name] = (byMethodZ[name] || 0) + s.total;
+                                                    }
+                                                });
+                                                const cashSalesZ = byMethodZ['Efectivo'] || 0;
+                                                const movInZ = (currentSession.movements || []).filter((m: any) => m.type === 'IN').reduce((a: number, b: any) => a + b.amount, 0);
+                                                const movOutZ = (currentSession.movements || []).filter((m: any) => m.type === 'OUT').reduce((a: number, b: any) => a + b.amount, 0);
+                                                const expectedZ = currentSession.openingBalance + cashSalesZ + movInZ - movOutZ;
+                                                const countedZ = parseFloat(cashAmount) || 0;
+                                                const diffZ = countedZ - expectedZ;
+                                                const isBalanced = diffZ === 0 && cashAmount;
+                                                const bgClass = isBalanced ? 'bg-green-50 dark:bg-green-900/20 border-t-2 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border-t-2 border-red-200 dark:border-red-800';
+                                                const textClass = isBalanced ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300';
+                                                return (
+                                                    <tfoot className={bgClass}>
+                                                        <tr>
+                                                            <td colSpan={2} className={`px-3 py-3 font-black text-sm ${textClass}`}>Total Contado</td>
+                                                            <td className={`px-3 py-3 text-right font-black text-lg ${textClass}`}>
+                                                                ${calcDenTotal(denCounts, denominations).toFixed(2)}
+                                                            </td>
+                                                        </tr>
+                                                    </tfoot>
+                                                );
+                                            })()}
                                         </table>
                                     </div>
                                 ) : null}
@@ -3731,9 +3778,10 @@ function POSContent() {
                         <div className="p-6 border-t border-border bg-gray-50/50 dark:bg-gray-900/50 flex gap-3">
                             <button
                                 onClick={handleCloseSession}
-                                className="w-full px-4 py-4 bg-foreground text-background dark:bg-white dark:text-black hover:-translate-y-1 shadow-xl rounded-xl transition-all font-black uppercase tracking-wider relative"
+                                disabled={isProcessing}
+                                className="w-full px-4 py-4 bg-foreground text-background dark:bg-white dark:text-black hover:-translate-y-1 shadow-xl rounded-xl transition-all font-black uppercase tracking-wider relative disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                             >
-                                Confirmar Arqueo y Cerrar Caja
+                                {isProcessing ? 'Cerrando caja...' : 'Confirmar Arqueo y Cerrar Caja'}
                             </button>
                         </div>
                     </div>
