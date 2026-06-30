@@ -1181,8 +1181,22 @@ function POSContent() {
                 notes: noteOverride || null,
                 soldBySalespersonId: selectedSalesperson?.id || null,
             };
+            const cashAbono = partialPayments
+                .filter(p => p.method.toLowerCase().includes('efectivo'))
+                .reduce((acc, p) => acc + p.amount, 0);
             const res = isTestModeActive() ? fakeSaleResult() : await suspendSale(suspendedData);
             if (res.success) {
+                if (cashAbono > 0 && currentSession && !isTestModeActive()) {
+                    try {
+                        const movRes = await addCashMovement(currentSession.id, 'IN', cashAbono, `Abono en efectivo - venta suspendida${res.receiptNumber ? ' #' + res.receiptNumber : ''}`);
+                        if (movRes.success) {
+                            const updated = await getCurrentCashSession(currentSession.locationId || undefined);
+                            setCurrentSession(updated);
+                        }
+                    } catch (movErr) {
+                        console.error(movErr);
+                    }
+                }
                 toast.success("Venta suspendida exitosamente.");
                 clearCartStorage();
                 setCart([]);
