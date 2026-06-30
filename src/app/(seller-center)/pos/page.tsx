@@ -328,17 +328,39 @@ function POSContent() {
         });
     }, [cart, selectedPaymentMethod, receivedAmount, globalDiscount, selectedTier]);
 
-    // Hook de conectividad — detecta online/offline y sincroniza automáticamente
+    // Hook de conectividad — detecta online/offline y sincroniza automáticamente.
+    // navigator.onLine solo ve la red local; si se cae el internet pero el router
+    // sigue encendido queda en true y el POS se congela esperando al servidor.
+    // Por eso confirmamos con un ping real a /api/health.
     useEffect(() => {
-        const updateOnline = () => setIsOnline(navigator.onLine);
-        window.addEventListener('online', updateOnline);
-        window.addEventListener('offline', updateOnline);
-        setIsOnline(navigator.onLine);
+        let cancelled = false;
+        const checkReachability = async () => {
+            if (!navigator.onLine) {
+                if (!cancelled) setIsOnline(false);
+                return;
+            }
+            try {
+                const controller = new AbortController();
+                const t = setTimeout(() => controller.abort(), 3500);
+                const res = await fetch('/api/health', { cache: 'no-store', signal: controller.signal });
+                clearTimeout(t);
+                if (!cancelled) setIsOnline(res.ok);
+            } catch {
+                if (!cancelled) setIsOnline(false);
+            }
+        };
+        const goOffline = () => setIsOnline(false);
+        window.addEventListener('online', checkReachability);
+        window.addEventListener('offline', goOffline);
+        checkReachability();
+        const interval = setInterval(checkReachability, 15000);
         // Contar ventas pendientes al cargar
         countPendingSales().then(setPendingCount).catch(() => { });
         return () => {
-            window.removeEventListener('online', updateOnline);
-            window.removeEventListener('offline', updateOnline);
+            cancelled = true;
+            clearInterval(interval);
+            window.removeEventListener('online', checkReachability);
+            window.removeEventListener('offline', goOffline);
         };
     }, []);
 
@@ -786,7 +808,15 @@ function POSContent() {
             return;
         }
         try {
-            const results = await searchProducts(searchQuery);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            const results = await Promise.race([
+                searchProducts(searchQuery),
+                new Promise((_, reject) => {
+                    controller.signal.addEventListener('abort', () => reject(new Error('SEARCH_TIMEOUT')));
+                }),
+            ]) as Awaited<ReturnType<typeof searchProducts>>;
+            clearTimeout(timeoutId);
             setSearchResults(results);
         } catch (error) {
             console.error("Error searching in POS, fallback a cache offline:", error);
@@ -1075,7 +1105,37 @@ function POSContent() {
                     loyaltyRedeemPoints: saleData.loyaltyRedeemPoints
                 });
             } else {
-                res = await processSale(saleData);
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 9000);
+                    res = await Promise.race([
+                        processSale(saleData),
+                        new Promise((_, reject) => {
+                            controller.signal.addEventListener('abort', () => reject(new Error('POS_TIMEOUT')));
+                        }),
+                    ]) as Awaited<ReturnType<typeof processSale>>;
+                    clearTimeout(timeoutId);
+                } catch (timeoutErr) {
+                    // El servidor no respondió a tiempo (internet caído / WAN abajo
+                    // aunque el router siga encendido): guardamos la venta localmente
+                    // para no congelar el POS y la sincronizamos al volver la conexión.
+                    setIsOnline(false);
+                    const localId = await savePendingSale({ data: saleData });
+                    const newCount = await countPendingSales();
+                    setPendingCount(newCount);
+                    toast.warning(`📴 Sin conexión — venta guardada localmente (${newCount} pendiente${newCount > 1 ? 's' : ''})`);
+                    clearCartStorage();
+                    setCart([]);
+                    setSelectedClient(null);
+                    setSelectedTier(null);
+                    setGlobalDiscount(null);
+                    setReceivedAmount('');
+                    setPartialPayments([]);
+                    const efectivoTimeout = paymentMethods.find((m: any) => m.name.toLowerCase().includes('efectivo'));
+                    setSelectedPaymentMethod(efectivoTimeout ? efectivoTimeout.name : (paymentMethods[0]?.name || 'Efectivo'));
+                    setIsProcessing(false);
+                    return;
+                }
             }
 
             if (res.success) {
