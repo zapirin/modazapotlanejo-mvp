@@ -422,7 +422,9 @@ export default function CatalogClient({
                                         <h4 className="font-bold text-sm tracking-tight group-hover:text-blue-600 transition-colors uppercase">{product.name}</h4>
                                     </Link>
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        {(isLoggedIn || showPricesWithoutLogin) ? (
+                                        {product.disableRetailPrice && !(isLoggedIn && isWholesale) ? (
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-purple-600">Exclusivo para mayoristas</p>
+                                        ) : (isLoggedIn || showPricesWithoutLogin) ? (
                                             isLoggedIn && isWholesale && product.sellByPackage && Array.isArray(product.wholesaleComposition) && product.wholesaleComposition.length > 0 ? (
                                                 <div className="flex flex-col gap-0.5">
                                                     {product.wholesaleComposition.slice(0, 2).map((method: any, i: number) => {

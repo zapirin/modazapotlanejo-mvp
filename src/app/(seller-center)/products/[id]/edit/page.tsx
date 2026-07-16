@@ -65,6 +65,7 @@ export default function EditProductPage() {
         wholesalePrice: '',
         cost: '',
         sellByPackage: false,
+        disableRetailPrice: false,
         packageSize: '6',
         isOnline: true,
         isPOS: true,
@@ -182,6 +183,7 @@ export default function EditProductPage() {
                     wholesalePrice: prod.wholesalePrice?.toString() || '',
                     cost: prod.cost?.toString() || '',
                     sellByPackage: prod.sellByPackage || false,
+                    disableRetailPrice: prod.disableRetailPrice || false,
                     packageSize: prod.packageSize?.toString() || '6',
                     isOnline: prod.isOnline ?? true,
                     isPOS: prod.isPOS ?? true,
@@ -706,6 +708,16 @@ export default function EditProductPage() {
                                             onChange={(e) => setFormData({ ...formData, basePrice: e.target.value })}
                                         />
                                     </div>
+                                    <label className={`flex items-center gap-2 text-xs font-bold mt-2 ${formData.sellByPackage ? 'cursor-pointer text-blue-700 dark:text-blue-400' : 'cursor-not-allowed text-gray-400'}`} title={!formData.sellByPackage ? 'Activa "Venta por Corridas (Mayoreo)" para habilitar esta opción' : ''}>
+                                        <input
+                                            type="checkbox"
+                                            className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 disabled:opacity-40"
+                                            disabled={!formData.sellByPackage}
+                                            checked={formData.disableRetailPrice}
+                                            onChange={(e) => setFormData({ ...formData, disableRetailPrice: e.target.checked })}
+                                        />
+                                        Solo vender por mayoreo (ocultar precio menudeo)
+                                    </label>
                                 </div>
 
                             </div>
@@ -721,7 +733,7 @@ export default function EditProductPage() {
                                     </div>
                                     <button
                                         type="button"
-                                        onClick={() => setFormData({ ...formData, sellByPackage: !formData.sellByPackage })}
+                                        onClick={() => setFormData({ ...formData, sellByPackage: !formData.sellByPackage, disableRetailPrice: !formData.sellByPackage ? formData.disableRetailPrice : false })}
                                         className={`w-14 h-8 rounded-full transition-all relative ${formData.sellByPackage ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-700'}`}
                                     >
                                         <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${formData.sellByPackage ? 'left-7' : 'left-1'}`}></div>

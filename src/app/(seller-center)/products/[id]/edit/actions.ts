@@ -38,6 +38,7 @@ export async function updateProduct(productId: string, data: any) {
                     cost: costPrice,
                     wholesaleComposition: data.wholesaleComposition ? JSON.parse(JSON.stringify(data.wholesaleComposition)) : null,
                     sellByPackage: data.sellByPackage || false,
+                    disableRetailPrice: data.disableRetailPrice || false,
                     packageSize: pSize,
                     variantOptions: data.variantOptions ? JSON.parse(JSON.stringify(data.variantOptions)) : null,
                     brandId: data.brandId || null,

@@ -53,6 +53,7 @@ export async function createProduct(data: {
     cost?: string;
     wholesaleComposition?: any;
     sellByPackage?: boolean;
+    disableRetailPrice?: boolean;
     packageSize?: string;
     isOnline?: boolean;
     isPOS?: boolean;
@@ -151,6 +152,7 @@ export async function createProduct(data: {
                 cost: costPrice,
                 wholesaleComposition: data.wholesaleComposition ? JSON.parse(JSON.stringify(data.wholesaleComposition)) : Prisma.JsonNull,
                 sellByPackage: data.sellByPackage || false,
+                disableRetailPrice: data.disableRetailPrice || false,
                 packageSize: pSize,
 
                 variantOptions: data.variantOptions ? JSON.parse(JSON.stringify(data.variantOptions)) : Prisma.JsonNull,
@@ -206,6 +208,7 @@ export async function duplicateProduct(productId: string) {
                 wholesalePrice: original.wholesalePrice,
                 cost: original.cost,
                 sellByPackage: original.sellByPackage,
+                disableRetailPrice: original.disableRetailPrice,
                 packageSize: original.packageSize,
                 wholesaleComposition: original.wholesaleComposition,
                 brandId: original.brandId,

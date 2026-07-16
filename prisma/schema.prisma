@@ -259,6 +259,7 @@ model Product {
   wholesalePrice       Float?
   cost                 Float?
   sellByPackage        Boolean      @default(false)
+  disableRetailPrice   Boolean      @default(false)
   packageSize          Int?
   wholesaleComposition Json?
   brandId              String?
