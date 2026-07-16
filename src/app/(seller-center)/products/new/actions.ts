@@ -1894,10 +1894,10 @@ export async function updateSaleDashboard(saleId: string, data: {
                     });
 
                     // Also revert inventoryLevel
-                    if (oldSale.locationId) {
+                    if (sale.locationId) {
                         await tx.inventoryLevel.upsert({
-                            where: { variantId_locationId: { variantId: oldItem.variantId, locationId: oldSale.locationId } },
-                            create: { variantId: oldItem.variantId, locationId: oldSale.locationId, stock: oldItem.quantity },
+                            where: { variantId_locationId: { variantId: oldItem.variantId, locationId: sale.locationId } },
+                            create: { variantId: oldItem.variantId, locationId: sale.locationId, stock: oldItem.quantity },
                             update: { stock: { increment: oldItem.quantity } }
                         });
                     }
@@ -1927,10 +1927,10 @@ export async function updateSaleDashboard(saleId: string, data: {
                     });
 
                     // Also decrement inventoryLevel for the sale location
-                    if (oldSale.locationId) {
+                    if (sale.locationId) {
                         await tx.inventoryLevel.upsert({
-                            where: { variantId_locationId: { variantId: item.variantId, locationId: oldSale.locationId } },
-                            create: { variantId: item.variantId, locationId: oldSale.locationId, stock: -item.quantity },
+                            where: { variantId_locationId: { variantId: item.variantId, locationId: sale.locationId } },
+                            create: { variantId: item.variantId, locationId: sale.locationId, stock: -item.quantity },
                             update: { stock: { decrement: item.quantity } }
                         });
                     }
