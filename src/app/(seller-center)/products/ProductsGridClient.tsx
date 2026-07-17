@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import ProductCardButtons from './ProductCardButtons';
 import GenerateSKUsButton from './GenerateSKUsButton';
@@ -23,6 +24,20 @@ export default function ProductsGridClient({ products, categories, brands, suppl
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [historyProduct, setHistoryProduct] = useState<{ id: string; name: string } | null>(null);
 
+    // Ordenamiento (cliente + persistencia en URL vía ?sort=)
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const pathname = usePathname();
+    const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'recent');
+    const handleSortChange = (value: string) => {
+        setSortBy(value);
+        const params = new URLSearchParams(Array.from(searchParams.entries()));
+        if (value === 'recent') params.delete('sort');
+        else params.set('sort', value);
+        const qs = params.toString();
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    };
+
     const safeCategories = categories || [];
     const safeBrands = brands || [];
     const safeSuppliers = suppliers || [];
@@ -42,6 +57,21 @@ export default function ProductsGridClient({ products, categories, brands, suppl
         const matchSupplier = selectedSupplier === '' || p.supplierId === selectedSupplier;
         return matchTab && matchSearch && matchCategory && matchBrand && matchSupplier;
     });
+
+    // Aplica el orden seleccionado sobre los productos ya filtrados.
+    // 'recent' = orden por defecto (createdAt desc que ya viene del backend).
+    const sortedProducts = useMemo(() => {
+        const priceOf = (p: any) => (p.promotionalPrice ?? p.price) ?? 0;
+        const stockOf = (p: any) => p.variants ? p.variants.reduce((acc: number, v: any) => acc + (v.stock || 0), 0) : 0;
+        const arr = [...filteredProducts];
+        switch (sortBy) {
+            case 'price_asc': return arr.sort((a, b) => priceOf(a) - priceOf(b));
+            case 'price_desc': return arr.sort((a, b) => priceOf(b) - priceOf(a));
+            case 'stock_asc': return arr.sort((a, b) => stockOf(a) - stockOf(b));
+            case 'stock_desc': return arr.sort((a, b) => stockOf(b) - stockOf(a));
+            default: return filteredProducts;
+        }
+    }, [filteredProducts, sortBy]);
 
     const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.checked) {
@@ -108,6 +138,18 @@ export default function ProductsGridClient({ products, categories, brands, suppl
                             <button onClick={() => setSearchQuery('')} className="absolute right-4 top-3 text-gray-400 hover:text-gray-600 font-bold text-lg">×</button>
                         )}
                     </div>
+                    <select
+                        value={sortBy}
+                        onChange={(e) => handleSortChange(e.target.value)}
+                        title="Ordenar productos"
+                        className="px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 font-bold text-sm outline-none transition-all hover:bg-gray-100 focus:ring-2 focus:ring-blue-500/50 cursor-pointer"
+                    >
+                        <option value="recent">↕ Más recientes</option>
+                        <option value="price_asc">Precio: menor a mayor</option>
+                        <option value="price_desc">Precio: mayor a menor</option>
+                        <option value="stock_asc">Cantidad: menor a mayor</option>
+                        <option value="stock_desc">Cantidad: mayor a menor</option>
+                    </select>
                     <button
                         onClick={() => setIsFiltersOpen(!isFiltersOpen)}
                         className={`px-5 py-3 rounded-xl border font-bold text-sm transition-all flex items-center gap-2 ${isFiltersOpen ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}
@@ -251,7 +293,7 @@ export default function ProductsGridClient({ products, categories, brands, suppl
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {filteredProducts.map((product: any) => {
+                                {sortedProducts.map((product: any) => {
                                     const isSelected = selectedIds.includes(product.id);
                                     const isDraft = !product.isOnline && !product.isPOS;
                                     const stockSum = product.variants ? product.variants.reduce((acc: number, v: any) => acc + (v.stock || 0), 0) : 0;
@@ -362,7 +404,7 @@ export default function ProductsGridClient({ products, categories, brands, suppl
                         </div>
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {filteredProducts.map((product: any) => {
+                        {sortedProducts.map((product: any) => {
                             const isDraft = !product.isOnline && !product.isPOS;
                             const isSelected = selectedIds.includes(product.id);
                             
