@@ -116,7 +116,7 @@ export default function ProductDetailClient({
                 if (product.onlineStockLocationIds && product.onlineStockLocationIds.length > 0) {
                     const onlineStock = v.inventoryLevels
                         ?.filter((l: any) => product.onlineStockLocationIds.includes(l.locationId))
-                        ?.reduce((s: number, l: any) => s + (l.quantity || 0), 0) || 0;
+                        ?.reduce((s: number, l: any) => s + (l.stock || 0), 0) || 0;
                     return sum + onlineStock;
                 }
                 return sum + (v.stock || 0);

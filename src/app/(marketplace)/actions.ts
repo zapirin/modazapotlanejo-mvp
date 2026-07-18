@@ -121,7 +121,7 @@ export async function getProducts(filters: {
                             id: true, 
                             stock: true, 
                             price: true, 
-                            inventoryLevels: { select: { locationId: true, quantity: true, price: true } } 
+                            inventoryLevels: { select: { locationId: true, stock: true, price: true } } 
                         } 
                     },
                     // @ts-ignore
@@ -262,7 +262,7 @@ export async function getProductDetail(slugOrId: string) {
             variants: { 
                 orderBy: { createdAt: 'asc' },
                 include: {
-                    inventoryLevels: { select: { locationId: true, quantity: true, price: true } }
+                    inventoryLevels: { select: { locationId: true, stock: true, price: true } }
                 }
             },
             // @ts-ignore
@@ -502,7 +502,7 @@ export async function getRelatedProducts(categoryId: string, excludeId: string, 
                         id: true, 
                         stock: true, 
                         price: true,
-                        inventoryLevels: { select: { locationId: true, quantity: true, price: true } }
+                        inventoryLevels: { select: { locationId: true, stock: true, price: true } }
                     } 
                 },
                 // @ts-ignore
