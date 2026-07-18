@@ -61,8 +61,10 @@ export async function createProduct(data: {
     tagIds?: string[];
     // New Dynamic Variants
     variantOptions?: any;
-    variantsData?: { attributes: any; stock: number; color?: string; size?: string; inventoryLevels?: { locationId: string; quantity: number }[] }[];
+    variantsData?: { attributes: any; stock: number; color?: string; size?: string; price?: number | null; inventoryLevels?: { locationId: string; quantity: number; price?: number | null }[] }[];
     sku?: string | null;
+    onlinePriceLocationId?: string | null;
+    onlineStockLocationIds?: string[];
     // Legacy
     colors?: string[];
     sizes?: string[];
@@ -119,10 +121,12 @@ export async function createProduct(data: {
                 stock: v.stock || 0,
                 color: v.color || (v.attributes?.Color || v.attributes?.color || null),
                 size: v.size || (v.attributes?.Talla || v.attributes?.talla || v.attributes?.Size || v.attributes?.size || null),
+                price: v.price || null,
                 inventoryLevels: v.inventoryLevels && v.inventoryLevels.length > 0 ? {
                     create: v.inventoryLevels.map(lvl => ({
                         locationId: lvl.locationId,
-                        stock: lvl.quantity
+                        stock: lvl.quantity,
+                        price: lvl.price || null
                     }))
                 } : undefined,
             }));
@@ -164,6 +168,8 @@ export async function createProduct(data: {
 
                 isOnline: data.isOnline !== undefined ? data.isOnline : true,
                 isPOS: data.isPOS !== undefined ? data.isPOS : true,
+                onlinePriceLocationId: data.onlinePriceLocationId || null,
+                onlineStockLocationIds: data.onlineStockLocationIds || [],
 
                 sku: (data as any).sku || null,
                 images: data.images || [],
@@ -193,7 +199,11 @@ export async function duplicateProduct(productId: string) {
         const original = await (prisma.product as any).findUnique({
             where: { id: productId },
             include: {
-                variants: true,
+                variants: {
+                    include: {
+                        inventoryLevels: true
+                    }
+                },
                 tags: true,
             }
         });
@@ -219,6 +229,8 @@ export async function duplicateProduct(productId: string) {
                 isOnline: original.isOnline,
                 isPOS: original.isPOS,
                 isActive: original.isActive,
+                onlinePriceLocationId: original.onlinePriceLocationId,
+                onlineStockLocationIds: original.onlineStockLocationIds,
                 images: original.images || [],
                 sku: null,
                 variantOptions: original.variantOptions,
@@ -228,7 +240,15 @@ export async function duplicateProduct(productId: string) {
                         color: v.color,
                         size: v.size,
                         sku: null,
-                        stock: 0
+                        stock: 0,
+                        price: v.price,
+                        inventoryLevels: {
+                            create: (v.inventoryLevels || []).map((lvl: any) => ({
+                                locationId: lvl.locationId,
+                                stock: 0,
+                                price: lvl.price
+                            }))
+                        }
                     }))
                 },
                 tags: {
