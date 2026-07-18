@@ -6,6 +6,7 @@ import { Prisma } from '@/generated/client';
 import { getSessionUser } from '@/app/actions/auth';
 import { sendLowInventoryAlert, sendDigitalTicketEmail } from "@/lib/email/templates";
 import { earnPoints, redeemPoints, pointsToMXN, getProgram } from "@/lib/loyalty";
+import { postProductToSocialMedia } from "@/lib/socialMedia";
 
 // ---------------------------------------------------------------------------
 // HELPER: Resolver el sellerId efectivo para cajeros
@@ -184,6 +185,10 @@ export async function createProduct(data: {
         });
 
         console.log("Product created successfully:", product.id);
+
+        // Auto-publicación en redes sociales (solo Kalexa, best-effort, no bloquea)
+        postProductToSocialMedia(product).catch(console.error);
+
         revalidatePath("/inventory");
         revalidatePath("/pos");
         return { success: true, productId: product.id };
@@ -256,6 +261,9 @@ export async function duplicateProduct(productId: string) {
                 }
             }
         });
+
+        // Auto-publicación en redes sociales (solo Kalexa, best-effort, no bloquea)
+        postProductToSocialMedia(duplicated).catch(console.error);
 
         revalidatePath("/products");
         revalidatePath("/inventory");

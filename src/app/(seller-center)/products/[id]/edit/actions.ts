@@ -2,9 +2,12 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getSessionUser } from "@/app/actions/auth";
 
 export async function getProductForEdit(productId: string) {
     try {
+        const user = await getSessionUser();
+        if (!user) return null;
         const product = await prisma.product.findUnique({
             where: { id: productId },
             include: {
@@ -12,6 +15,18 @@ export async function getProductForEdit(productId: string) {
                 tags: true
             }
         });
+        if (!product) return null;
+        if (user.role !== 'ADMIN') {
+            let effectiveId = user.id;
+            if (user.role === 'CASHIER') {
+                const cashier = await (prisma.user as any).findUnique({
+                    where: { id: user.id },
+                    select: { managedBySellerId: true }
+                });
+                effectiveId = cashier?.managedBySellerId || user.id;
+            }
+            if (product.sellerId !== effectiveId) return null;
+        }
         return product;
     } catch (error) {
         console.error("Error fetching product for edit:", error);
@@ -21,6 +36,28 @@ export async function getProductForEdit(productId: string) {
 
 export async function updateProduct(productId: string, data: any) {
     try {
+        const user = await getSessionUser();
+        if (!user) return { success: false, error: "No autorizado" };
+
+        if (user.role !== 'ADMIN') {
+            const product = await prisma.product.findUnique({
+                where: { id: productId },
+                select: { sellerId: true }
+            });
+            if (!product) return { success: false, error: "Producto no encontrado" };
+            let effectiveId = user.id;
+            if (user.role === 'CASHIER') {
+                const cashier = await (prisma.user as any).findUnique({
+                    where: { id: user.id },
+                    select: { managedBySellerId: true }
+                });
+                effectiveId = cashier?.managedBySellerId || user.id;
+            }
+            if (product.sellerId !== effectiveId) {
+                return { success: false, error: "No tienes permiso para modificar este producto" };
+            }
+        }
+
         const price = parseFloat(data.basePrice);
         const wPrice = data.wholesalePrice ? parseFloat(data.wholesalePrice) : null;
         const costPrice = data.cost ? parseFloat(data.cost) : null;
@@ -47,6 +84,8 @@ export async function updateProduct(productId: string, data: any) {
                     subcategoryId: data.subcategoryId || null,
                     isOnline: data.isOnline !== undefined ? data.isOnline : true,
                     isPOS: data.isPOS !== undefined ? data.isPOS : true,
+                    onlinePriceLocationId: data.onlinePriceLocationId || null,
+                    onlineStockLocationIds: data.onlineStockLocationIds || [],
                     sku: data.sku || null,
                     images: data.images || [],
                     tags: data.tagIds ? {
@@ -78,32 +117,32 @@ export async function updateProduct(productId: string, data: any) {
                     if (existing) {
                         await tx.variant.update({
                             where: { id: existing.id },
-                            data: { stock: vData.stock, color, size }
+                            data: { stock: vData.stock, color, size, price: vData.price || null }
                         });
                         variantId = existing.id;
                         touchedVariantIds.add(existing.id);
                     } else {
                         const created = await tx.variant.create({
-                            data: { productId, attributes: attrs, stock: vData.stock, color, size }
+                            data: { productId, attributes: attrs, stock: vData.stock, color, size, price: vData.price || null }
                         });
                         variantId = created.id;
                         touchedVariantIds.add(created.id);
                     }
 
-                    // Guardar stock por sucursal si viene locationStock
-                    if (vData.locationStock && vData.locationStock.length > 0) {
-                        for (const level of vData.locationStock) {
-                            const existing = await tx.inventoryLevel.findFirst({
+                    // Guardar stock y precio por sucursal si viene locationStock
+                    if (vData.inventoryLevels && vData.inventoryLevels.length > 0) {
+                        for (const level of vData.inventoryLevels) {
+                            const existingLevel = await tx.inventoryLevel.findFirst({
                                 where: { variantId, locationId: level.locationId }
                             });
-                            if (existing) {
+                            if (existingLevel) {
                                 await tx.inventoryLevel.update({
-                                    where: { id: existing.id },
-                                    data: { stock: level.stock }
+                                    where: { id: existingLevel.id },
+                                    data: { stock: level.quantity, price: level.price || null }
                                 });
                             } else {
                                 await tx.inventoryLevel.create({
-                                    data: { id: "il-" + variantId + "-" + level.locationId, variantId, locationId: level.locationId, stock: level.stock, updatedAt: new Date() }
+                                    data: { id: "il-" + variantId + "-" + level.locationId, variantId, locationId: level.locationId, stock: level.quantity, price: level.price || null, updatedAt: new Date() }
                                 });
                             }
                         }
