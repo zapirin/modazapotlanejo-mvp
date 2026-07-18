@@ -111,8 +111,27 @@ export default function ProductDetailClient({
                 }
                 return true;
             })
-            .reduce((sum: number, v: any) => sum + (v.stock || 0), 0);
+            .reduce((sum: number, v: any) => {
+                // Si el producto restringe stock a ubicaciones específicas online
+                if (product.onlineStockLocationIds && product.onlineStockLocationIds.length > 0) {
+                    const onlineStock = v.inventoryLevels
+                        ?.filter((l: any) => product.onlineStockLocationIds.includes(l.locationId))
+                        ?.reduce((s: number, l: any) => s + (l.quantity || 0), 0) || 0;
+                    return sum + onlineStock;
+                }
+                return sum + (v.stock || 0);
+            }, 0);
     };
+
+    const getResolvedPriceForVariant = useCallback((variant: any) => {
+        if (!variant) return product.price || 0;
+        if (product.onlinePriceLocationId) {
+            const level = variant.inventoryLevels?.find((l: any) => l.locationId === product.onlinePriceLocationId);
+            if (level && level.price != null) return level.price;
+        }
+        if (variant.price != null) return variant.price;
+        return product.price || 0;
+    }, [product.price, product.onlinePriceLocationId]);
 
     // Cantidad total seleccionada
     const totalSelected = Object.values(sizeQuantities).reduce((a: number, b: any) => a + (b || 0), 0);
@@ -128,8 +147,36 @@ export default function ProductDetailClient({
         .reduce((sum: number, item: any) => sum + item.price * item.quantity, 0);
 
     const totalCombinedQty = totalSelected + qtyAlreadyInCart;
-    const subtotalSelected = totalSelected * (product.price || 0);
+    const subtotalSelected = Object.entries(sizeQuantities).reduce((sum, [size, qty]) => {
+        const variant = product.variants.find((v: any) => {
+            const vSize = v.attributes?.[lastAttr?.name || ''] || v.size;
+            if (vSize !== size) return false;
+            for (const filter of filterAttrs) {
+                const vVal = v.attributes?.[filter.name] || (filter.name === 'Color' ? v.color : (filter.name === 'Talla' || filter.name === 'Tamaño') ? v.size : null);
+                if (selectedAttributes[filter.name] && vVal !== selectedAttributes[filter.name]) return false;
+            }
+            return true;
+        }) || product.variants.find((v: any) => (v.attributes?.[lastAttr?.name || ''] || v.size) === size);
+        return sum + (getResolvedPriceForVariant(variant) * qty);
+    }, 0);
     const subtotalCombined = subtotalSelected + subtotalInCart;
+
+    // Obtener un variant seleccionado para usar su precio base si existe, si no usar el de product.price
+    const selectedVariant = product.variants.find((v: any) => {
+        const firstSelectedSize = Object.keys(sizeQuantities).find(size => sizeQuantities[size] > 0);
+        if (!firstSelectedSize) return false;
+        const vSize = v.attributes?.[lastAttr?.name || ''] || v.size;
+        return vSize === firstSelectedSize;
+    });
+
+    const displayBasePrice = getResolvedPriceForVariant(selectedVariant);
+
+    // "Solo mayoreo": ocultar precio menudeo. Precio por pieza más bajo entre los métodos de mayoreo.
+    const hideRetail = !!product.disableRetailPrice;
+    const wsPrices = Array.isArray(product.wholesaleComposition)
+        ? product.wholesaleComposition.map((m: any) => parseFloat(m?.price)).filter((n: number) => !isNaN(n) && n > 0)
+        : [];
+    const wholesalePerPiece = wsPrices.length > 0 ? Math.min(...wsPrices) : null;
 
     const discountResult = priceTiers.length > 0 && totalCombinedQty > 0
         ? calculateAutoDiscount(priceTiers, totalCombinedQty, subtotalCombined)
@@ -138,7 +185,7 @@ export default function ProductDetailClient({
     const pricePerPieceWithDiscount = discountResult && totalCombinedQty > 0
         ? (() => {
             const tier = discountResult.tier;
-            const basePrice = product.price || 0;
+            const basePrice = displayBasePrice || product.price || 0;
             if (tier.discountPercentage) {
                 return basePrice * (1 - tier.discountPercentage / 100);
             } else if (tier.defaultPriceMinusFixed) {
@@ -146,7 +193,7 @@ export default function ProductDetailClient({
             }
             return basePrice;
         })()
-        : product.price || 0;
+        : null;
 
     const updateSizeQty = (size: string, delta: number) => {
         const stock = stockForSize(size);
@@ -185,8 +232,8 @@ export default function ProductDetailClient({
                 sellerName: product.seller?.businessName || product.seller?.name || 'Vendedor',
                 color: variant.attributes?.Color || variant.color || selectedAttributes['Color'] || 'Único',
                 size,
-                price: product.price,
-                normalPrice: product.price,
+                price: getResolvedPriceForVariant(variant),
+                normalPrice: getResolvedPriceForVariant(variant),
                 quantity: qty,
                 image: product.images?.[0] || '',
                 sellByPackage: false,
@@ -408,14 +455,29 @@ export default function ProductDetailClient({
                     {(user || showPricesWithoutLogin) ? (
                         <div className="space-y-4">
                             {/* Precio menudeo + descuento si aplica */}
+                            {hideRetail ? (
+                                (user && isWholesale) ? (
+                                    <div className="flex items-baseline gap-3 flex-wrap">
+                                        <span className="text-4xl font-black tracking-tight text-emerald-600">
+                                            {wholesalePerPiece != null ? `desde $${wholesalePerPiece.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'}
+                                        </span>
+                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">por pieza · mayoreo</span>
+                                    </div>
+                                ) : (
+                                    <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-2xl border border-purple-100 dark:border-purple-800/50">
+                                        <p className="text-purple-700 dark:text-purple-300 font-black uppercase tracking-widest text-sm">Exclusivo para mayoristas</p>
+                                        <p className="text-gray-500 text-xs font-medium mt-1">Este producto solo está disponible para compradores mayoristas.</p>
+                                    </div>
+                                )
+                            ) : (
                             <div className="flex items-baseline gap-3 flex-wrap">
-                                {user && discountResult ? (
+                                {user && discountResult && pricePerPieceWithDiscount != null ? (
                                     <>
                                         <span className="text-4xl font-black tracking-tight text-emerald-600">
                                             ${pricePerPieceWithDiscount.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                         </span>
                                         <span className="text-2xl font-black text-gray-300 line-through">
-                                            ${(product.price || 0).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                            ${displayBasePrice.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                         </span>
                                         <span className="px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full text-xs font-black">
                                             {discountResult.tier.name} aplicado
@@ -423,14 +485,15 @@ export default function ProductDetailClient({
                                     </>
                                 ) : (
                                     <span className="text-4xl font-black tracking-tight text-blue-600">
-                                        ${(product.price || 0).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                        ${displayBasePrice.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                     </span>
                                 )}
                                 <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">por pieza</span>
                             </div>
+                            )}
 
                             {/* Niveles de precio — solo si está logueado */}
-                            {user && priceTiers.length > 0 && (
+                            {user && !hideRetail && priceTiers.length > 0 && (
                                 <div className="space-y-2">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
                                         Descuentos por volumen
@@ -535,7 +598,7 @@ export default function ProductDetailClient({
                     })}
 
                     {/* SELECTOR DE TALLAS (Último atributo) */}
-                    {sortedSizes.length > 0 && (
+                    {sortedSizes.length > 0 && !hideRetail && (
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">{lastAttr?.name || 'Talla'}</label>
@@ -578,24 +641,24 @@ export default function ProductDetailClient({
                             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Resumen</p>
                             <div className="flex justify-between items-center">
                                 <span className="text-sm font-bold text-foreground">
-                                    {totalSelected} pz × {discountResult ? (
-                                        <>${pricePerPieceWithDiscount.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} <span className="line-through text-gray-400 text-xs">${(product.price || 0).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span></>
+                                    {totalSelected} pz × {discountResult && pricePerPieceWithDiscount != null ? (
+                                        <>${pricePerPieceWithDiscount.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} <span className="line-through text-gray-400 text-xs">${displayBasePrice.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span></>
                                     ) : (
-                                        <>${(product.price || 0).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</>
+                                        <>${displayBasePrice.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</>
                                     )}
                                 </span>
-                                {discountResult ? (
+                                {discountResult && pricePerPieceWithDiscount != null ? (
                                     <span className="text-emerald-600 font-black text-lg">${(pricePerPieceWithDiscount * totalSelected).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
                                 ) : (
                                     <span className="text-lg font-black text-blue-600">${subtotalSelected.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
                                 )}
                             </div>
-                            {discountResult && (
+                            {discountResult && pricePerPieceWithDiscount != null && (
                                 <p className="text-[10px] text-emerald-600 font-black">
-                                    Ahorro: ${((product.price || 0) - pricePerPieceWithDiscount).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/pz · {discountResult.tier.name}
+                                    Ahorro: ${((displayBasePrice) - pricePerPieceWithDiscount).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/pz · {discountResult.tier.name}
                                 </p>
                             )}
-                            {discountResult && qtyAlreadyInCart > 0 && (
+                            {discountResult && pricePerPieceWithDiscount != null && qtyAlreadyInCart > 0 && (
                                 <div className="flex justify-between items-center pt-1 border-t border-border">
                                     <span className="text-[11px] text-gray-500 font-bold">Total acumulado ({totalCombinedQty} pz en carrito agregando {totalSelected > 1 ? 'estas' : 'esta'})</span>
                                     <span className="text-[11px] font-black text-blue-600">${(pricePerPieceWithDiscount * totalCombinedQty).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
@@ -608,10 +671,19 @@ export default function ProductDetailClient({
                     {user ? (
                         <div className="flex flex-col gap-3">
                             <div className="flex gap-3">
-                                <button onClick={handleAddToCart}
-                                    className={`flex-1 px-6 py-5 rounded-full text-xs font-black uppercase tracking-[0.2em] transition-all shadow-2xl ${addedToCart ? 'bg-green-600 text-white shadow-green-500/20' : 'bg-foreground text-background shadow-foreground/20 hover:scale-105'}`}>
-                                    {addedToCart ? '✓ Agregado' : `🛒 Agregar al Carrito${totalSelected > 0 ? ` (${totalSelected} pz)` : ''}`}
-                                </button>
+                                {hideRetail ? (
+                                    !isWholesale ? (
+                                        <button disabled
+                                            className="flex-1 px-6 py-5 rounded-full text-xs font-black uppercase tracking-[0.2em] bg-gray-200 dark:bg-gray-800 text-gray-400 cursor-not-allowed">
+                                            Producto exclusivo para mayoristas
+                                        </button>
+                                    ) : null
+                                ) : (
+                                    <button onClick={handleAddToCart}
+                                        className={`flex-1 px-6 py-5 rounded-full text-xs font-black uppercase tracking-[0.2em] transition-all shadow-2xl ${addedToCart ? 'bg-green-600 text-white shadow-green-500/20' : 'bg-foreground text-background shadow-foreground/20 hover:scale-105'}`}>
+                                        {addedToCart ? '✓ Agregado' : `🛒 Agregar al Carrito${totalSelected > 0 ? ` (${totalSelected} pz)` : ''}`}
+                                    </button>
+                                )}
                                 <Link href="/cart" className="px-6 py-5 bg-white dark:bg-gray-800 border-2 border-border rounded-full text-xs font-black uppercase tracking-[0.2em] hover:border-blue-600 transition-all flex items-center whitespace-nowrap">
                                     Ver Carrito
                                 </Link>

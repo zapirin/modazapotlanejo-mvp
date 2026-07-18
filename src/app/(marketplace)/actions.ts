@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { getBrandConfig, mergeBrandWithDB } from '@/lib/brand';
+import { unstable_cache } from 'next/cache';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyMap = any;
@@ -115,7 +116,14 @@ export async function getProducts(filters: {
                     category: true,
                     subcategory: true,
                     tags: true,
-                    variants: { select: { id: true, stock: true } },
+                    variants: { 
+                        select: { 
+                            id: true, 
+                            stock: true, 
+                            price: true, 
+                            inventoryLevels: { select: { locationId: true, quantity: true, price: true } } 
+                        } 
+                    },
                     // @ts-ignore
                     seller: { select: { id: true, name: true, businessName: true, logoUrl: true, sellerSlug: true } },
                 }
@@ -130,8 +138,8 @@ export async function getProducts(filters: {
     }
 }
 
-export async function getBrands(sellerId?: string) {
-    try {
+const getBrandsCached = unstable_cache(
+    async (sellerId?: string) => {
         const where: AnyMap = {
             products: {
                 some: sellerId
@@ -143,15 +151,23 @@ export async function getBrands(sellerId?: string) {
             where,
             include: {
                 _count: {
-                    select: { 
-                        products: { 
-                            where: sellerId ? { sellerId, isOnline: true, isActive: true } : { isOnline: true, isActive: true } 
-                        } 
+                    select: {
+                        products: {
+                            where: sellerId ? { sellerId, isOnline: true, isActive: true } : { isOnline: true, isActive: true }
+                        }
                     }
                 }
             },
             orderBy: { name: 'asc' }
         });
+    },
+    ['marketplace-brands'],
+    { revalidate: 60, tags: ['catalog-brands'] }
+);
+
+export async function getBrands(sellerId?: string) {
+    try {
+        return await getBrandsCached(sellerId);
     } catch (error) {
         return [];
     }
@@ -196,8 +212,8 @@ export async function getFeaturedCategories() {
     return getCategories();
 }
 
-export async function getCategories(sellerId?: string) {
-    try {
+const getCategoriesCached = unstable_cache(
+    async (sellerId?: string) => {
         const CATEGORY_ORDER = ['DAMAS', 'CABALLEROS', 'NIÑOS', 'ACCESORIOS', 'CALZADO'];
         const productFilter = sellerId
             ? { sellerId, isOnline: true, isActive: true }
@@ -224,6 +240,14 @@ export async function getCategories(sellerId?: string) {
             if (ib === -1) return -1;
             return ia - ib;
         });
+    },
+    ['marketplace-categories'],
+    { revalidate: 60, tags: ['catalog-categories'] }
+);
+
+export async function getCategories(sellerId?: string) {
+    try {
+        return await getCategoriesCached(sellerId);
     } catch (error) {
         return [];
     }
@@ -235,7 +259,12 @@ export async function getProductDetail(slugOrId: string) {
             brand: true,
             category: true,
             subcategory: true,
-            variants: { orderBy: { createdAt: 'asc' } },
+            variants: { 
+                orderBy: { createdAt: 'asc' },
+                include: {
+                    inventoryLevels: { select: { locationId: true, quantity: true, price: true } }
+                }
+            },
             // @ts-ignore
             seller: { select: { id: true, name: true, businessName: true, logoUrl: true, sellerSlug: true } },
         };
@@ -402,23 +431,21 @@ export async function getProductImages(productIds: string[]): Promise<Record<str
     } catch { return {}; }
 }
 
-export async function getActiveBrandConfig(host: string | null) {
-    const baseConfig = getBrandConfig(host);
-    
-    try {
-        if (!host) return baseConfig;
-        
+const getActiveBrandConfigCached = unstable_cache(
+    async (host: string) => {
+        const baseConfig = getBrandConfig(host);
+
         const cleanHost = host.split(':')[0].toLowerCase().replace(/^www\./, '');
         // Si es el subdominio de preview de Kalexa, buscar por kalexafashion.com en la BD
         const lookupHost = cleanHost.includes('kalexa.modazapotlanejo') ? 'kalexafashion.com' : cleanHost;
-        
+
         const dbBrand = await prisma.brandConfig.findFirst({
-            where: { 
+            where: {
                 domain: { contains: lookupHost, mode: 'insensitive' },
                 isActive: true
             }
         });
-        
+
         if (dbBrand) {
             // Para dominios dinámicos (no en config estática), construir base desde cero
             const isKnownStaticDomain = ['modazapotlanejo.com','zonadelvestir.com','kalexafashion.com'].some(d => cleanHost.includes(d.split('.')[0]));
@@ -438,6 +465,17 @@ export async function getActiveBrandConfig(host: string | null) {
         }
 
         return baseConfig;
+    },
+    ['active-brand-config'],
+    { revalidate: 60, tags: ['brand-config'] }
+);
+
+export async function getActiveBrandConfig(host: string | null) {
+    const baseConfig = getBrandConfig(host);
+    if (!host) return baseConfig;
+
+    try {
+        return await getActiveBrandConfigCached(host);
     } catch (error) {
         console.error('Error fetching brand config from DB:', error);
         return baseConfig;
@@ -459,7 +497,14 @@ export async function getRelatedProducts(categoryId: string, excludeId: string, 
             include: {
                 brand: true,
                 category: true,
-                variants: { select: { id: true, stock: true } },
+                variants: { 
+                    select: { 
+                        id: true, 
+                        stock: true, 
+                        price: true,
+                        inventoryLevels: { select: { locationId: true, quantity: true, price: true } }
+                    } 
+                },
                 // @ts-ignore
                 seller: { select: { id: true, name: true, businessName: true, sellerSlug: true } },
             },
@@ -467,8 +512,8 @@ export async function getRelatedProducts(categoryId: string, excludeId: string, 
     } catch { return []; }
 }
 
-export async function getAvailableVariantOptions(sellerId?: string) {
-    try {
+const getAvailableVariantOptionsCached = unstable_cache(
+    async (sellerId?: string) => {
         const productWhere: AnyMap = { isOnline: true, isActive: true };
         if (sellerId) productWhere.sellerId = sellerId;
         const [colors, sizes, tags] = await Promise.all([
@@ -495,6 +540,14 @@ export async function getAvailableVariantOptions(sellerId?: string) {
             sizes:  sizes.map((v: AnyMap) => v.size!).filter(Boolean),
             tags:   tags.map((t: AnyMap) => ({ id: t.id, name: t.name })),
         };
+    },
+    ['marketplace-variant-options'],
+    { revalidate: 60, tags: ['catalog-variant-options'] }
+);
+
+export async function getAvailableVariantOptions(sellerId?: string) {
+    try {
+        return await getAvailableVariantOptionsCached(sellerId);
     } catch { return { colors: [], sizes: [], tags: [] }; }
 }
 
