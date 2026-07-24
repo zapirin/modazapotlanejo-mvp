@@ -8,12 +8,14 @@ import { prisma } from '@/lib/prisma';
 import path from 'path';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 
-// ⚠️ IMPORTANTE — RENOVACIÓN MANUAL DEL TOKEN ⚠️
-// FB_ACCESS_TOKEN es un token de larga duración de Meta que EXPIRA ~60 días
-// después de generarse. Hay que renovarlo manualmente (generar uno nuevo en
-// Meta y reemplazarlo en el .env del servidor) ANTES de esa fecha, o las
-// publicaciones dejarán de salir. Cuando expire, el error quedará registrado
-// en los logs de PM2 — la tienda y la creación de productos NO se ven afectadas.
+// ⚠️ IMPORTANTE — SOBRE EL TOKEN (FB_ACCESS_TOKEN) ⚠️
+// Es un token de PÁGINA de larga duración (obtenido a partir de un token de
+// usuario de larga duración vía /me/accounts). Meta lo describe como "sin
+// expiración" mientras no se cambie la contraseña de Facebook ni se revoque
+// el acceso de la app "Kalexa Fashion Auto Post". Aun así, revisar de vez en
+// cuando (cada varios meses) que las publicaciones sigan saliendo. Si algún
+// día deja de funcionar, el error queda registrado en los logs de PM2 — la
+// tienda y la creación de productos NUNCA se ven afectadas.
 const FB_PAGE_ID = process.env.FB_PAGE_ID || '';
 const IG_USER_ID = process.env.IG_USER_ID || '';
 const FB_ACCESS_TOKEN = process.env.FB_ACCESS_TOKEN || '';
@@ -31,58 +33,87 @@ function isConfigured(): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// IMAGEN: resolver la primera imagen del producto a una URL pública en JPG
-// (Instagram solo acepta JPG oficialmente). El archivo original del producto
-// NUNCA se modifica — si hace falta convertir, se guarda una copia aparte
-// en /uploads/social/.
+// IMAGEN: resolver la primera imagen del producto a una URL pública en JPG,
+// lista para Instagram. El archivo original del producto NUNCA se modifica —
+// siempre se guarda una copia aparte en /uploads/social/.
+//
+// Instagram exige que la relación ancho/alto esté entre 4:5 (0.8) y 1.91:1.
+// Las fotos de ropa de cuerpo completo suelen ser más altas que eso (ej. una
+// foto de 662×1200 da una relación de 0.55), así que se agregan franjas
+// blancas a los lados (o arriba/abajo si fuera muy panorámica) para cumplir
+// la regla — la foto original nunca se recorta ni se deforma.
 // ---------------------------------------------------------------------------
 
-async function convertToJpgAndSave(buffer: Buffer, productId: string): Promise<string | null> {
-    // Import dinámico de sharp, mismo patrón que api/admin/compress-images
-    const sharpModule = await import('sharp').catch(() => null);
-    if (!sharpModule) {
-        console.warn('[Social] sharp no disponible — no se puede convertir la imagen a JPG');
-        return null;
-    }
-    const sharp = sharpModule.default;
-    const jpgBuffer = await sharp(buffer)
-        .flatten({ background: '#ffffff' }) // fondo blanco para PNG con transparencia
-        .jpeg({ quality: 90 })
-        .toBuffer();
+const IG_MIN_RATIO = 0.8;  // 4:5 — límite documentado por Meta
+const IG_MAX_RATIO = 1.91; // 1.91:1 — límite documentado por Meta
+// Al rellenar con franjas, apuntamos un poco adentro del límite (no exacto)
+// para evitar rechazos por redondeo en el límite exacto.
+const IG_TARGET_MIN_RATIO = 0.82;
+const IG_TARGET_MAX_RATIO = 1.88;
 
-    const dir = path.join(UPLOAD_DIR, 'social');
-    await mkdir(dir, { recursive: true });
-    const filename = `${productId}_${Date.now()}.jpg`;
-    await writeFile(path.join(dir, filename), jpgBuffer);
-    return `${PUBLIC_SITE}${PUBLIC_BASE}/social/${filename}`;
+async function loadImageBuffer(image: string): Promise<Buffer | null> {
+    if (image.startsWith('data:')) {
+        const matches = image.match(/^data:image\/\w+;base64,(.+)$/);
+        return matches ? Buffer.from(matches[1], 'base64') : null;
+    }
+    if (image.startsWith('http')) {
+        const res = await fetch(image);
+        return res.ok ? Buffer.from(await res.arrayBuffer()) : null;
+    }
+    // Ruta relativa local (/uploads/...) — el caso normal
+    const relativePath = image.startsWith(PUBLIC_BASE) ? image.slice(PUBLIC_BASE.length) : image;
+    return await readFile(path.join(UPLOAD_DIR, relativePath));
 }
 
 async function resolveJpgImageUrl(image: string, productId: string): Promise<string | null> {
     try {
-        const isJpg = /\.jpe?g(\?.*)?$/i.test(image);
+        const buffer = await loadImageBuffer(image);
+        if (!buffer) return null;
 
-        // Caso 1: imagen base64 embebida (productos antiguos) → decodificar y convertir
-        if (image.startsWith('data:')) {
-            const matches = image.match(/^data:image\/\w+;base64,(.+)$/);
-            if (!matches) return null;
-            return await convertToJpgAndSave(Buffer.from(matches[1], 'base64'), productId);
+        // Import dinámico de sharp, mismo patrón que api/admin/compress-images
+        const sharpModule = await import('sharp').catch(() => null);
+        if (!sharpModule) {
+            console.warn('[Social] sharp no disponible — no se puede preparar la imagen');
+            return null;
+        }
+        const sharp = sharpModule.default;
+
+        const metadata = await sharp(buffer).metadata();
+        const width = metadata.width || 0;
+        const height = metadata.height || 0;
+        if (!width || !height) return null;
+
+        const ratio = width / height;
+        let pipeline = sharp(buffer);
+
+        if (ratio < IG_MIN_RATIO) {
+            // Muy alta/angosta: agrandar el lienzo a los lados con franjas blancas
+            pipeline = pipeline.resize({
+                width: Math.ceil(height * IG_TARGET_MIN_RATIO),
+                height,
+                fit: 'contain',
+                background: '#ffffff',
+            });
+        } else if (ratio > IG_MAX_RATIO) {
+            // Muy ancha/baja: agrandar el lienzo arriba/abajo con franjas blancas
+            pipeline = pipeline.resize({
+                width,
+                height: Math.ceil(width / IG_TARGET_MAX_RATIO),
+                fit: 'contain',
+                background: '#ffffff',
+            });
         }
 
-        // Caso 2: URL absoluta externa
-        if (image.startsWith('http')) {
-            if (isJpg) return image;
-            const res = await fetch(image);
-            if (!res.ok) return null;
-            return await convertToJpgAndSave(Buffer.from(await res.arrayBuffer()), productId);
-        }
+        const jpgBuffer = await pipeline
+            .flatten({ background: '#ffffff' }) // fondo blanco para PNG con transparencia
+            .jpeg({ quality: 90 })
+            .toBuffer();
 
-        // Caso 3: ruta relativa local (/uploads/...) — el caso normal
-        if (isJpg) return `${PUBLIC_SITE}${image}`;
-        const relativePath = image.startsWith(PUBLIC_BASE)
-            ? image.slice(PUBLIC_BASE.length)
-            : image;
-        const buffer = await readFile(path.join(UPLOAD_DIR, relativePath));
-        return await convertToJpgAndSave(buffer, productId);
+        const dir = path.join(UPLOAD_DIR, 'social');
+        await mkdir(dir, { recursive: true });
+        const filename = `${productId}_${Date.now()}.jpg`;
+        await writeFile(path.join(dir, filename), jpgBuffer);
+        return `${PUBLIC_SITE}${PUBLIC_BASE}/social/${filename}`;
     } catch (error) {
         console.error('[Social] Error preparando imagen:', error instanceof Error ? error.message : String(error));
         return null;
