@@ -190,6 +190,72 @@ export default function ReportsPage() {
         setLoading(false);
     };
 
+    // Impresión / Guardar PDF del reporte "Para Resurtir".
+    // Genera HTML limpio (fondo blanco, colores neutros) para que el PDF salga
+    // bien aunque la pantalla esté en modo oscuro. Luego el usuario lo adjunta
+    // por WhatsApp o email.
+    const handlePrintRestock = () => {
+        if (!restockData?.data || restockData.data.products.length === 0) return;
+        const d = restockData.data;
+        const money = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
+        const locName = selectedLocationId
+            ? (locations.find(l => l.id === selectedLocationId)?.name || 'Sucursal')
+            : 'Todas las sucursales';
+        const rangeStr = `${dateRange.startDate.toLocaleDateString('es-MX')} — ${dateRange.endDate.toLocaleDateString('es-MX')}`;
+
+        const esc = (s: string) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const th = 'style="text-align:left;border-bottom:1.5px solid #333;padding:5px 8px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;"';
+        const thC = th.replace('text-align:left', 'text-align:center');
+        const thR = th.replace('text-align:left', 'text-align:right');
+
+        let html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111;padding:24px;max-width:1000px;margin:0 auto;">`;
+        html += `<h1 style="font-size:22px;margin:0 0 6px;">📦 Para Resurtir</h1>`;
+        html += `<p style="margin:0 0 2px;font-size:13px;color:#444;">Periodo: <b>${esc(rangeStr)}</b></p>`;
+        html += `<p style="margin:0 0 2px;font-size:13px;color:#444;">Sucursal: <b>${esc(locName)}</b></p>`;
+        html += `<p style="margin:0 0 18px;font-size:13px;color:#444;">Total del periodo: <b>${d.grandTotal.units} pz · ${money(d.grandTotal.revenue)}</b></p>`;
+
+        for (const p of d.products) {
+            html += `<h2 style="font-size:15px;margin:18px 0 6px;border-bottom:2px solid #111;padding-bottom:4px;">${esc(p.name)} <span style="font-weight:normal;color:#555;font-size:13px;">— ${p.totalUnits} pz · ${money(p.totalRevenue)}</span></h2>`;
+            html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px;"><thead><tr>`;
+            html += `<th ${th}>Talla</th><th ${th}>Color</th>`;
+            for (const loc of d.locations) html += `<th ${thC}>${esc(loc.name)}</th>`;
+            html += `<th ${thR}>Total</th></tr></thead><tbody>`;
+            for (const v of p.variants) {
+                html += `<tr>`;
+                html += `<td style="padding:5px 8px;border-bottom:1px solid #ddd;font-weight:bold;">${esc(v.size)}</td>`;
+                html += `<td style="padding:5px 8px;border-bottom:1px solid #ddd;">${esc(v.color || '—')}</td>`;
+                for (const loc of d.locations) {
+                    const c = v.cells[loc.id];
+                    html += `<td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:center;">${c ? `<b>${c.units}</b><br><span style="font-size:10px;color:#2a7;">${money(c.revenue)}</span>` : '<span style="color:#bbb;">—</span>'}</td>`;
+                }
+                html += `<td style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:right;"><b>${v.totalUnits}</b><br><span style="font-size:10px;color:#2a7;">${money(v.totalRevenue)}</span></td>`;
+                html += `</tr>`;
+            }
+            html += `</tbody></table>`;
+        }
+        html += `</div>`;
+
+        // Técnica de impresión del proyecto: ocultar el resto del body, imprimir, restaurar
+        const bodyChildren = Array.from(document.body.children) as HTMLElement[];
+        const saved: { el: HTMLElement; display: string }[] = [];
+        bodyChildren.forEach(c => { saved.push({ el: c, display: c.style.display }); c.style.display = 'none'; });
+        const printArea = document.createElement('div');
+        printArea.id = 'restock-print-area';
+        printArea.style.cssText = 'background:white;margin:0;padding:0;width:100%;';
+        printArea.innerHTML = html;
+        document.body.appendChild(printArea);
+        const origBg = document.body.style.background;
+        document.body.style.background = 'white';
+        try { window.print(); } catch (err) { console.error(err); }
+        const restore = () => {
+            printArea.remove();
+            document.body.style.background = origBg;
+            saved.forEach(({ el: child, display }) => { child.style.display = display; });
+        };
+        window.addEventListener('afterprint', restore, { once: true });
+        setTimeout(restore, 3000);
+    };
+
     const fetchTransfersData = async () => {
         setLoading(true);
         const res = await getTransfersReport({ ...dateRange, locationId: selectedLocationId || undefined });
@@ -786,6 +852,14 @@ export default function ReportsPage() {
             ) : activeTab === 'restock' ? (
                 restockData && restockData.success ? (
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        {restockData.data.products.length > 0 && (
+                            <div className="flex justify-end">
+                                <button onClick={handlePrintRestock}
+                                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-foreground text-background text-sm font-black hover:opacity-90 transition shadow-sm">
+                                    🖨️ Imprimir / Guardar PDF
+                                </button>
+                            </div>
+                        )}
                         {/* KPIs */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {renderMetricCard("Piezas Vendidas", restockData.data.grandTotal.units, "En el periodo seleccionado", "📦")}
