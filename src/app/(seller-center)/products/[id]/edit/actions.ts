@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/app/actions/auth";
+import { postProductToSocialMedia } from "@/lib/socialMedia";
 
 export async function getProductForEdit(productId: string) {
     try {
@@ -39,12 +40,16 @@ export async function updateProduct(productId: string, data: any) {
         const user = await getSessionUser();
         if (!user) return { success: false, error: "No autorizado" };
 
+        // sellerId (para permisos) e isOnline (para detectar si esta edición
+        // pasa el producto de "fuera de línea" a "en línea" y así saber si
+        // corresponde publicarlo en redes sociales).
+        const existingProduct = await prisma.product.findUnique({
+            where: { id: productId },
+            select: { sellerId: true, isOnline: true }
+        });
+        if (!existingProduct) return { success: false, error: "Producto no encontrado" };
+
         if (user.role !== 'ADMIN') {
-            const product = await prisma.product.findUnique({
-                where: { id: productId },
-                select: { sellerId: true }
-            });
-            if (!product) return { success: false, error: "Producto no encontrado" };
             let effectiveId = user.id;
             if (user.role === 'CASHIER') {
                 const cashier = await (prisma.user as any).findUnique({
@@ -53,7 +58,7 @@ export async function updateProduct(productId: string, data: any) {
                 });
                 effectiveId = cashier?.managedBySellerId || user.id;
             }
-            if (product.sellerId !== effectiveId) {
+            if (existingProduct.sellerId !== effectiveId) {
                 return { success: false, error: "No tienes permiso para modificar este producto" };
             }
         }
@@ -166,6 +171,20 @@ export async function updateProduct(productId: string, data: any) {
                 }
             }
         });
+
+        // Publicar en redes sociales si esta edición pasó el producto de
+        // "fuera de línea" a "en línea" (solo Kalexa, best-effort, no bloquea).
+        // Cubre tanto duplicados (que nacen fuera de línea) como productos
+        // existentes que se reactivan. No se dispara si ya estaba en línea.
+        try {
+            const isNowOnline = data.isOnline !== undefined ? data.isOnline : true;
+            if (!existingProduct.isOnline && isNowOnline) {
+                const saved = await prisma.product.findUnique({ where: { id: productId } });
+                if (saved) postProductToSocialMedia(saved).catch(console.error);
+            }
+        } catch (socialError) {
+            console.error("[Social] Error verificando publicación pendiente:", socialError);
+        }
 
         revalidatePath("/inventory");
         revalidatePath("/pos");

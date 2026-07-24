@@ -231,7 +231,9 @@ export async function duplicateProduct(productId: string) {
                 sellerId: await getEffectiveSellerId(user) || user?.id,
                 categoryId: original.categoryId,
                 subcategoryId: original.subcategoryId,
-                isOnline: original.isOnline,
+                // Oculto de la tienda en línea hasta terminar la edición de la copia
+                // (se activa manualmente al editar y guardar). El POS no se afecta.
+                isOnline: false,
                 isPOS: original.isPOS,
                 isActive: original.isActive,
                 onlinePriceLocationId: original.onlinePriceLocationId,
@@ -261,9 +263,6 @@ export async function duplicateProduct(productId: string) {
                 }
             }
         });
-
-        // Auto-publicación en redes sociales (solo Kalexa, best-effort, no bloquea)
-        postProductToSocialMedia(duplicated).catch(console.error);
 
         revalidatePath("/products");
         revalidatePath("/inventory");
