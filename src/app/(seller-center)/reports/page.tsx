@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { getSalesReports, getCommissionReport, getZCutsReport, getProfitReport, getMarketplaceCommissionReport, getReportPermissions, getTransfersReport, ReportDateRange } from './actions';
+import { getSalesReports, getCommissionReport, getZCutsReport, getProfitReport, getMarketplaceCommissionReport, getReportPermissions, getTransfersReport, getRestockReport, ReportDateRange } from './actions';
 import { getTransferById } from '../pos/actions';
 import { getLocationsSettings } from '../settings/actions';
 import TransferTicket from '../pos/TransferTicket';
@@ -37,7 +37,7 @@ const handlePrintTransfer = (elementId: string) => {
 };
 
 export default function ReportsPage() {
-    const [activeTab, setActiveTab] = useState<'sales' | 'commissions' | 'zcuts' | 'profit' | 'transfers'>('sales');
+    const [activeTab, setActiveTab] = useState<'sales' | 'commissions' | 'zcuts' | 'profit' | 'transfers' | 'restock'>('sales');
     const [perms, setPerms] = useState({ role: null as string | null, canViewReports: true, canViewCommissions: true, canViewZCuts: true, canViewProfit: true, canViewTransfers: true, isCashier: false, sessionStartedAt: null as Date | null });
     const [loading, setLoading] = useState(false);
     const [activeFilter, setActiveFilter] = useState('today');
@@ -55,6 +55,7 @@ export default function ReportsPage() {
     const [zcutsData, setZcutsData] = useState<any>(null);
     const [profitData, setProfitData] = useState<any>(null);
     const [transfersData, setTransfersData] = useState<any>(null);
+    const [restockData, setRestockData] = useState<any>(null);
     const [selectedTransfer, setSelectedTransfer] = useState<any | null>(null);
     const [expandedCut, setExpandedCut] = useState<string | null>(null);
     const [locations, setLocations] = useState<any[]>([]);
@@ -72,6 +73,12 @@ export default function ReportsPage() {
         switch (preset) {
             case 'today':
                 start.setHours(0, 0, 0, 0);
+                break;
+            case 'yesterday':
+                start.setDate(start.getDate() - 1);
+                start.setHours(0, 0, 0, 0);
+                now.setDate(now.getDate() - 1);
+                now.setHours(23, 59, 59, 999);
                 break;
             case 'week':
                 const day = start.getDay() || 7; 
@@ -171,8 +178,17 @@ export default function ReportsPage() {
         else if (activeTab === 'commissions') fetchCommissionData();
         else if (activeTab === 'profit') fetchProfitData();
         else if (activeTab === 'transfers') fetchTransfersData();
+        else if (activeTab === 'restock') fetchRestockData();
         else fetchZCutsData();
     }, [dateRange, activeTab, selectedLocationId]);
+
+    const fetchRestockData = async () => {
+        setLoading(true);
+        const res = await getRestockReport({ ...dateRange, locationId: selectedLocationId || undefined });
+        if (res.success) setRestockData(res);
+        else alert(res.error || 'No se pudo cargar el reporte para resurtir');
+        setLoading(false);
+    };
 
     const fetchTransfersData = async () => {
         setLoading(true);
@@ -269,6 +285,12 @@ export default function ReportsPage() {
                             Ventas
                         </button>
                         )}
+                        {perms.canViewReports && (
+                        <button onClick={() => { handleFilterChange('yesterday'); setActiveTab('restock'); }}
+                            className={`px-5 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition ${activeTab === 'restock' ? 'bg-white dark:bg-gray-700 text-foreground shadow' : 'text-gray-500 hover:text-foreground'}`}>
+                            Para Resurtir
+                        </button>
+                        )}
                         {perms.canViewCommissions && (
                         <button onClick={() => setActiveTab('commissions')}
                             className={`px-5 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition ${activeTab === 'commissions' ? 'bg-white dark:bg-gray-700 text-foreground shadow' : 'text-gray-500 hover:text-foreground'}`}>
@@ -320,6 +342,7 @@ export default function ReportsPage() {
                         <div className="flex flex-wrap shadow-sm bg-input border border-border p-1 rounded-2xl w-full md:w-auto overflow-x-auto">
                             {[
                                 { id: 'today', name: 'Hoy' },
+                                { id: 'yesterday', name: 'Ayer' },
                                 { id: 'week', name: 'Semana' },
                                 { id: 'month', name: 'Mes' },
                                 { id: 'last_month', name: 'Mes Ant.' },
@@ -758,6 +781,78 @@ export default function ReportsPage() {
                                 </div>
                             )}
                         </div>
+                    </div>
+                ) : null
+            ) : activeTab === 'restock' ? (
+                restockData && restockData.success ? (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        {/* KPIs */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {renderMetricCard("Piezas Vendidas", restockData.data.grandTotal.units, "En el periodo seleccionado", "📦")}
+                            {renderMetricCard("Ingreso Total", `$${restockData.data.grandTotal.revenue.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, "En el periodo seleccionado", "💰")}
+                        </div>
+
+                        {restockData.data.products.length === 0 ? (
+                            <div className="bg-card border border-border rounded-3xl p-16 text-center text-gray-400 font-medium">
+                                <p className="text-4xl mb-3">📦</p>
+                                <p>No hay ventas de POS en este periodo.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-6">
+                                {restockData.data.products.map((p: any) => (
+                                    <div key={p.id} className="bg-card border border-border rounded-3xl overflow-hidden shadow-sm">
+                                        <div className="p-5 border-b border-border bg-gray-50/50 dark:bg-gray-800/50 flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-xl overflow-hidden flex-shrink-0 border border-border">
+                                                {p.image ? <img src={p.image} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-xl">👚</div>}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-black text-foreground truncate">{p.name}</p>
+                                                <p className="text-xs text-gray-500 font-bold tabular-nums">{p.totalUnits} pz · ${p.totalRevenue.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                                            </div>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm">
+                                                <thead>
+                                                    <tr className="border-b border-border text-[10px] uppercase tracking-widest text-gray-400 font-black">
+                                                        <th className="text-left px-5 py-3">Talla</th>
+                                                        <th className="text-left px-3 py-3">Color</th>
+                                                        {restockData.data.locations.map((loc: any) => (
+                                                            <th key={loc.id} className="text-center px-3 py-3">{loc.name}</th>
+                                                        ))}
+                                                        <th className="text-right px-5 py-3">Total</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {p.variants.map((v: any) => (
+                                                        <tr key={v.variantId} className="border-b border-border last:border-0 hover:bg-black/5 dark:hover:bg-white/5 transition">
+                                                            <td className="px-5 py-3 font-black text-foreground">{v.size}</td>
+                                                            <td className="px-3 py-3 text-gray-500 font-bold">{v.color || '—'}</td>
+                                                            {restockData.data.locations.map((loc: any) => {
+                                                                const cell = v.cells[loc.id];
+                                                                return (
+                                                                    <td key={loc.id} className="px-3 py-3 text-center tabular-nums">
+                                                                        {cell ? (
+                                                                            <div>
+                                                                                <span className="font-black text-foreground">{cell.units}</span>
+                                                                                <span className="block text-[11px] text-green-600 dark:text-green-400 font-bold">${cell.revenue.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                                                                            </div>
+                                                                        ) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+                                                                    </td>
+                                                                );
+                                                            })}
+                                                            <td className="px-5 py-3 text-right tabular-nums">
+                                                                <span className="font-black text-foreground">{v.totalUnits}</span>
+                                                                <span className="block text-[11px] text-green-600 dark:text-green-400 font-bold">${v.totalRevenue.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 ) : null
             ) : data && data.success ? (

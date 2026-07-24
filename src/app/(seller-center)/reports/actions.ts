@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/client";
 import { getSessionUser } from "@/app/actions/auth";
 
 
@@ -704,5 +705,120 @@ export async function getTransfersReport({ startDate, endDate, locationId }: Rep
     } catch (error: any) {
         console.error('Error generating transfers report:', error);
         return { success: false, error: 'No se pudo generar el reporte de traspasos.' };
+    }
+}
+
+// ─── Reporte "Para Resurtir" — ventas por modelo y variante, desglosado por sucursal ─
+// Mismo acceso que el reporte de Ventas (SELLER ve sus sucursales, CASHIER las suyas,
+// ADMIN de marketplace bloqueado). La agregación (piezas e ingreso) se hace DENTRO de
+// la base de datos con una sola consulta SQL para que escale aunque crezcan las ventas.
+export async function getRestockReport({ startDate, endDate, locationId }: ReportDateRange & { locationId?: string }) {
+    try {
+        const user = await getSessionUser();
+        if (user?.role === 'ADMIN') return { success: false, error: 'No autorizado.' };
+
+        // Aislamiento por vendedor/sucursal (igual que getSalesReports)
+        const conditions: Prisma.Sql[] = [
+            Prisma.sql`s."status" = 'COMPLETED'`,
+            Prisma.sql`s."createdAt" >= ${startDate}`,
+            Prisma.sql`s."createdAt" <= ${endDate}`,
+        ];
+        if (user?.role === 'SELLER') {
+            conditions.push(Prisma.sql`s."sellerId" = ${user.id}`);
+        } else if (user?.role === 'CASHIER') {
+            const cashier = await (prisma.user as any).findUnique({
+                where: { id: user.id },
+                select: { allowedLocationIds: true }
+            });
+            const locIds: string[] = cashier?.allowedLocationIds || [];
+            if (locIds.length === 0) {
+                return { success: true, data: { locations: [], products: [], grandTotal: { units: 0, revenue: 0 } } };
+            }
+            conditions.push(Prisma.sql`s."locationId" IN (${Prisma.join(locIds)})`);
+        }
+        if (locationId && user?.role !== 'CASHIER') {
+            conditions.push(Prisma.sql`s."locationId" = ${locationId}`);
+        }
+        const whereSql = Prisma.join(conditions, ' AND ');
+
+        // Agregado en la BD: piezas e ingreso por (sucursal, variante)
+        const rows = await prisma.$queryRaw<Array<{ locationId: string | null; variantId: string; units: number; revenue: number }>>(Prisma.sql`
+            SELECT s."locationId" AS "locationId",
+                   si."variantId" AS "variantId",
+                   SUM(si."quantity")::int AS units,
+                   SUM(si."quantity" * si."price") AS revenue
+            FROM "SaleItem" si
+            JOIN "Sale" s ON s."id" = si."saleId"
+            WHERE ${whereSql}
+            GROUP BY s."locationId", si."variantId"
+        `);
+
+        if (rows.length === 0) {
+            return { success: true, data: { locations: [], products: [], grandTotal: { units: 0, revenue: 0 } } };
+        }
+
+        // Traer nombres de variantes/productos/sucursales solo para lo que apareció
+        const variantIds = [...new Set(rows.map(r => r.variantId))];
+        const locationIds = [...new Set(rows.map(r => r.locationId).filter((x): x is string => !!x))];
+        const [variants, locs] = await Promise.all([
+            prisma.variant.findMany({
+                where: { id: { in: variantIds } },
+                select: { id: true, color: true, size: true, product: { select: { id: true, name: true, images: true } } }
+            }),
+            prisma.storeLocation.findMany({ where: { id: { in: locationIds } }, select: { id: true, name: true } }),
+        ]);
+        const variantMap = new Map(variants.map((v: any) => [v.id, v]));
+
+        const NO_LOC = '__none__';
+        const usedLocationIds = new Set<string>();
+        let hasNoLoc = false;
+        const products = new Map<string, any>();
+
+        for (const row of rows) {
+            const v: any = variantMap.get(row.variantId);
+            if (!v || !v.product) continue;
+            const locKey = row.locationId || NO_LOC;
+            if (row.locationId) usedLocationIds.add(row.locationId); else hasNoLoc = true;
+
+            const units = Number(row.units) || 0;
+            const revenue = Number(row.revenue) || 0;
+
+            let prod = products.get(v.product.id);
+            if (!prod) {
+                prod = { id: v.product.id, name: v.product.name, image: v.product.images?.[0] || '', totalUnits: 0, totalRevenue: 0, variants: new Map() };
+                products.set(v.product.id, prod);
+            }
+            prod.totalUnits += units;
+            prod.totalRevenue += revenue;
+
+            let varRow = prod.variants.get(row.variantId);
+            if (!varRow) {
+                varRow = { variantId: row.variantId, size: v.size || '—', color: v.color || '', cells: {} as Record<string, { units: number; revenue: number }>, totalUnits: 0, totalRevenue: 0 };
+                prod.variants.set(row.variantId, varRow);
+            }
+            varRow.cells[locKey] = { units, revenue };
+            varRow.totalUnits += units;
+            varRow.totalRevenue += revenue;
+        }
+
+        // Columnas de sucursal ordenadas por nombre (+ "Sin sucursal" al final si aplica)
+        const orderedLocations = locs
+            .filter((l: any) => usedLocationIds.has(l.id))
+            .sort((a: any, b: any) => a.name.localeCompare(b.name))
+            .map((l: any) => ({ id: l.id, name: l.name }));
+        if (hasNoLoc) orderedLocations.push({ id: NO_LOC, name: 'Sin sucursal' });
+
+        // Productos y variantes ordenados por más vendidos primero (lo más relevante para resurtir)
+        const productsArr = [...products.values()].map(p => ({
+            ...p,
+            variants: [...p.variants.values()].sort((a: any, b: any) => b.totalUnits - a.totalUnits),
+        })).sort((a, b) => b.totalUnits - a.totalUnits);
+
+        const grandTotal = productsArr.reduce((acc, p) => ({ units: acc.units + p.totalUnits, revenue: acc.revenue + p.totalRevenue }), { units: 0, revenue: 0 });
+
+        return { success: true, data: { locations: orderedLocations, products: productsArr, grandTotal } };
+    } catch (error: any) {
+        console.error('Error generating restock report:', error);
+        return { success: false, error: 'No se pudo generar el reporte para resurtir.' };
     }
 }
