@@ -450,7 +450,7 @@ export default function CatalogClient({
                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                                         {product.category?.name}{product.subcategory?.name ? ` • ${product.subcategory.name}` : ''}
                                     </p>
-                                    {product.seller && (
+                                    {!sellerId && product.seller && (
                                         <Link href={`/vendor/${product.seller.sellerSlug || product.seller.id}`}
                                             className="text-[10px] font-bold text-blue-500 uppercase tracking-widest flex items-center gap-1 hover:text-blue-700 transition-colors">
                                             🏭 {product.seller.businessName || product.seller.name}
@@ -517,7 +517,7 @@ export default function CatalogClient({
                                             <span className="px-2 py-0.5 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-lg text-[10px] font-bold">Sin stock</span>
                                         )}
                                     </div>
-                                    {product.seller && (
+                                    {!sellerId && product.seller && (
                                         <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">
                                             🏭 {product.seller.businessName || product.seller.name}
                                         </p>
