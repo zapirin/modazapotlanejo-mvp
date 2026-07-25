@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { createProduct, getCategories, getBrands, createBrand, createSubcategory, getSuppliers, createSupplier, getStoreLocations } from './actions';
-import { processImage } from '@/lib/imageUtils';
+import ProductImagesEditor from '@/components/ProductImagesEditor';
 import { getTags, createTag } from '../../inventory/tags/actions';
 import { getSessionUser } from '@/app/actions/auth';
 
@@ -17,7 +17,6 @@ export default function NewProductPage() {
     const [tags, setTags] = useState<any[]>([]);
     const [locations, setLocations] = useState<any[]>([]);
     const [user, setUser] = useState<any>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [formData, setFormData] = useState({
         name: '',
@@ -40,7 +39,12 @@ export default function NewProductPage() {
         activeMethodId: '',
         images: [] as string[],
         tagIds: [] as string[],
-        sku: ''
+        sku: '',
+        onlinePriceLocationId: '',
+        onlineStockLocationIds: [] as string[],
+        advancedPricing: false,
+        variantPrices: {} as Record<string, string | number>,
+        inventoryPrices: {} as Record<string, string | number>
     });
     const [isCreatingTag, setIsCreatingTag] = useState(false);
     const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
@@ -141,36 +145,6 @@ export default function NewProductPage() {
         load();
     }, []);
 
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files || []);
-        for (const file of files) {
-            try {
-                const { url, isStorage, sizeKB } = await processImage(file, 'products');
-                console.log(`Imagen procesada: ${sizeKB}KB ${isStorage ? '(Storage)' : '(base64 comprimido)'}`);
-                setFormData(prev => ({
-                    ...prev,
-                    images: [...prev.images, url]
-                }));
-            } catch {
-                // Fallback: subir sin comprimir
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    const base64String = reader.result as string;
-                    setFormData(prev => ({ ...prev, images: [...prev.images, base64String] }));
-                };
-                reader.readAsDataURL(file);
-            }
-        }
-        if (e.target) e.target.value = '';
-    };
-
-    const handleRemoveImage = (index: number) => {
-        setFormData(prev => ({
-            ...prev,
-            images: prev.images.filter((_, i) => i !== index)
-        }));
-    };
-
     const handleAddOption = () => {
         if (newOptionName.trim()) {
             setFormData(prev => ({
@@ -213,6 +187,26 @@ export default function NewProductPage() {
             inventory: {
                 ...prev.inventory,
                 [`${attrKey}_${locationId}`]: value
+            }
+        }));
+    };
+
+    const handleInventoryPriceChange = (attrKey: string, locationId: string, value: string) => {
+        setFormData(prev => ({
+            ...prev,
+            inventoryPrices: {
+                ...prev.inventoryPrices,
+                [`${attrKey}_${locationId}`]: value
+            }
+        }));
+    };
+
+    const handleVariantPriceChange = (attrKey: string, value: string) => {
+        setFormData(prev => ({
+            ...prev,
+            variantPrices: {
+                ...prev.variantPrices,
+                [attrKey]: value
             }
         }));
     };
@@ -316,21 +310,27 @@ export default function NewProductPage() {
                 
                 locations.forEach(loc => {
                     const quantity = parseInt((formData.inventory[`${attrKey}_${loc.id}`] || "0").toString()) || 0;
+                    const invPriceVal = formData.inventoryPrices[`${attrKey}_${loc.id}`];
+                    const invPrice = invPriceVal ? parseFloat(invPriceVal.toString()) : null;
                     totalStock += quantity;
                     if (quantity >= 0) { // we send it even if 0 to initialize it
-                        inventoryLevels.push({ locationId: loc.id, quantity });
+                        inventoryLevels.push({ locationId: loc.id, quantity, price: invPrice });
                     }
                 });
+
+                const varPriceVal = formData.variantPrices[attrKey];
+                const varPrice = varPriceVal ? parseFloat(varPriceVal.toString()) : null;
 
                 return {
                     attributes: combo,
                     stock: totalStock,
+                    price: varPrice,
                     inventoryLevels
                 };
             });
 
             // Exclude old inventory shape to avoid type conflicts
-            const { inventory, wholesaleMethods, activeMethodId, ...submissionData } = formData;
+            const { inventory, wholesaleMethods, activeMethodId, advancedPricing, variantPrices, inventoryPrices, ...submissionData } = formData;
 
             const result = await createProduct({
                 ...submissionData,
@@ -338,6 +338,8 @@ export default function NewProductPage() {
                 wholesalePrice: formData.wholesalePrice,
                 cost: formData.cost,
                 sku: formData.sku.trim() || null,
+                onlinePriceLocationId: formData.onlinePriceLocationId || null,
+                onlineStockLocationIds: formData.onlineStockLocationIds,
                 categoryId: categories.find(c => c.slug === formData.category)?.id,
                 variantOptions: formData.variantOptions,
                 variantsData,
@@ -402,37 +404,61 @@ export default function NewProductPage() {
                                 </div>
                             </div>
 
+                            {formData.isOnline && locations.length > 1 && (
+                                <div className="bg-blue-50/50 dark:bg-blue-900/10 p-4 rounded-2xl border border-blue-100 dark:border-blue-900/30 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-200">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-widest text-blue-800 dark:text-blue-400">Tomar precio público de:</label>
+                                        <select 
+                                            className="w-full px-4 py-2 bg-white dark:bg-card border border-blue-200 dark:border-blue-800 rounded-xl text-sm"
+                                            value={formData.onlinePriceLocationId}
+                                            onChange={e => setFormData({ ...formData, onlinePriceLocationId: e.target.value })}
+                                        >
+                                            <option value="">(Mismo que el precio base)</option>
+                                            {locations.map(loc => (
+                                                <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-widest text-blue-800 dark:text-blue-400">Tomar stock de:</label>
+                                        <div className="bg-white dark:bg-card border border-blue-200 dark:border-blue-800 rounded-xl p-2 max-h-32 overflow-y-auto space-y-1">
+                                            <label className="flex items-center gap-2 text-sm px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={formData.onlineStockLocationIds.length === 0} 
+                                                    onChange={e => setFormData({ ...formData, onlineStockLocationIds: [] })}
+                                                />
+                                                <span className="font-bold">Todas las sucursales (Suma total)</span>
+                                            </label>
+                                            {locations.map(loc => (
+                                                <label key={loc.id} className="flex items-center gap-2 text-sm px-2 py-1 hover:bg-gray-50 dark:hover:bg-gray-800 rounded cursor-pointer">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={formData.onlineStockLocationIds.includes(loc.id)} 
+                                                        onChange={e => {
+                                                            if (e.target.checked) {
+                                                                setFormData({ ...formData, onlineStockLocationIds: [...formData.onlineStockLocationIds, loc.id] })
+                                                            } else {
+                                                                setFormData({ ...formData, onlineStockLocationIds: formData.onlineStockLocationIds.filter(id => id !== loc.id) })
+                                                            }
+                                                        }}
+                                                    />
+                                                    <span>{loc.name}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Images */}
                             <div className="space-y-4">
                                 <label className="text-xs font-black uppercase tracking-widest text-gray-400">Fotografías del Producto</label>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    {formData.images.map((img, idx) => (
-                                        <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden border border-border group bg-gray-50/50 dark:bg-card/50 border-dashed">
-                                            <img src={img} alt={`Product ${idx}`} className="w-full h-full object-cover" />
-                                            <button 
-                                                onClick={() => handleRemoveImage(idx)}
-                                                className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg font-bold"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                    ))}
-                                    <button 
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="aspect-square rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 flex flex-col items-center justify-center text-gray-400 hover:text-blue-500 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors"
-                                    >
-                                        <span className="text-3xl mb-2">📸</span>
-                                        <span className="text-xs font-bold px-4 text-center">Agregar Foto</span>
-                                    </button>
-                                    <input 
-                                        type="file" 
-                                        ref={fileInputRef} 
-                                        className="hidden" 
-                                        accept="image/*" 
-                                        multiple 
-                                        onChange={handleImageUpload} 
-                                    />
-                                </div>
+                                <p className="text-xs text-gray-400 font-medium -mt-2">Arrastra las fotos para reordenarlas. La primera es la principal.</p>
+                                <ProductImagesEditor
+                                    images={formData.images}
+                                    onChange={(imgs) => setFormData(prev => ({ ...prev, images: imgs }))}
+                                />
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1001,6 +1027,18 @@ export default function NewProductPage() {
                                 )}
                             </div>
 
+                            <div className="flex justify-end mt-4 mb-2">
+                                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer bg-blue-50 dark:bg-blue-900/10 px-4 py-2 rounded-xl text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800 transition hover:bg-blue-100 dark:hover:bg-blue-900/30">
+                                    <input 
+                                        type="checkbox" 
+                                        className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                                        checked={formData.advancedPricing}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, advancedPricing: e.target.checked }))}
+                                    />
+                                    Configurar precio avanzado (Por Variante / Sucursal)
+                                </label>
+                            </div>
+
                             {generateCombinations(formData.variantOptions).length > 0 ? (
                                 <div className="space-y-6">
                                     <div className="overflow-x-auto rounded-3xl border border-border shadow-inner bg-gray-50/50 dark:bg-gray-900/20">
@@ -1008,9 +1046,14 @@ export default function NewProductPage() {
                                             <thead>
                                                 <tr className="border-b border-border bg-gray-50/50 dark:bg-gray-800/50">
                                                     <th className="p-4 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Combinación</th>
+                                                    {formData.advancedPricing && (
+                                                        <th className="p-4 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-32 border-l border-border bg-gray-100/50 dark:bg-gray-800/30">
+                                                            Precio Variante
+                                                        </th>
+                                                    )}
                                                     {locations.map(loc => (
-                                                        <th key={loc.id} className="p-4 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-32 bg-blue-50/30 dark:bg-blue-900/10 border-l border-border">
-                                                            Stock {loc.name} {loc.isWebStore ? '🌐' : '🏪'}
+                                                        <th key={loc.id} className="p-4 text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 text-center w-40 bg-blue-50/30 dark:bg-blue-900/10 border-l border-border">
+                                                            {loc.name} {loc.isWebStore ? '🌐' : '🏪'}
                                                         </th>
                                                     ))}
                                                     {formData.sellByPackage && (
@@ -1035,17 +1078,48 @@ export default function NewProductPage() {
                                                                     ))}
                                                                 </div>
                                                             </td>
-                                                            {locations.map(loc => (
-                                                                <td key={loc.id} className="p-2 border-l border-border bg-blue-50/10 dark:bg-blue-900/5">
-                                                                    <div className="bg-input border border-border/50 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all shadow-inner">
+                                                            {formData.advancedPricing && (
+                                                                <td className="p-2 border-l border-border bg-gray-50/30 dark:bg-gray-800/20">
+                                                                    <div className="bg-input border border-border/50 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all shadow-inner flex items-center">
+                                                                        <span className="pl-3 text-xs text-gray-400">$</span>
                                                                         <input
                                                                             type="number"
                                                                             min="0"
-                                                                            placeholder="0"
-                                                                            className="w-full bg-transparent p-3 outline-none text-center font-black text-blue-600 dark:text-blue-400 text-lg"
-                                                                            value={formData.inventory[`${attrKey}_${loc.id}`] || ''}
-                                                                            onChange={(e) => handleInventoryChange(attrKey, loc.id, e.target.value)}
+                                                                            placeholder="Base"
+                                                                            className="w-full bg-transparent p-3 outline-none text-right font-black text-green-600 dark:text-green-400 text-sm"
+                                                                            value={formData.variantPrices[attrKey] || ''}
+                                                                            onChange={(e) => handleVariantPriceChange(attrKey, e.target.value)}
                                                                         />
+                                                                    </div>
+                                                                </td>
+                                                            )}
+                                                            {locations.map(loc => (
+                                                                <td key={loc.id} className="p-2 border-l border-border bg-blue-50/10 dark:bg-blue-900/5">
+                                                                    <div className="flex flex-col gap-2">
+                                                                        <div className="bg-input border border-border/50 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all shadow-inner flex items-center">
+                                                                            <span className="pl-3 text-[10px] font-bold text-gray-400 uppercase">Stock</span>
+                                                                            <input
+                                                                                type="number"
+                                                                                min="0"
+                                                                                placeholder="0"
+                                                                                className="w-full bg-transparent p-2 outline-none text-right font-black text-blue-600 dark:text-blue-400 text-sm"
+                                                                                value={formData.inventory[`${attrKey}_${loc.id}`] || ''}
+                                                                                onChange={(e) => handleInventoryChange(attrKey, loc.id, e.target.value)}
+                                                                            />
+                                                                        </div>
+                                                                        {formData.advancedPricing && (
+                                                                            <div className="bg-input border border-border/50 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 transition-all shadow-inner flex items-center">
+                                                                                <span className="pl-3 text-[10px] font-bold text-gray-400 uppercase">Precio</span>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    min="0"
+                                                                                    placeholder="Mismo"
+                                                                                    className="w-full bg-transparent p-2 outline-none text-right font-black text-green-600 dark:text-green-400 text-sm"
+                                                                                    value={formData.inventoryPrices[`${attrKey}_${loc.id}`] || ''}
+                                                                                    onChange={(e) => handleInventoryPriceChange(attrKey, loc.id, e.target.value)}
+                                                                                />
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 </td>
                                                             ))}

@@ -1,5 +1,5 @@
 "use client";
-import { processImage } from '@/lib/imageUtils';
+import ProductImagesEditor from '@/components/ProductImagesEditor';
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
@@ -52,7 +52,6 @@ export default function EditProductPage() {
     const [user, setUser] = useState<any>(null);
     const [locations, setLocations] = useState<any[]>([]);
     const [stockByLocation, setStockByLocation] = useState<Record<string, number>>({});
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [formData, setFormData] = useState({
         name: '',
@@ -71,6 +70,11 @@ export default function EditProductPage() {
         isPOS: true,
         variantOptions: [] as any[],
         inventory: {} as Record<string, string | number>,
+        advancedPricing: false,
+        variantPrices: {} as Record<string, string | number>,
+        inventoryPrices: {} as Record<string, string | number>,
+        onlinePriceLocationId: "",
+        onlineStockLocationIds: [] as string[],
         wholesaleMethods: [] as any[],
         activeMethodId: '',
         images: [] as string[],
@@ -158,14 +162,18 @@ export default function EditProductPage() {
 
                 const inventory: Record<string, string | number> = {};
                 const stockLevels: Record<string, number> = {};
+                const inventoryPrices: Record<string, string | number> = {};
+                const variantPrices: Record<string, string | number> = {};
                 if (prod.variants) {
                     prod.variants.forEach((v: any) => {
                         const attrKey = JSON.stringify(v.attributes || {});
                         inventory[attrKey] = v.stock;
+                        variantPrices[attrKey] = v.price !== null ? v.price : "";
                         // Cargar stock por sucursal
                         if (v.inventoryLevels) {
                             v.inventoryLevels.forEach((level: any) => {
                                 stockLevels[`${attrKey}_${level.locationId}`] = level.stock;
+                                inventoryPrices[`${attrKey}_${level.locationId}`] = level.price !== null ? level.price : "";
                             });
                         }
                     });
@@ -188,7 +196,12 @@ export default function EditProductPage() {
                     isOnline: prod.isOnline ?? true,
                     isPOS: prod.isPOS ?? true,
                     variantOptions: (prod.variantOptions as any[]) || [],
-                    inventory, 
+                    inventory,
+                    variantPrices,
+                    inventoryPrices,
+                    advancedPricing: false,
+                    onlinePriceLocationId: prod.onlinePriceLocationId || "",
+                    onlineStockLocationIds: prod.onlineStockLocationIds || locations.map((l:any)=>l.id), 
                     wholesaleMethods: wholesaleMethods,
                     activeMethodId: wholesaleMethods[0]?.id || '',
                     images: prod.images || [],
@@ -210,32 +223,6 @@ export default function EditProductPage() {
             load();
         }
     }, [params.id, router]);
-
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files || []);
-        for (const file of files) {
-            try {
-                const { url, isStorage, sizeKB } = await processImage(file, 'products');
-                console.log(`Imagen: ${sizeKB}KB ${isStorage ? '(Storage)' : '(comprimida)'}`);
-                setFormData(prev => ({ ...prev, images: [...prev.images, url] }));
-            } catch {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    const base64String = reader.result as string;
-                    setFormData(prev => ({ ...prev, images: [...prev.images, base64String] }));
-                };
-                reader.readAsDataURL(file);
-            }
-        }
-        if (e.target) e.target.value = '';
-    };
-
-    const handleRemoveImage = (index: number) => {
-        setFormData(prev => ({
-            ...prev,
-            images: prev.images.filter((_, i) => i !== index)
-        }));
-    };
 
     const handleAddOption = () => {
         if (newOptionName.trim()) {
@@ -281,6 +268,21 @@ export default function EditProductPage() {
                 [attrKey]: value
             }
         }));
+    };
+
+    const handleInventoryChangeWithLocation = (attrKey: string, locationId: string, value: string) => {
+        setStockByLocation(prev => ({
+            ...prev,
+            [`${attrKey}_${locationId}`]: value
+        }));
+    };
+
+    const handleVariantPriceChange = (attrKey: string, value: string) => {
+        setFormData(prev => ({ ...prev, variantPrices: { ...prev.variantPrices, [attrKey]: value } }));
+    };
+
+    const handleInventoryPriceChange = (attrKey: string, locationId: string, value: string) => {
+        setFormData(prev => ({ ...prev, inventoryPrices: { ...prev.inventoryPrices, [`${attrKey}_${locationId}`]: value } }));
     };
 
     const handleWholesaleChange = (attrKey: string, value: string) => {
@@ -348,22 +350,32 @@ export default function EditProductPage() {
             const combinations = generateCombinations(formData.variantOptions);
             const variantsData = combinations.map(combo => {
                 const attrKey = JSON.stringify(combo);
-                const locationStock = locations.map((loc: any) => ({
-                    locationId: loc.id,
-                    stock: stockByLocation[`${attrKey}_${loc.id}`] || 0
-                }));
-                // Si hay sucursales configuradas, el stock total se calcula desde ellas
-                // Si no hay sucursales, se usa el stock inicial del campo manual
-                const stockFromLocations = locationStock.reduce((acc: number, l: any) => acc + l.stock, 0);
+                const inventoryLevels: { locationId: string, quantity: number, price: number | null }[] = [];
+                
+                locations.forEach((loc: any) => {
+                    const quantity = parseInt(String(stockByLocation[`${attrKey}_${loc.id}`] || "0")) || 0;
+                    const invPriceVal = formData.inventoryPrices[`${attrKey}_${loc.id}`];
+                    const invPrice = invPriceVal ? parseFloat(invPriceVal.toString()) : null;
+                    if (quantity >= 0) {
+                        inventoryLevels.push({ locationId: loc.id, quantity, price: invPrice });
+                    }
+                });
+
+                const stockFromLocations = inventoryLevels.reduce((acc: number, l: any) => acc + l.quantity, 0);
                 const totalStock = locations.length > 0 ? stockFromLocations : (parseInt(String(formData.inventory[attrKey])) || 0);
+                
+                const varPriceVal = formData.variantPrices[attrKey];
+                const varPrice = varPriceVal ? parseFloat(varPriceVal.toString()) : null;
+
                 return {
                     attributes: combo,
                     stock: totalStock,
-                    locationStock
+                    price: varPrice,
+                    inventoryLevels
                 };
             });
 
-            const { inventory, wholesaleMethods, activeMethodId, category, ...submissionData } = formData;
+            const { inventory, wholesaleMethods, activeMethodId, category, advancedPricing, variantPrices, inventoryPrices, ...submissionData } = formData;
             const res = await updateProduct(params.id as string, {
                 ...submissionData,
                 sku: formData.sku.trim() || null,
@@ -444,30 +456,54 @@ export default function EditProductPage() {
                                 </div>
                             </div>
 
+                            {formData.isOnline && locations.length > 1 && (
+                                <div className="bg-blue-50/50 dark:bg-blue-900/10 p-4 rounded-2xl border border-blue-100 dark:border-blue-900/30 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-200">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-widest text-blue-800 dark:text-blue-400">Tomar precio público de:</label>
+                                        <select 
+                                            className="w-full px-4 py-2 bg-white dark:bg-card border border-blue-200 dark:border-blue-800 rounded-xl text-sm"
+                                            value={formData.onlinePriceLocationId}
+                                            onChange={e => setFormData({ ...formData, onlinePriceLocationId: e.target.value })}
+                                        >
+                                            <option value="">(Mismo que el precio base)</option>
+                                            {locations.map((loc:any) => (
+                                                <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                            ))}
+                                        </select>
+                                        <p className="text-[10px] text-blue-600/70 leading-tight">Si el producto tiene precio diferente por sucursal, la tienda en línea tomará el de la sucursal seleccionada.</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-black uppercase tracking-widest text-blue-800 dark:text-blue-400">Stock disponible en línea:</label>
+                                        <div className="space-y-1">
+                                            {locations.map((loc:any) => (
+                                                <label key={loc.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 p-1.5 rounded-lg transition-colors">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        className="rounded text-blue-600 w-4 h-4"
+                                                        checked={formData.onlineStockLocationIds.includes(loc.id)}
+                                                        onChange={(e) => {
+                                                            const ids = new Set(formData.onlineStockLocationIds);
+                                                            if (e.target.checked) ids.add(loc.id);
+                                                            else ids.delete(loc.id);
+                                                            setFormData({ ...formData, onlineStockLocationIds: Array.from(ids) });
+                                                        }}
+                                                    />
+                                                    <span className="font-medium">{loc.name}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Images */}
                             <div className="space-y-4">
                                 <label className="text-xs font-black uppercase tracking-widest text-gray-400">Fotografías del Producto</label>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    {formData.images.map((img, idx) => (
-                                        <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden border border-border group bg-gray-50/50 dark:bg-card/50 border-dashed">
-                                            <img src={img} alt={`Product ${idx}`} className="w-full h-full object-cover" />
-                                            <button 
-                                                onClick={() => handleRemoveImage(idx)}
-                                                className="absolute top-2 right-2 w-8 h-8 flex items-center justify-center bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg font-bold"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                    ))}
-                                    <button 
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="aspect-square rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 flex flex-col items-center justify-center text-gray-400 hover:text-blue-500 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors"
-                                    >
-                                        <span className="text-3xl mb-2">📸</span>
-                                        <span className="text-xs font-bold px-4 text-center">Agregar Foto</span>
-                                    </button>
-                                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleImageUpload} />
-                                </div>
+                                <p className="text-xs text-gray-400 font-medium -mt-2">Arrastra las fotos para reordenarlas. La primera es la principal.</p>
+                                <ProductImagesEditor
+                                    images={formData.images}
+                                    onChange={(imgs) => setFormData(prev => ({ ...prev, images: imgs }))}
+                                />
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
