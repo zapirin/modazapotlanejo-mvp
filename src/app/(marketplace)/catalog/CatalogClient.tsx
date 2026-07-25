@@ -412,7 +412,7 @@ export default function CatalogClient({
                                         </div>
                                         {product.variants?.every((v: any) => v.stock === 0) && (
                                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                                <span className="px-4 py-2 bg-black/70 text-white rounded-full text-[10px] font-black uppercase tracking-widest">Sin stock</span>
+                                                <span className="px-4 py-2 bg-black/70 text-white rounded-full text-[10px] font-black uppercase tracking-widest">Agotado</span>
                                             </div>
                                         )}
                                     </div>
@@ -514,7 +514,7 @@ export default function CatalogClient({
                                             });
                                         })()}
                                         {product.variants?.every((v: any) => v.stock === 0) && (
-                                            <span className="px-2 py-0.5 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-lg text-[10px] font-bold">Sin stock</span>
+                                            <span className="px-2 py-0.5 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-lg text-[10px] font-bold">Agotado</span>
                                         )}
                                     </div>
                                     {!sellerId && product.seller && (

@@ -64,7 +64,7 @@ export default async function WishlistPage() {
                                                 )}
                                                 {currentStock === 0 && (
                                                     <span className="px-3 py-1 bg-gray-800/80 text-white rounded-full text-[8px] font-black uppercase tracking-widest">
-                                                        Sin stock
+                                                        Agotado
                                                     </span>
                                                 )}
                                                 {item.product.brand?.name && (
