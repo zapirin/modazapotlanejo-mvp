@@ -19,6 +19,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
     if (!product) return { title: 'Producto no encontrado' };
 
+    const hasStock = (product.variants as any[])?.some((v: any) =>
+        (v.inventoryLevels as any[])?.some((il: any) => (il.stock ?? 0) > 0)
+    );
+
     const image = (product.images as string[])?.[0] || null;
     const description = (product.description?.slice(0, 155) ||
         `${product.name} — ${product.category?.name || 'Ropa'}. Disponible en ${brand.name}. Zapotlanejo, Jalisco.`);
@@ -51,6 +55,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
             images: image ? [image] : [],
         },
         alternates: { canonical: `${getCanonicalBase(host, brand)}/catalog/${slug}` },
+        ...(!hasStock ? { robots: { index: false, follow: true } } : {}),
     };
 }
 
