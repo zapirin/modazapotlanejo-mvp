@@ -831,8 +831,10 @@ function POSContent() {
         const initialInputs: any = {};
 
         if (!isSingleMode) {
+            // price arranca vacio: solo si el cajero teclea un precio se bloquea el renglon
+            // frente al nivel de precio (ver priceLocked en saveVariationsToCart).
             product.variants.forEach((v: any) => {
-                initialInputs[v.id] = { quantity: 0, price: product.price };
+                initialInputs[v.id] = { quantity: 0, price: null };
             });
         }
 
@@ -3122,6 +3124,7 @@ function POSContent() {
                                                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
                                                                 <input
                                                                     type="number"
+                                                                    placeholder={tierAdjustPrice(selectedProduct.price, selectedTier).toFixed(2)}
                                                                     value={variationInputs[v.id]?.price || ''}
                                                                     onChange={(e) => setVariationInputs({ ...variationInputs, [v.id]: { ...variationInputs[v.id], price: parseFloat(e.target.value) || 0 } })}
                                                                     className="w-full pl-7 pr-3 py-2 border border-border focus:border-blue-500 rounded-xl outline-none bg-white dark:bg-gray-800 font-bold transition-all text-right"
