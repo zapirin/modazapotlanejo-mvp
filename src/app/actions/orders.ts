@@ -12,6 +12,7 @@ import {
   sendOrderUpdatedToBuyer,
 } from "@/lib/email/templates";
 import { earnPoints, redeemPoints, pointsToMXN, getProgram } from "@/lib/loyalty";
+import { calculateAutoDiscount } from "@/lib/discountUtils";
 
 interface OrderItemInput {
     variantId: string;
@@ -44,8 +45,64 @@ export async function createOrder(data: {
         const user = await getSessionUser();
         if (!user) return { success: false, error: "Debes iniciar sesión para realizar un pedido." };
 
-        const total = data.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-        const discount = data.discount || 0;
+        // === Recalcular precios desde la BD para prevenir manipulación desde el cliente ===
+        const variantIds = data.items.map(i => i.variantId);
+        const variants = await prisma.variant.findMany({
+            where: { id: { in: variantIds } },
+            include: {
+                product: { select: { price: true, sellByPackage: true, onlinePriceLocationId: true } },
+                inventoryLevels: { select: { locationId: true, price: true } }
+            }
+        });
+        const variantMap = new Map(variants.map(v => [v.id, v]));
+
+        const serverItems = data.items.map(item => {
+            const variant = variantMap.get(item.variantId) as any;
+            if (!variant) return null;
+            const product = variant.product;
+            let basePrice: number;
+            if (product.onlinePriceLocationId) {
+                const level = variant.inventoryLevels?.find((l: any) => l.locationId === product.onlinePriceLocationId);
+                basePrice = (level?.price != null) ? level.price : (variant.price ?? product.price);
+            } else {
+                basePrice = variant.price ?? product.price;
+            }
+            return { ...item, basePrice, sellByPackage: !!product.sellByPackage };
+        }).filter(Boolean) as any[];
+
+        if (serverItems.length !== data.items.length) {
+            return { success: false, error: "Algunas variantes ya no están disponibles." };
+        }
+
+        // Aplicar descuento por volumen en el servidor si se proporcionó priceTierId
+        if (data.priceTierId) {
+            const tier = await (prisma as any).priceTier.findUnique({ where: { id: data.priceTierId } });
+            if (tier) {
+                const looseItems = serverItems.filter(i => !i.sellByPackage);
+                const looseQty = looseItems.reduce((s: number, i: any) => s + i.quantity, 0);
+                const looseTotal = looseItems.reduce((s: number, i: any) => s + i.basePrice * i.quantity, 0);
+                const discountResult = calculateAutoDiscount([tier], looseQty, looseTotal);
+                if (discountResult && discountResult.discount > 0) {
+                    const unitDiscount = discountResult.discount / looseQty;
+                    serverItems.forEach(item => {
+                        if (!item.sellByPackage && unitDiscount > 0) {
+                            item.price = Math.max(0, Math.round((item.basePrice - unitDiscount) * 100) / 100);
+                        } else {
+                            item.price = item.basePrice;
+                        }
+                    });
+                } else {
+                    serverItems.forEach(item => { item.price = item.basePrice; });
+                }
+            } else {
+                serverItems.forEach(item => { item.price = item.basePrice; });
+            }
+        } else {
+            serverItems.forEach(item => { item.price = item.basePrice; });
+        }
+
+        const total = Math.round(serverItems.reduce((sum, item) => sum + item.price * item.quantity, 0) * 100) / 100;
+        const discount = Math.round((data.discount || 0) * 100) / 100;
 
         // Loyalty discount calculation
         let loyaltyDiscount = 0;
@@ -53,11 +110,11 @@ export async function createOrder(data: {
         if (requestedRedeemPoints > 0) {
             const program = await getProgram(data.sellerId);
             if (program?.isActive) {
-                loyaltyDiscount = pointsToMXN(requestedRedeemPoints, program.redeemRate);
+                loyaltyDiscount = Math.round(pointsToMXN(requestedRedeemPoints, program.redeemRate) * 100) / 100;
             }
         }
 
-        const finalTotal = Math.max(0, total - discount - loyaltyDiscount);
+        const finalTotal = Math.round(Math.max(0, total - discount - loyaltyDiscount) * 100) / 100;
 
         // Fetch seller's commission rate
         const seller = await prisma.user.findUnique({
@@ -66,8 +123,8 @@ export async function createOrder(data: {
         });
 
         const commissionRate = seller?.commission ?? 5; // Default 5% if not set
-        const commissionAmount = (finalTotal * commissionRate) / 100;
-        const sellerEarnings = finalTotal - commissionAmount;
+        const commissionAmount = Math.round((finalTotal * commissionRate / 100) * 100) / 100;
+        const sellerEarnings = Math.round((finalTotal - commissionAmount) * 100) / 100;
 
         const order = await prisma.order.create({
             data: {
@@ -88,9 +145,10 @@ export async function createOrder(data: {
                 shippingCarrier: data.shippingCarrier || null,
                 shippingServiceName: data.shippingServiceName || null,
                 sourceDomain: data.domain || null,
+                discount: discount,
                 loyaltyDiscount,
                 items: {
-                    create: data.items.map(item => ({
+                    create: serverItems.map(item => ({
                         variantId: item.variantId,
                         quantity: item.quantity,
                         price: item.price,
@@ -115,7 +173,7 @@ export async function createOrder(data: {
                     buyerName: user.name,
                     orderNumber: order.orderNumber,
                     orderId: order.id,
-                    items: data.items,
+                    items: serverItems,
                     total: finalTotal,
                     notes: data.notes,
                     brandName: isKalexaDomain ? 'Kalexa Fashion' : undefined,
@@ -136,7 +194,7 @@ export async function createOrder(data: {
                     buyerName: user.name,
                     sellerName: seller?.businessName || seller?.name || 'Kalexa Fashion',
                     orderNumber: order.orderNumber,
-                    items: data.items,
+                    items: serverItems,
                     total: finalTotal,
                     notes: data.notes,
                     brandName: isKalexa ? 'Kalexa Fashion' : undefined,
