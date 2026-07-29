@@ -614,15 +614,12 @@ export default function CartPage() {
                             const unitDiscount = (discountResult && discountResult.looseQty > 0 && discountResult.discount > 0)
                                 ? discountResult.discount / discountResult.looseQty
                                 : 0;
-                            
-                            console.log(`[DEBUG CART] looseQty: ${discountResult?.looseQty}, discount: ${discountResult?.discount}, unitDiscount: ${unitDiscount}`);
 
                             const adjustedItemsForCoupon = group.items.map((item: any) => {
                                 const isLoose = !item.sellByPackage;
                                 const adjustedPrice = (isLoose && unitDiscount > 0)
                                     ? Math.max(0, Math.round((item.price - unitDiscount) * 100) / 100)
                                     : item.price;
-                                console.log(`[DEBUG CART] Item ${item.productId}: isLoose=${isLoose}, originalPrice=${item.price}, adjustedPrice=${adjustedPrice}`);
                                 return { ...item, price: adjustedPrice, originalPrice: item.price };
                             });
 

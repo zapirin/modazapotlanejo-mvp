@@ -205,13 +205,10 @@ export async function validateCoupon(code: string, sellerId: string, items: any[
             }
 
             if (applies) {
-                console.log(`[DEBUG] Item ${item.productId} applies. quantity=${item.quantity}, price=${item.price}`);
                 eligibleSubtotal += (item.price * item.quantity);
             }
         });
     }
-
-    console.log(`[DEBUG] Final eligibleSubtotal: ${eligibleSubtotal}`);
 
     if (eligibleSubtotal === 0) {
         return { error: 'Este cupón no aplica para los productos en tu carrito' };
