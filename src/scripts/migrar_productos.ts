@@ -13,6 +13,14 @@ function mapCategory(legacyCategory: string | undefined): string {
     return 'DAMAS';
 }
 
+function makeSlug(text: string): string {
+    return text.toLowerCase().trim()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s-]/g, '')
+        .trim().replace(/\s+/g, '-').replace(/-+/g, '-')
+        .substring(0, 60).replace(/-+$/, '') || 'producto';
+}
+
 async function main() {
     console.log("Iniciando fusión inteligente de items_export.xlsx (Catálogo) y inventory_list.xlsx (Stock)...");
     
@@ -84,6 +92,7 @@ async function main() {
             masterObjMap.set(legacyId, {
                 id: newProductId,
                 name: String(item['Nombre']).trim(),
+                slug: makeSlug(String(item['Nombre']).trim()),
                 description: (item['descripción larga'] || item['Descripción'] || "").trim() || null,
                 price: Number(item['Precio de venta']) || 0,
                 cost: Number(item['Costo']) || null,
