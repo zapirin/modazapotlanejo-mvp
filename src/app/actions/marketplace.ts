@@ -322,6 +322,7 @@ export async function updateMarketplaceSettingsFull(data: {
     brandColors?: Record<string, string>;
     showPricesPublicly?: boolean;
     hideOutOfStock?: boolean;
+    landingBlocks?: any;
 }) {
     try {
         await checkAdmin();
@@ -386,13 +387,21 @@ export async function assignSellerSlug(sellerId: string) {
     }
 }
 
-export async function getFeaturedContent() {
+export async function getFeaturedContent(brand?: any) {
     try {
-        const settings = await prisma.marketplaceSettings.findFirst();
-        if (!settings) return { sellers: [], products: [] };
+        let sellerIds: string[] = [];
+        let productIds: string[] = [];
 
-        const sellerIds = (settings as any).featuredSellerIds || [];
-        const productIds = (settings as any).featuredProductIds || [];
+        if (brand && brand.isSingleVendor) {
+            sellerIds = brand.featuredSellerIds || [];
+            productIds = brand.featuredProductIds || [];
+        } else {
+            const settings = await prisma.marketplaceSettings.findFirst();
+            if (settings) {
+                sellerIds = (settings as any).featuredSellerIds || [];
+                productIds = (settings as any).featuredProductIds || [];
+            }
+        }
 
         const [sellers, products] = await Promise.all([
             sellerIds.length > 0 ? prisma.user.findMany({
@@ -402,7 +411,12 @@ export async function getFeaturedContent() {
                 }
             }) : Promise.resolve([]),
             productIds.length > 0 ? prisma.product.findMany({
-                where: { id: { in: productIds }, isOnline: true, isActive: true },
+                where: { 
+                    id: { in: productIds }, 
+                    isOnline: true, 
+                    isActive: true,
+                    ...(brand && brand.isSingleVendor && brand.sellerId ? { sellerId: brand.sellerId } : {})
+                },
                 include: { brand: true, category: true, seller: { select: { id: true, name: true, businessName: true, sellerSlug: true } } }
             }) : Promise.resolve([]),
         ]);
@@ -481,6 +495,7 @@ export async function updateBrandConfig(domain: string, data: {
     announcementText?: string | null;
     announcementMode?: string;
     hideOutOfStock?: boolean | null;
+    landingBlocks?: any;
 }) {
     try {
         await checkAdmin();

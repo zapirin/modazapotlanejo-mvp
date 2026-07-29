@@ -128,6 +128,39 @@ export async function updateStoreSettings(data: {
 }
 
 // LOCATIONS & TICKETS SETTINGS
+export async function getSellerBrandConfig() {
+    try {
+        const { sellerId } = await getSellerFilter();
+        if (!sellerId) return { success: false };
+        const brand = await prisma.brandConfig.findFirst({
+            where: { sellerId, isSingleVendor: true }
+        });
+        return { success: true, brand };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
+export async function updateSellerLandingBlocks(blocks: any) {
+    try {
+        const { sellerId } = await getSellerFilter();
+        if (!sellerId) return { success: false, error: 'No autorizado' };
+        const brand = await prisma.brandConfig.findFirst({
+            where: { sellerId, isSingleVendor: true }
+        });
+        if (!brand) return { success: false, error: 'No tienes una página independiente configurada' };
+        
+        await prisma.brandConfig.update({
+            where: { id: brand.id },
+            data: { landingBlocks: blocks }
+        });
+        revalidatePath('/', 'layout');
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message };
+    }
+}
+
 export async function getLocationsSettings() {
     try {
         const { filter } = await getSellerFilter();

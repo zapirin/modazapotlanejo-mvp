@@ -34,9 +34,12 @@ import { requestPasswordReset } from '@/app/actions/auth';
 import { validateImageFile } from '@/lib/uploadImage';
 import { processImage } from '@/lib/imageUtils';
 import { toast } from 'sonner';
+import LandingBuilder from '@/components/Blocks/LandingBuilder';
+import { LandingBlock } from '@/lib/blocks';
 
 const TABS = [
     { key: 'site', label: '🎨 Sitio', icon: '🎨' },
+    { key: 'builder', label: '🏗️ Constructor', icon: '🏗️' },
     { key: 'sellers', label: '🏭 Vendedores', icon: '🏭' },
     { key: 'featured', label: '⭐ Destacados', icon: '⭐' },
     { key: 'photos', label: '📸 Fotografía', icon: '📸' },
@@ -50,6 +53,7 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
     const [activeTab, setActiveTab] = useState('site');
     const [settings, setSettings] = useState(initialSettings);
     const [loading, setLoading] = useState(false);
+    const [landingBlocks, setLandingBlocks] = useState<LandingBlock[]>(initialSettings?.landingBlocks || []);
     const [savingBrand, setSavingBrand] = useState<string | null>(null);
 
     // Modal nueva marca
@@ -532,6 +536,35 @@ export default function MarketplaceClient({ initialSettings }: { initialSettings
                     );
                 })}
             </div>
+
+            {/* ── TAB: BUILDER ── */}
+            {activeTab === 'builder' && (
+                <div className="bg-card border border-border rounded-3xl p-8 space-y-6 shadow-sm">
+                    <h2 className="text-xl font-black">🏗️ Constructor de Landing Page</h2>
+                    <p className="text-gray-500 text-sm">Personaliza las secciones de la página principal global.</p>
+                    <LandingBuilder 
+                        blocks={landingBlocks} 
+                        onChange={setLandingBlocks} 
+                        onUploadImage={async (file) => {
+                            const validation = validateImageFile(file);
+                            if (!validation.valid) throw new Error(validation.error);
+                            const { url } = await processImage(file, 'blocks');
+                            return url;
+                        }}
+                    />
+                    <div className="pt-4 border-t border-border mt-6 flex justify-end">
+                        <button onClick={async () => {
+                            setLoading(true);
+                            const res = await updateMarketplaceSettingsFull({ landingBlocks });
+                            if (res.success) toast.success('Bloques guardados correctamente');
+                            else toast.error(res.error || 'Error al guardar');
+                            setLoading(false);
+                        }} disabled={loading} className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-black hover:bg-blue-700 transition">
+                            {loading ? 'Guardando...' : '💾 Guardar Landing Page'}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* ── TAB: SITIO ── */}
             {activeTab === 'site' && (

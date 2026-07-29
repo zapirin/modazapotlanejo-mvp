@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { getStoreSettings, updateStoreSettings, updateSellerLogo, getRequireCashSession, updateRequireCashSession, getRequireSalesperson, updateRequireSalesperson, getCashierCanDeleteSuspended, updateCashierCanDeleteSuspended, createStripeConnectLink, getStripeConnectStatus } from '../actions';
+import { getStoreSettings, updateStoreSettings, updateSellerLogo, getRequireCashSession, updateRequireCashSession, getRequireSalesperson, updateRequireSalesperson, getCashierCanDeleteSuspended, updateCashierCanDeleteSuspended, createStripeConnectLink, getStripeConnectStatus, getSellerBrandConfig, updateSellerLandingBlocks } from '../actions';
 import { useSearchParams } from 'next/navigation';
 import { validateImageFile } from '@/lib/uploadImage';
 import { processImage } from '@/lib/imageUtils';
 import { toast } from 'sonner';
+import LandingBuilder from '@/components/Blocks/LandingBuilder';
+import { LandingBlock } from '@/lib/blocks';
 
 export default function GeneralSettingsPage() {
     const [settings, setSettings] = useState<any>(null);
@@ -49,6 +51,11 @@ export default function GeneralSettingsPage() {
     const [connectingStripe, setConnectingStripe] = useState(false);
     const searchParams = useSearchParams();
 
+    // Landing Page Builder
+    const [sellerBrand, setSellerBrand] = useState<any>(null);
+    const [landingBlocks, setLandingBlocks] = useState<LandingBlock[]>([]);
+    const [savingBlocks, setSavingBlocks] = useState(false);
+
     useEffect(() => { loadSettings(); }, []);
 
     const loadSettings = async () => {
@@ -84,6 +91,14 @@ export default function GeneralSettingsPage() {
         // Cargar estado de Stripe Connect
         const stripeRes = await getStripeConnectStatus();
         setStripeStatus(stripeRes.status);
+        
+        // Cargar Brand Config si tiene
+        const brandRes = await getSellerBrandConfig();
+        if (brandRes.success && brandRes.brand) {
+            setSellerBrand(brandRes.brand);
+            setLandingBlocks((brandRes.brand as any).landingBlocks || []);
+        }
+        
         setLoading(false);
     };
 
@@ -535,6 +550,44 @@ export default function GeneralSettingsPage() {
                         </button>
                     </div>
                 </div>
+
+                {/* Constructor de Landing Page (Solo si tiene página independiente) */}
+                {sellerBrand && (
+                    <div className="bg-card rounded-3xl p-8 shadow-sm border border-border space-y-4">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h2 className="text-xl font-black text-foreground">🏗️ Constructor de Página Principal</h2>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    Personaliza las secciones de tu página independiente ({sellerBrand.domain}).
+                                </p>
+                            </div>
+                        </div>
+                        <LandingBuilder
+                            blocks={landingBlocks}
+                            onChange={setLandingBlocks}
+                            onUploadImage={async (file) => {
+                                const validation = validateImageFile(file);
+                                if (!validation.valid) throw new Error(validation.error);
+                                const { url } = await processImage(file, 'blocks');
+                                return url;
+                            }}
+                        />
+                        <div className="flex justify-end pt-4">
+                            <button type="button"
+                                disabled={savingBlocks}
+                                onClick={async () => {
+                                    setSavingBlocks(true);
+                                    const res = await updateSellerLandingBlocks(landingBlocks);
+                                    if (res.success) toast.success('Página guardada correctamente');
+                                    else toast.error(res.error || 'Error al guardar');
+                                    setSavingBlocks(false);
+                                }}
+                                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition disabled:opacity-50">
+                                {savingBlocks ? 'Guardando...' : '💾 Guardar Página'}
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 <div className="pt-4 flex justify-end">
                     <button onClick={handleSave} disabled={saving}
