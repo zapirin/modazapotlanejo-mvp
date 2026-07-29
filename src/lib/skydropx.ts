@@ -208,6 +208,7 @@ export async function getShippingQuotes(
 
         interface RawSkydropxRate {
             id?: string;
+            success?: boolean;
             total?: string;
             provider_display_name?: string;
             provider_name?: string;
@@ -217,13 +218,14 @@ export async function getShippingQuotes(
         }
 
         const rates: ShippingRate[] = (data?.rates ?? [])
-            .filter((r: RawSkydropxRate) => r.total != null && parseFloat(r.total) > 0)
+            .filter((r: RawSkydropxRate) => r.success !== false && r.total != null && parseFloat(r.total) > 0)
             .map((r: RawSkydropxRate) => ({
                 rateId:        String(r.id ?? ""),
                 quotationId,
                 carrier:       r.provider_display_name ?? r.provider_name ?? "Desconocido",
                 serviceName:   r.provider_service_name ?? "Estándar",
-                totalPrice:    parseFloat(r.total ?? "0"),
+                // Se suma un margen fijo (~$35 MXN) para cubrir posibles variaciones de impuestos y cargos extra en la creación real de la guía
+                totalPrice:    (Math.round(parseFloat(r.total ?? "0") * 1.16 * 100) / 100) + 35,
                 currency:      r.currency_code ?? "MXN",
                 estimatedDays: parseInt(r.days ?? "3", 10),
             }))
