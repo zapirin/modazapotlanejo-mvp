@@ -252,12 +252,12 @@ export default function CartPage() {
     };
 
     // Aplica el cupón para un vendedor
-    const handleApplyCoupon = async (sellerId: string, groupTotal: number) => {
+    const handleApplyCoupon = async (sellerId: string, groupTotal: number, sellerItems: any[]) => {
         const code = (couponInputs[sellerId] || '').trim();
         if (!code) return;
         setCouponLoading(prev => ({ ...prev, [sellerId]: true }));
         setCouponErrors(prev => ({ ...prev, [sellerId]: '' }));
-        const result = await validateCoupon(code, sellerId, groupTotal);
+        const result = await validateCoupon(code, sellerId, sellerItems, groupTotal);
         setCouponLoading(prev => ({ ...prev, [sellerId]: false }));
         if (result.error) {
             setCouponErrors(prev => ({ ...prev, [sellerId]: result.error! }));
@@ -336,18 +336,18 @@ export default function CartPage() {
                 const discountResult = getGroupDiscount(sellerId, group);
                 const coupon = appliedCoupons.get(sellerId);
 
-                // Distribuir el descuento por volumen en el precio unitario de los items
-                // sueltos para que OrderItem.price refleje lo que realmente pagó el cliente.
-                const looseTotal = discountResult?.looseTotal || 0;
+                // Distribuir el descuento por volumen equitativamente por pieza suelta,
+                // igual que lo hace la interfaz visual.
+                const looseQty = discountResult?.looseQty || 0;
                 const volumeDiscount = discountResult?.discount || 0;
-                const priceMultiplier = (looseTotal > 0 && volumeDiscount > 0)
-                    ? (looseTotal - volumeDiscount) / looseTotal
-                    : 1;
+                const unitDiscount = (looseQty > 0 && volumeDiscount > 0)
+                    ? volumeDiscount / looseQty
+                    : 0;
 
                 const adjustedItems = group.items.map((item: any) => {
                     const isLoose = !item.sellByPackage;
-                    const adjustedPrice = (isLoose && priceMultiplier !== 1)
-                        ? Math.round(item.price * priceMultiplier * 100) / 100
+                    const adjustedPrice = (isLoose && unitDiscount > 0)
+                        ? Math.max(0, Math.round((item.price - unitDiscount) * 100) / 100)
                         : item.price;
                     return { ...item, price: adjustedPrice };
                 });
@@ -611,6 +611,21 @@ export default function CartPage() {
                                 .filter((t: any) => t.autoApplyMarketplace && t.minQuantity > looseQty)
                                 .sort((a: any, b: any) => a.minQuantity - b.minQuantity)[0] : null;
 
+                            const unitDiscount = (discountResult && discountResult.looseQty > 0 && discountResult.discount > 0)
+                                ? discountResult.discount / discountResult.looseQty
+                                : 0;
+                            
+                            console.log(`[DEBUG CART] looseQty: ${discountResult?.looseQty}, discount: ${discountResult?.discount}, unitDiscount: ${unitDiscount}`);
+
+                            const adjustedItemsForCoupon = group.items.map((item: any) => {
+                                const isLoose = !item.sellByPackage;
+                                const adjustedPrice = (isLoose && unitDiscount > 0)
+                                    ? Math.max(0, Math.round((item.price - unitDiscount) * 100) / 100)
+                                    : item.price;
+                                console.log(`[DEBUG CART] Item ${item.productId}: isLoose=${isLoose}, originalPrice=${item.price}, adjustedPrice=${adjustedPrice}`);
+                                return { ...item, price: adjustedPrice, originalPrice: item.price };
+                            });
+
                             return (
                                 <div key={sellerId} className="bg-card rounded-3xl border border-border shadow-sm overflow-hidden">
                                     <div className="px-6 py-4 border-b border-border bg-gray-50/50 dark:bg-gray-800/50">
@@ -754,12 +769,12 @@ export default function CartPage() {
                                                             type="text"
                                                             value={couponInputs[sellerId] || ''}
                                                             onChange={e => setCouponInputs(p => ({ ...p, [sellerId]: e.target.value.toUpperCase() }))}
-                                                            onKeyDown={e => e.key === 'Enter' && handleApplyCoupon(sellerId, volumeTotal)}
+                                                            onKeyDown={e => e.key === 'Enter' && handleApplyCoupon(sellerId, volumeTotal, adjustedItemsForCoupon)}
                                                             placeholder="Código"
                                                             className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-foreground font-mono font-black text-sm uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                         />
                                                         <button
-                                                            onClick={() => handleApplyCoupon(sellerId, volumeTotal)}
+                                                            onClick={() => handleApplyCoupon(sellerId, volumeTotal, adjustedItemsForCoupon)}
                                                             disabled={couponLoading[sellerId]}
                                                             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-black hover:bg-blue-700 transition disabled:opacity-60 whitespace-nowrap"
                                                         >

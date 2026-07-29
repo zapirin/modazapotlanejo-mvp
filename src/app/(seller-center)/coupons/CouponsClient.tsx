@@ -12,9 +12,12 @@ const EMPTY_FORM = {
     maxUsesPerBuyer: '',
     startsAt: '',
     expiresAt: '',
+    applicableProductIds: [] as string[],
+    applicableCategoryIds: [] as string[],
+    applicableSubcategoryIds: [] as string[],
 };
 
-export default function CouponsClient({ initialCoupons }: { initialCoupons: any[] }) {
+export default function CouponsClient({ initialCoupons, products = [], categories = [] }: { initialCoupons: any[], products?: any[], categories?: any[] }) {
     const [coupons, setCoupons] = useState(initialCoupons);
     const [showModal, setShowModal] = useState(false);
     const [editCoupon, setEditCoupon] = useState<any>(null);
@@ -22,9 +25,26 @@ export default function CouponsClient({ initialCoupons }: { initialCoupons: any[
     const [error, setError] = useState('');
     const [isPending, startTransition] = useTransition();
 
+    // Estado para tipo de restricción
+    const [restrictionType, setRestrictionType] = useState<'ALL' | 'PRODUCTS' | 'CATEGORIES'>('ALL');
+
+    // Estado para búsqueda en MultiSelect
+    const [productSearch, setProductSearch] = useState('');
+    const [categorySearch, setCategorySearch] = useState('');
+    const [subcategorySearch, setSubcategorySearch] = useState('');
+
+    const toggleSelection = (id: string, list: string[], setList: (v: string[]) => void) => {
+        if (list.includes(id)) {
+            setList(list.filter(item => item !== id));
+        } else {
+            setList([...list, id]);
+        }
+    };
+
     const openCreate = () => {
         setEditCoupon(null);
         setForm(EMPTY_FORM);
+        setRestrictionType('ALL');
         setError('');
         setShowModal(true);
     };
@@ -40,7 +60,19 @@ export default function CouponsClient({ initialCoupons }: { initialCoupons: any[
             maxUsesPerBuyer: c.maxUsesPerBuyer ? String(c.maxUsesPerBuyer) : '',
             startsAt: c.startsAt ? new Date(c.startsAt).toISOString().slice(0, 16) : '',
             expiresAt: c.expiresAt ? new Date(c.expiresAt).toISOString().slice(0, 16) : '',
+            applicableProductIds: c.applicableProductIds || [],
+            applicableCategoryIds: c.applicableCategoryIds || [],
+            applicableSubcategoryIds: c.applicableSubcategoryIds || [],
         });
+        
+        if (c.applicableProductIds?.length > 0) {
+            setRestrictionType('PRODUCTS');
+        } else if (c.applicableCategoryIds?.length > 0 || c.applicableSubcategoryIds?.length > 0) {
+            setRestrictionType('CATEGORIES');
+        } else {
+            setRestrictionType('ALL');
+        }
+
         setError('');
         setShowModal(true);
     };
@@ -57,6 +89,9 @@ export default function CouponsClient({ initialCoupons }: { initialCoupons: any[
             maxUsesPerBuyer: form.maxUsesPerBuyer ? parseInt(form.maxUsesPerBuyer) : null,
             startsAt: form.startsAt || null,
             expiresAt: form.expiresAt || null,
+            applicableProductIds: restrictionType === 'PRODUCTS' ? form.applicableProductIds : [],
+            applicableCategoryIds: restrictionType === 'CATEGORIES' ? form.applicableCategoryIds : [],
+            applicableSubcategoryIds: restrictionType === 'CATEGORIES' ? form.applicableSubcategoryIds : [],
         };
         startTransition(async () => {
             const result = editCoupon
@@ -329,6 +364,127 @@ export default function CouponsClient({ initialCoupons }: { initialCoupons: any[
                                         onChange={e => setForm(f => ({ ...f, expiresAt: e.target.value }))}
                                         className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
+                                </div>
+                            </div>
+
+                            <hr className="border-border" />
+                            
+                            <div>
+                                <h4 className="font-black text-sm text-foreground mb-1">Restricciones de Aplicación</h4>
+                                
+                                <div className="space-y-4 mt-4">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-1.5">Aplicar cupón a</label>
+                                        <select
+                                            value={restrictionType}
+                                            onChange={(e) => {
+                                                const val = e.target.value as any;
+                                                setRestrictionType(val);
+                                                if (val === 'ALL') {
+                                                    setForm(f => ({ ...f, applicableProductIds: [], applicableCategoryIds: [], applicableSubcategoryIds: [] }));
+                                                } else if (val === 'PRODUCTS') {
+                                                    setForm(f => ({ ...f, applicableCategoryIds: [], applicableSubcategoryIds: [] }));
+                                                } else if (val === 'CATEGORIES') {
+                                                    setForm(f => ({ ...f, applicableProductIds: [] }));
+                                                }
+                                            }}
+                                            className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="ALL">Todos los productos</option>
+                                            <option value="PRODUCTS">Productos específicos</option>
+                                            <option value="CATEGORIES">Categoría / Subcategoría específica</option>
+                                        </select>
+                                    </div>
+
+                                    {restrictionType === 'PRODUCTS' && (
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-1.5">Seleccionar productos ({form.applicableProductIds.length} seleccionados)</label>
+                                            <div className="border border-border rounded-xl bg-background overflow-hidden flex flex-col">
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="Buscar producto por nombre o SKU..." 
+                                                    className="w-full px-3 py-2 text-sm bg-transparent border-b border-border focus:outline-none"
+                                                    value={productSearch}
+                                                    onChange={e => setProductSearch(e.target.value)}
+                                                />
+                                                <div className="h-40 overflow-y-auto p-2 space-y-1">
+                                                    {products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.sku?.toLowerCase().includes(productSearch.toLowerCase())).map(p => (
+                                                        <label key={p.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={form.applicableProductIds.includes(p.id)}
+                                                                onChange={() => toggleSelection(p.id, form.applicableProductIds, (v) => setForm(f => ({ ...f, applicableProductIds: v })))}
+                                                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                            />
+                                                            <div className="text-sm">
+                                                                <span className="font-bold text-foreground">{p.name}</span>
+                                                                {p.sku && <span className="text-gray-400 text-xs ml-2">SKU: {p.sku}</span>}
+                                                            </div>
+                                                        </label>
+                                                    ))}
+                                                    {products.length > 0 && products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.sku?.toLowerCase().includes(productSearch.toLowerCase())).length === 0 && (
+                                                        <div className="p-4 text-center text-sm text-gray-500">No se encontraron productos</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {restrictionType === 'CATEGORIES' && (
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-1.5">Categoría madre</label>
+                                                <select
+                                                    value={form.applicableCategoryIds[0] || ''}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setForm(f => ({ 
+                                                            ...f, 
+                                                            applicableCategoryIds: val ? [val] : [],
+                                                            applicableSubcategoryIds: [] // Limpiar subcategoría al cambiar categoría madre
+                                                        }));
+                                                    }}
+                                                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                >
+                                                    <option value="">Selecciona una categoría</option>
+                                                    {categories.map(c => (
+                                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="flex flex-col h-full">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-1.5">Subcategorías ({form.applicableSubcategoryIds.length} seleccionadas)</label>
+                                                <div className={`border border-border rounded-xl bg-background overflow-hidden flex flex-col flex-1 min-h-[160px] ${!form.applicableCategoryIds[0] ? 'opacity-50 pointer-events-none' : ''}`}>
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="Buscar subcategoría..." 
+                                                        className="w-full px-3 py-2 text-sm bg-transparent border-b border-border focus:outline-none"
+                                                        value={subcategorySearch}
+                                                        onChange={e => setSubcategorySearch(e.target.value)}
+                                                        disabled={!form.applicableCategoryIds[0]}
+                                                    />
+                                                    <div className="h-32 overflow-y-auto p-2 space-y-1">
+                                                        {categories.find(c => c.id === form.applicableCategoryIds[0])?.subcategories
+                                                            ?.filter((sc: any) => sc.name.toLowerCase().includes(subcategorySearch.toLowerCase()))
+                                                            .map((sc: any) => (
+                                                            <label key={sc.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer">
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    checked={form.applicableSubcategoryIds.includes(sc.id)}
+                                                                    onChange={() => toggleSelection(sc.id, form.applicableSubcategoryIds, (v) => setForm(f => ({ ...f, applicableSubcategoryIds: v })))}
+                                                                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                                />
+                                                                <span className="text-sm font-bold text-foreground">{sc.name}</span>
+                                                            </label>
+                                                        ))}
+                                                        {(!categories.find(c => c.id === form.applicableCategoryIds[0])?.subcategories?.length) && form.applicableCategoryIds[0] && (
+                                                            <div className="p-4 text-center text-sm text-gray-500">Sin subcategorías</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

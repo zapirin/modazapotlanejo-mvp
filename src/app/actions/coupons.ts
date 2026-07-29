@@ -24,6 +24,9 @@ export async function createCoupon(data: {
     maxUsesPerBuyer?: number | null;
     startsAt?: string | null;
     expiresAt?: string | null;
+    applicableProductIds?: string[];
+    applicableCategoryIds?: string[];
+    applicableSubcategoryIds?: string[];
 }) {
     const user = await getSessionUser();
     if (!user || !['SELLER', 'ADMIN'].includes(user.role))
@@ -50,13 +53,17 @@ export async function createCoupon(data: {
                 startsAt: data.startsAt ? new Date(data.startsAt) : null,
                 expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
                 isActive: true,
+                applicableProductIds: data.applicableProductIds || [],
+                applicableCategoryIds: data.applicableCategoryIds || [],
+                applicableSubcategoryIds: data.applicableSubcategoryIds || [],
             },
         });
         revalidatePath('/coupons');
         return { success: true, coupon };
     } catch (e: any) {
         if (e.code === 'P2002') return { error: 'Ya tienes un cupón con ese código' };
-        return { error: 'Error al crear el cupón' };
+        console.error("Coupon creation error:", e);
+        return { error: 'Error al crear el cupón: ' + (e.message || String(e)) };
     }
 }
 
@@ -71,6 +78,9 @@ export async function updateCoupon(id: string, data: {
     startsAt?: string | null;
     expiresAt?: string | null;
     isActive?: boolean;
+    applicableProductIds?: string[];
+    applicableCategoryIds?: string[];
+    applicableSubcategoryIds?: string[];
 }) {
     const user = await getSessionUser();
     if (!user || !['SELLER', 'ADMIN'].includes(user.role))
@@ -92,13 +102,17 @@ export async function updateCoupon(id: string, data: {
                 ...(data.startsAt !== undefined && { startsAt: data.startsAt ? new Date(data.startsAt) : null }),
                 ...(data.expiresAt !== undefined && { expiresAt: data.expiresAt ? new Date(data.expiresAt) : null }),
                 ...(data.isActive !== undefined && { isActive: data.isActive }),
+                ...(data.applicableProductIds !== undefined && { applicableProductIds: data.applicableProductIds }),
+                ...(data.applicableCategoryIds !== undefined && { applicableCategoryIds: data.applicableCategoryIds }),
+                ...(data.applicableSubcategoryIds !== undefined && { applicableSubcategoryIds: data.applicableSubcategoryIds }),
             },
         });
         revalidatePath('/coupons');
         return { success: true, coupon: updated };
     } catch (e: any) {
         if (e.code === 'P2002') return { error: 'Ya tienes un cupón con ese código' };
-        return { error: 'Error al actualizar el cupón' };
+        console.error("Coupon update error:", e);
+        return { error: 'Error al actualizar el cupón: ' + (e.message || String(e)) };
     }
 }
 
@@ -117,8 +131,8 @@ export async function deleteCoupon(id: string) {
 }
 
 // ── BUYER: validar cupón en carrito ─────────────────────────────────────────
-export async function validateCoupon(code: string, sellerId: string, subtotal: number) {
-    if (!code || !sellerId) return { error: 'Datos incompletos' };
+export async function validateCoupon(code: string, sellerId: string, items: any[], effectiveTotal?: number) {
+    if (!code || !sellerId || !items || items.length === 0) return { error: 'Datos incompletos' };
 
     const now = new Date();
     const coupon = await prisma.discountCoupon.findFirst({
@@ -135,8 +149,6 @@ export async function validateCoupon(code: string, sellerId: string, subtotal: n
     if (coupon.expiresAt && coupon.expiresAt < now) return { error: 'Cupón expirado' };
     if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses)
         return { error: 'Cupón agotado' };
-    if (subtotal < coupon.minPurchase)
-        return { error: `Compra mínima de $${coupon.minPurchase.toFixed(2)} requerida` };
 
     // Verificar límite por comprador (si el usuario está autenticado)
     if (coupon.maxUsesPerBuyer !== null) {
@@ -151,6 +163,62 @@ export async function validateCoupon(code: string, sellerId: string, subtotal: n
             }
         }
     }
+
+    // Filtrar items elegibles basados en products/categories
+    const hasProductFilters = coupon.applicableProductIds && coupon.applicableProductIds.length > 0;
+    const hasCategoryFilters = coupon.applicableCategoryIds && coupon.applicableCategoryIds.length > 0;
+    const hasSubcategoryFilters = coupon.applicableSubcategoryIds && coupon.applicableSubcategoryIds.length > 0;
+
+    let eligibleSubtotal = 0;
+
+    if (!hasProductFilters && !hasCategoryFilters && !hasSubcategoryFilters) {
+        // Aplica a todos los items del vendedor — usar el total efectivo (post descuentos de volumen) si se proporcionó
+        eligibleSubtotal = effectiveTotal ?? items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    } else {
+        // Necesitamos consultar las categorías de los productos en el carrito para evaluarlos
+        const productIds = items.map(i => i.productId);
+        const productsInCart = await prisma.product.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, categoryId: true, subcategoryId: true }
+        });
+
+        const productMap = new Map(productsInCart.map(p => [p.id, p]));
+
+        items.forEach(item => {
+            const prod = productMap.get(item.productId);
+            if (!prod) return;
+
+            const isProductAllowed = hasProductFilters ? coupon.applicableProductIds.includes(prod.id) : false;
+            const isCategoryAllowed = hasCategoryFilters && prod.categoryId ? coupon.applicableCategoryIds.includes(prod.categoryId) : false;
+            const isSubcategoryAllowed = hasSubcategoryFilters && prod.subcategoryId ? coupon.applicableSubcategoryIds.includes(prod.subcategoryId) : false;
+
+            let applies = false;
+            
+            if (hasProductFilters) {
+                if (isProductAllowed) applies = true;
+            } else if (hasSubcategoryFilters) {
+                // Si seleccionaron subcategorías específicas, solo esas subcategorías aplican (ignora la categoría general)
+                if (isSubcategoryAllowed) applies = true;
+            } else if (hasCategoryFilters) {
+                // Si seleccionaron una categoría pero ninguna subcategoría, aplica a toda la categoría
+                if (isCategoryAllowed) applies = true;
+            }
+
+            if (applies) {
+                console.log(`[DEBUG] Item ${item.productId} applies. quantity=${item.quantity}, price=${item.price}`);
+                eligibleSubtotal += (item.price * item.quantity);
+            }
+        });
+    }
+
+    console.log(`[DEBUG] Final eligibleSubtotal: ${eligibleSubtotal}`);
+
+    if (eligibleSubtotal === 0) {
+        return { error: 'Este cupón no aplica para los productos en tu carrito' };
+    }
+
+    if (eligibleSubtotal < coupon.minPurchase)
+        return { error: `Compra mínima de $${coupon.minPurchase.toFixed(2)} requerida en productos aplicables` };
 
     const isFreeShipping = ['FREE_SHIPPING', 'PERCENTAGE_FREE_SHIPPING', 'FIXED_FREE_SHIPPING'].includes(coupon.discountType);
 
@@ -170,8 +238,8 @@ export async function validateCoupon(code: string, sellerId: string, subtotal: n
 
     const isPercentage = coupon.discountType === 'PERCENTAGE' || coupon.discountType === 'PERCENTAGE_FREE_SHIPPING';
     const discountAmount = isPercentage
-            ? Math.min(subtotal * (coupon.discountValue / 100), subtotal)
-            : Math.min(coupon.discountValue, subtotal);
+            ? Math.round(Math.min(eligibleSubtotal * (coupon.discountValue / 100), eligibleSubtotal) * 100) / 100
+            : Math.round(Math.min(coupon.discountValue, eligibleSubtotal) * 100) / 100;
 
     return {
         success: true,
