@@ -1,7 +1,7 @@
 import { PrismaClient } from '@/generated/client'
 
 const prismaClient = new PrismaClient({
-    log: ['query'],
+    log: process.env.NODE_ENV === 'production' ? [] : ['query'],
 })
 
 const globalForPrisma = globalThis as unknown as {
