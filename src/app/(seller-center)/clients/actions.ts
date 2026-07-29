@@ -21,6 +21,7 @@ async function getEffectiveSellerId(user: any): Promise<string | null> {
 export async function createClient(data: { name: string; email?: string; phone?: string }) {
     try {
         const user = await getSessionUser();
+        if (!user) return { success: false, error: "No autorizado" };
         const sellerId = await getEffectiveSellerId(user);
         const newClient = await prisma.client.create({
             data: {

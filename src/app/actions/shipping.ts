@@ -42,9 +42,9 @@ export async function saveShippingAddress(data: {
         }
 
         if (data.id) {
-            // Actualizar existente
-            const address = await prisma.shippingAddress.update({
-                where: { id: data.id },
+            // Actualizar existente — verificar que pertenezca al usuario
+            const result = await prisma.shippingAddress.updateMany({
+                where: { id: data.id, userId: user.id },
                 data: {
                     label: data.label || "Principal",
                     name: data.name,
@@ -58,6 +58,8 @@ export async function saveShippingAddress(data: {
                     isDefault: data.isDefault ?? false,
                 },
             });
+            if (result.count === 0) return { success: false, error: "Dirección no encontrada o no autorizada." };
+            const address = await prisma.shippingAddress.findUnique({ where: { id: data.id } });
             return { success: true, address };
         } else {
             // Crear nueva
@@ -105,10 +107,11 @@ export async function deleteShippingAddress(id: string) {
         const user = await getSessionUser();
         if (!user) return { success: false, error: "No autorizado." };
 
-        await prisma.shippingAddress.delete({
-            where: { id },
+        const result = await prisma.shippingAddress.deleteMany({
+            where: { id, userId: user.id },
         });
 
+        if (result.count === 0) return { success: false, error: "Dirección no encontrada o no autorizada." };
         return { success: true };
     } catch (error: any) {
         console.error("Error deleting shipping address:", error);

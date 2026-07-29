@@ -1,10 +1,10 @@
 "use server";
 
-import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { Role } from '@/generated/client';
 import { revalidatePath } from 'next/cache';
 import { sendEmail } from '@/lib/email/resend';
+import { getSessionUser } from '@/app/actions/auth';
 
 // --- SELLER APPLICATIONS ---
 
@@ -77,7 +77,9 @@ export async function applyAsSeller(data: {
 
 export async function getSellerApplications() {
     try {
-                return await prisma.sellerApplication.findMany({
+        const user = await getSessionUser();
+        if (!user || user.role !== 'ADMIN') return [];
+        return await prisma.sellerApplication.findMany({
             where: { status: 'PENDING' },
             orderBy: { createdAt: 'desc' }
         });
@@ -91,6 +93,8 @@ export async function getSellerApplications() {
 
 export async function getSellers() {
     try {
+        const user = await getSessionUser();
+        if (!user || user.role !== 'ADMIN') return [];
         return await prisma.user.findMany({
                         where: { role: Role.SELLER },
             select: {
@@ -112,6 +116,8 @@ export async function getSellers() {
 
 export async function updateSellerCosts(id: string, costs: { commission: number, fixedFee: number }) {
     try {
+        const user = await getSessionUser();
+        if (!user || user.role !== 'ADMIN') return { success: false, error: 'No autorizado' };
         await prisma.user.update({
             where: { id },
             data: {
@@ -129,6 +135,8 @@ export async function updateSellerCosts(id: string, costs: { commission: number,
 
 export async function toggleUserStatus(userId: string) {
     try {
+        const admin = await getSessionUser();
+        if (!admin || admin.role !== 'ADMIN') return { success: false, error: 'No autorizado' };
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) return { success: false, error: 'Usuario no encontrado' };
 
@@ -145,6 +153,8 @@ export async function toggleUserStatus(userId: string) {
 
 export async function updateUserAdminNotes(userId: string, notes: string) {
     try {
+        const admin = await getSessionUser();
+        if (!admin || admin.role !== 'ADMIN') return { success: false, error: 'No autorizado' };
         await prisma.user.update({
             where: { id: userId },
             data: { adminNotes: notes }
@@ -158,6 +168,8 @@ export async function updateUserAdminNotes(userId: string, notes: string) {
 
 export async function resendSellerCredentials(userId: string, customPassword?: string) {
     try {
+        const admin = await getSessionUser();
+        if (!admin || admin.role !== 'ADMIN') return { success: false, error: 'No autorizado' };
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) return { success: false, error: 'Usuario no encontrado' };
 
@@ -206,6 +218,8 @@ export async function resendSellerCredentials(userId: string, customPassword?: s
 
 export async function syncApprovedSellers() {
     try {
+        const admin = await getSessionUser();
+        if (!admin || admin.role !== 'ADMIN') return { success: false, error: 'No autorizado' };
         const approvedApps = await prisma.sellerApplication.findMany({
             where: { status: 'APPROVED' }
         });
