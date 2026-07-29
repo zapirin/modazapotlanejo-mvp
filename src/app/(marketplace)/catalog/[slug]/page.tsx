@@ -24,8 +24,22 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     );
 
     const image = (product.images as string[])?.[0] || null;
-    const description = (product.description?.slice(0, 155) ||
-        `${product.name} — ${product.category?.name || 'Ropa'}. Disponible en ${brand.name}. Zapotlanejo, Jalisco.`);
+    // La descripcion de la BD puede traer HTML del editor, saltos de linea o ser
+    // demasiado corta para servir como meta description: se limpia y, si no queda
+    // texto util, se arma una a partir de los datos del producto.
+    const cleanDescription = (product.description || '')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+    const description = cleanDescription.length < 50
+        ? `${product.name} — ${product.category?.name || 'Ropa'}. Disponible en ${brand.name}. Zapotlanejo, Jalisco.`
+        : cleanDescription.length <= 155
+            ? cleanDescription
+            : cleanDescription.slice(0, 155).replace(/\s+\S*$/, '') + '…';
 
     return {
         title: product.name,
