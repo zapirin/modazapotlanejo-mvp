@@ -64,9 +64,33 @@ Recientemente hemos implementado y desplegado con éxito en el servidor de produ
 
 ---
 
+## ⚠️ Regla aprendida (2026-07-28): el servidor puede ir adelante O atrás de git
+
+Antes de subir CUALQUIER archivo al VPS, comparar con la versión que ya corre ahí:
+```bash
+ssh root@187.124.158.239 'base64 "/var/www/modazapo/<ruta>"' | base64 -d -i - > /tmp/servidor.tsx
+diff "<ruta local>" /tmp/servidor.tsx
+```
+El deploy histórico se ha hecho editando directo en el servidor y con scripts sueltos (no siempre `git pull`), así que hay archivos donde el servidor tiene código que git nunca vio, y viceversa. Subir a ciegas puede BORRAR funcionalidad en producción. Ver caso real en la entrada del 2026-07-28/29 abajo.
+
 ## 📝 Bitácora de Cambios Recientes
 
 *(Las inteligencias artificiales deben documentar aquí sus cambios cronológicamente antes de finalizar su turno).*
+
+### [2026-07-28/29] — SEO (indexación + meta descriptions), auditoría de seguridad y sincronización servidor↔git (Claude Code / Sonnet & Opus 5)
+* **Bug crítico de SEO corregido**: `catalog/[slug]/page.tsx` marcaba `noindex` a TODOS los productos (2,146 con stock real, en los 3 dominios) porque comparaba `il.quantity` (campo inexistente) en vez de `il.stock`. Causaba el aviso de Search Console sobre páginas no indexables. Verificado con productos reales antes/después.
+* **Meta descriptions limpiadas**: 513 productos tenían HTML crudo del editor (134 literalmente vacíos: `<p><br data-mce-bogus="1"></p>`), textos cortados a media palabra, o descripciones duplicadas entre productos (1,306 casos). Ahora se limpia HTML/espacios, se corta en palabra completa, y si el texto útil es muy corto se genera uno con el nombre del producto.
+* **zonadelvestir.com usa canonical hacia modazapotlanejo.com a propósito** (`getCanonicalBase` en `src/lib/brand.ts`) — mismo catálogo al 100% (2,204/2,204 URLs idénticas), es decisión de diseño para no competir contra sí mismo en Google, no un bug. Decisión pendiente del usuario: mantener consolidado (recomendado, dado que faltan meta descriptions de calidad) o invertir en diferenciar contenido.
+* **Se descubrió deriva servidor↔git en 19 archivos**: cambios ya desplegados y funcionando en producción (verificado byte-a-byte idénticos local=servidor) que nunca se habían comiteado. Se organizaron y comitearon en 8 commits temáticos + 1 de limpieza:
+  - Seguridad: `admin.ts`, `shipping.ts`, `tags/actions.ts`, `clients/actions.ts` — verificación de sesión/rol ADMIN/propiedad antes de leer o modificar datos (varias funciones no comprobaban nada antes).
+  - `upload/route.ts` — valida el tipo real de archivo por magic numbers (no confía en el content-type del navegador) + límite 10MB.
+  - `orders.ts`/`stripe.ts` — el precio de cada item se recalcula en el servidor desde la BD (antes se confiaba en lo que mandaba el navegador — hueco de manipulación de precios).
+  - Cupones: restricción por producto/categoría/subcategoría + corrección de bug (mínimo de compra se evaluaba contra el carrito completo, no contra los productos elegibles del cupón).
+  - Constructor de landing page por bloques (`src/components/Blocks/LandingBuilder.tsx`, `src/lib/blocks.ts`, nuevo tab en Marketplace admin y en Configuración de vendedor single-vendor).
+  - `skydropx.ts` — margen de 16% + $35 MXN fijo sobre la cotización de envío mostrada al comprador (confirmar con el usuario si ese margen es el correcto).
+  - `prisma.ts` — deja de loguear cada query en producción.
+* **Pendiente de infraestructura anotado** (sin urgencia, disco al 42%): instalar `pm2-logrotate` (el log de errores no rota, ya ~15-19MB); errores crónicos "Failed to find Server Action" tras cada `pm2 restart` (2,764 acumulados de 16 deploys — afecta solo a clientes con la pestaña ya abierta durante el restart, no a visitas nuevas).
+* **Estado de despliegue**: todo desplegado, verificado (build OK, PM2 online, HTTP 200 en los 3 dominios, checks de contenido específico por dominio), y comiteado en git. Ver memoria persistente de Claude Code (`~/.claude/projects/.../memory/`) para detalle completo si se retoma con Claude.
 
 ### [2026-05-22] — Cambios en Fidelización, Niveles de Precio y Sucursal Dinámica (Antigravity)
 * **Archivos Modificados**:
