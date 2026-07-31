@@ -224,6 +224,7 @@ export async function postProductToSocialMedia(product: {
     images?: string[] | null;
     sellerId?: string | null;
     isOnline?: boolean;
+    wholesaleComposition?: any;
 }) {
     try {
         // Solo productos visibles en la tienda en línea
@@ -254,9 +255,17 @@ export async function postProductToSocialMedia(product: {
             return;
         }
 
-        const priceText = Number.isInteger(product.price) ? `${product.price}` : product.price.toFixed(2);
+        // Precio de mayoreo por pieza más bajo entre los métodos (Corrida/Paquete/Caja),
+        // mismo cálculo que ProductCard.tsx y ProductDetailClient.tsx. Si el producto
+        // tiene ventas de mayoreo, se publica el precio más bajo posible como "Desde $X".
+        const wsPrices = Array.isArray(product.wholesaleComposition)
+            ? product.wholesaleComposition.map((m: any) => parseFloat(m?.price)).filter((n: number) => !isNaN(n) && n > 0)
+            : [];
+        const lowestPrice = wsPrices.length > 0 ? Math.min(product.price, ...wsPrices) : product.price;
+        const priceText = Number.isInteger(lowestPrice) ? `${lowestPrice}` : lowestPrice.toFixed(2);
+        const pricePrefix = wsPrices.length > 0 ? 'Desde $' : '$';
         const link = `${PUBLIC_SITE}/catalog/${product.slug || product.id}`;
-        const caption = `${product.name} — $${priceText} MXN. Disponible aquí: ${link}`;
+        const caption = `${product.name} — ${pricePrefix}${priceText} MXN. Disponible aquí: ${link}`;
 
         console.log('[Social] Publicando producto en redes:', product.id, imageUrl);
         const fbOk = await postToFacebook(imageUrl, caption);
