@@ -5,6 +5,23 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/app/actions/auth";
 import { postProductToSocialMedia } from "@/lib/socialMedia";
 
+// Mismas reglas de slug que products/new/actions.ts
+function makeSlug(text: string): string {
+    return text.toLowerCase().trim()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9\s-]/g, '')
+        .trim().replace(/\s+/g, '-').replace(/-+/g, '-')
+        .substring(0, 60).replace(/-+$/, '') || 'producto';
+}
+
+async function uniqueProductSlug(base: string): Promise<string> {
+    let slug = base, counter = 1;
+    while (await (prisma.product as any).findUnique({ where: { slug } })) {
+        slug = `${base}-${counter++}`;
+    }
+    return slug;
+}
+
 export async function getProductForEdit(productId: string) {
     try {
         const user = await getSessionUser();
@@ -40,12 +57,13 @@ export async function updateProduct(productId: string, data: any) {
         const user = await getSessionUser();
         if (!user) return { success: false, error: "No autorizado" };
 
-        // sellerId (para permisos) e isOnline (para detectar si esta edición
+        // sellerId (para permisos), isOnline (para detectar si esta edición
         // pasa el producto de "fuera de línea" a "en línea" y así saber si
-        // corresponde publicarlo en redes sociales).
+        // corresponde publicarlo en redes sociales) y slug (para regenerarlo
+        // si el producto aún está oculto y cambió de nombre).
         const existingProduct = await prisma.product.findUnique({
             where: { id: productId },
-            select: { sellerId: true, isOnline: true }
+            select: { sellerId: true, isOnline: true, slug: true }
         });
         if (!existingProduct) return { success: false, error: "Producto no encontrado" };
 
@@ -68,12 +86,27 @@ export async function updateProduct(productId: string, data: any) {
         const costPrice = data.cost ? parseFloat(data.cost) : null;
         const pSize = data.packageSize ? parseInt(data.packageSize) : null;
 
+        // El link (slug) se regenera a partir del nombre SOLO si el producto
+        // sigue oculto: al no haber estado nunca en línea, no hay ningún enlace
+        // publicado (Facebook, Instagram, Google) que se pueda romper. Esto
+        // limpia los slugs heredados al duplicar, donde la copia arrastraba el
+        // nombre del producto original. Un producto ya en línea conserva su
+        // link aunque se le cambie el nombre.
+        let regeneratedSlug: string | null = null;
+        if (!existingProduct.isOnline && data.name) {
+            const base = makeSlug(data.name);
+            if (base !== existingProduct.slug) {
+                regeneratedSlug = await uniqueProductSlug(base);
+            }
+        }
+
         await prisma.$transaction(async (tx) => {
             // 1. Update Product Model
             await tx.product.update({
                 where: { id: productId },
                 data: {
                     name: data.name,
+                    ...(regeneratedSlug ? { slug: regeneratedSlug } : {}),
                     description: data.description || "",
                     price: price,
                     wholesalePrice: wPrice,

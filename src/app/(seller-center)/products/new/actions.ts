@@ -215,7 +215,7 @@ export async function duplicateProduct(productId: string) {
 
         if (!original) return { success: false, error: "Producto no encontrado" };
 
-        const duplicatedSlug = await uniqueProductSlug(makeSlug(`${original.name} (COPIA)`));
+        const duplicatedSlug = await uniqueProductSlug(makeSlug(original.name));
 
         const duplicated = await (prisma.product as any).create({
             data: {
