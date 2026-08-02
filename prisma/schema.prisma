@@ -181,6 +181,7 @@ model User {
   resetToken                String?                @unique
   resetTokenExpiry          DateTime?
   registeredDomain          String?
+  marketingConsent          Boolean                @default(false)
   ownedBrands               Brand[]
   sessions                  CashRegisterSession[]
   clients                   Client[]
@@ -589,6 +590,7 @@ model Order {
   stripePaymentIntentId String?
   paymentReleasedAt     DateTime?
   refundedAt            DateTime?
+  paymentReminderSentAt DateTime?
   loyaltyDiscount       Float            @default(0)
   settlementId          String?
   createdAt             DateTime         @default(now())
