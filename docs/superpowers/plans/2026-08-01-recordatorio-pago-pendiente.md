@@ -10,6 +10,33 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-01-recordatorio-pago-pendiente-design.md`
 
+## Desviaciones durante la ejecución (2026-08-01)
+
+Tres hallazgos obligaron a ajustar el plan sobre la marcha:
+
+1. **No hay base de datos local.** El `.env` local apunta a producción
+   (`187.124.158.239`), pero ese puerto **no es accesible desde fuera del
+   servidor**. No existe ninguna base contra la cual probar en local, y tampoco
+   riesgo de tocar datos reales desde la laptop.
+2. **`node_modules` no existía.** El proyecto nunca se había instalado en local;
+   `npx prisma` bajaba Prisma 7 en vez del 6.19.2 del proyecto. Se corrió
+   `npm install` y desde entonces se usa `node_modules/.bin/prisma`.
+3. **El build ignora los errores de tipos** (`ignoreBuildErrors: true` en
+   `next.config.ts`), así que `npm run build` no sirve como red de seguridad de
+   tipos. Se usa `node_modules/.bin/tsc --noEmit` filtrando por los archivos
+   tocados: el proyecto arrastra 20 errores preexistentes ajenos a este trabajo.
+
+Consecuencias:
+
+- La verificación de las Tareas 1-6 en local se limita a tipos + build. Las
+  pruebas con datos (Tarea 5) se hacen **en el servidor, tras desplegar**.
+- Se añadió `?dryRun=1` al endpoint del cron: lista a quién se le escribiría sin
+  enviar nada ni marcar órdenes. Es lo que permite validar la selección contra
+  datos reales sin efectos secundarios.
+- `scripts/verificar-recordatorio.mjs` exige el **número de pedido explícito**
+  en `preparar`, y rechaza pedidos que no estén en `PENDING_PAYMENT`. Corriendo
+  contra la base real, no puede tocar el pedido de un cliente por accidente.
+
 ## Global Constraints
 
 - **Sin dependencias nuevas.** El proyecto no tiene framework de pruebas (`package.json` solo trae `dev`, `build`, `start`, `lint`, `postinstall`) y no se va a agregar uno. La verificación es por script ejecutable con `node` y comprobación manual en el navegador.
