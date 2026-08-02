@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getBuyerOrders, releasePayment } from '@/app/actions/escrow';
+import { createCheckoutSession } from '@/app/actions/stripe';
 import { toast } from 'sonner';
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
@@ -19,6 +20,7 @@ export default function BuyerOrdersPage() {
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [releasing, setReleasing] = useState<string | null>(null);
+    const [paying, setPaying] = useState<string | null>(null);
 
     useEffect(() => { loadOrders(); }, []);
 
@@ -45,6 +47,23 @@ export default function BuyerOrdersPage() {
             toast.error(res.error || 'Error al confirmar');
         }
         setReleasing(null);
+    };
+
+    const handleResumePayment = async (orderId: string) => {
+        setPaying(orderId);
+        try {
+            const res = await createCheckoutSession({ orderIds: [orderId] });
+            if (res.success && res.url) {
+                // No se limpia `paying`: el navegador ya se va a Stripe y
+                // limpiarlo haría parpadear el botón.
+                window.location.href = res.url;
+                return;
+            }
+            toast.error(res.error || 'No se pudo iniciar el pago');
+        } catch {
+            toast.error('No se pudo iniciar el pago');
+        }
+        setPaying(null);
     };
 
     if (loading) return (
@@ -128,6 +147,31 @@ export default function BuyerOrdersPage() {
                                         <div>
                                             <p className="text-xs font-black uppercase tracking-widest text-blue-700 dark:text-blue-400">En camino</p>
                                             <p className="text-xs text-gray-500">Guía: <span className="font-bold">{order.shipment.trackingNumber}</span></p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Reanudar pago */}
+                                {order.status === 'PENDING_PAYMENT' && (
+                                    <div className="px-6 py-4 bg-amber-50 dark:bg-amber-900/10 border-t border-border">
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                            <div>
+                                                <p className="font-black text-sm text-amber-800 dark:text-amber-300">Este pedido está esperando tu pago</p>
+                                                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                                                    Complétalo para que el vendedor pueda prepararlo y enviarlo.
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => handleResumePayment(order.id)}
+                                                disabled={paying === order.id}
+                                                className="shrink-0 px-6 py-2.5 bg-blue-600 text-white rounded-full text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                {paying === order.id ? (
+                                                    <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Redirigiendo...</>
+                                                ) : (
+                                                    '💳 Pagar ahora'
+                                                )}
+                                            </button>
                                         </div>
                                     </div>
                                 )}

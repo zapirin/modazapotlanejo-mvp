@@ -17,10 +17,13 @@ interface StripeLineItem {
   quantity: number;
 }
 
+// `items` y `total` son opcionales porque los line items, el envío y los
+// descuentos se reconstruyen desde la BD a partir de `orderIds`. El carrito los
+// sigue enviando; reanudar un pago desde "mis pedidos" no los necesita.
 export async function createCheckoutSession(data: {
   orderIds: string[];
-  items: { productName: string; quantity: number; price: number; image?: string; size?: string; color?: string }[];
-  total: number;
+  items?: { productName: string; quantity: number; price: number; image?: string; size?: string; color?: string }[];
+  total?: number;
 }) {
   try {
     const user = await getSessionUser();
