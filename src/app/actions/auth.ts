@@ -212,6 +212,7 @@ export async function registerBuyer(data: {
     businessName?: string;
     taxId?: string;
     registeredDomain?: string;
+    marketingConsent?: boolean;
     shippingAddress?: {
         name: string;
         phone: string;
@@ -245,6 +246,7 @@ export async function registerBuyer(data: {
                 businessName: data.businessName,
                 taxId: data.taxId,
                 registeredDomain: domain,
+                marketingConsent: data.marketingConsent ?? false,
             }
         });
 

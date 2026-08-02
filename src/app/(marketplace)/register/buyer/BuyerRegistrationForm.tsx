@@ -25,6 +25,7 @@ export default function BuyerRegistrationForm({ brandName, registeredDomain }: {
     const [address, setAddress] = useState({
         name: '', phone: '', street: '', colonia: '', city: '', state: '', zip: '', referencias: '',
     });
+    const [marketingConsent, setMarketingConsent] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -40,6 +41,7 @@ export default function BuyerRegistrationForm({ brandName, registeredDomain }: {
             taxId: type === 'wholesale' ? formData.taxId : undefined,
             shippingAddress: address.street ? address : undefined,
             registeredDomain,
+            marketingConsent,
         });
 
         if (result.success) {
@@ -177,6 +179,18 @@ export default function BuyerRegistrationForm({ brandName, registeredDomain }: {
                             </div>
                         </div>
                     </div>
+
+                    <label className="flex items-start gap-3 px-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={marketingConsent}
+                            onChange={(e) => setMarketingConsent(e.target.checked)}
+                            className="mt-0.5 w-5 h-5 rounded-md border-border accent-blue-600 shrink-0"
+                        />
+                        <span className="text-[11px] font-bold text-gray-500 leading-relaxed">
+                            Quiero recibir ofertas y novedades por correo. Puedes pedirnos que te demos de baja cuando quieras.
+                        </span>
+                    </label>
 
                     <button type="submit" disabled={loading}
                         className={`w-full py-5 rounded-full text-xs font-black uppercase tracking-[0.2em] shadow-2xl transition-all ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-foreground text-background hover:scale-[1.02] shadow-foreground/20'}`}>
