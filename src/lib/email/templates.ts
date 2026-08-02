@@ -976,3 +976,87 @@ export async function sendDigitalTicketEmail({
   });
 }
 
+
+// ---------------------------------------------------------------------------
+// 13. RECORDATORIO DE PAGO PENDIENTE — Para el COMPRADOR
+// Lo dispara el cron abandoned-payment cuando una orden lleva horas sin pagarse
+// ---------------------------------------------------------------------------
+
+export async function sendPendingPaymentReminder({
+  buyerEmail,
+  buyerName,
+  orders,
+  domain,
+}: {
+  buyerEmail: string;
+  buyerName: string;
+  orders: { orderNumber: number; total: number; sellerName: string }[];
+  domain?: string;
+}) {
+  const esKalexa = domain?.includes('kalexa');
+  const brandName = esKalexa
+    ? 'Kalexa Fashion'
+    : domain?.includes('zonadelvestir')
+      ? 'Zona del Vestir'
+      : 'Moda Zapotlanejo';
+  const brandColor = esKalexa ? '#8124E3' : '#2563eb';
+
+  const varios = orders.length > 1;
+  const total = orders.reduce((suma, o) => suma + o.total, 0);
+
+  const filas = orders.map(o => `
+    <tr>
+      <td style="padding:10px 12px;font-size:14px;color:#1e293b;border-bottom:1px solid #f1f5f9;">
+        Pedido #${o.orderNumber}
+        <br/><span style="font-size:12px;color:#64748b;">${o.sellerName}</span>
+      </td>
+      <td style="padding:10px 12px;font-size:14px;color:#1e293b;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:600;">
+        $${o.total.toFixed(2)}
+      </td>
+    </tr>
+  `).join('');
+
+  const body = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#1e293b;">
+      ${varios ? 'Tus pedidos siguen sin pagar' : 'Tu pedido sigue sin pagar'}
+    </h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#64748b;">
+      Hola <strong>${buyerName}</strong>, notamos que ${varios ? 'tus pedidos quedaron' : 'tu pedido quedó'} sin completar el pago.
+      ${varios ? 'Siguen apartados' : 'Sigue apartado'} y ${varios ? 'puedes terminarlos' : 'puedes terminarlo'} en un par de clics.
+    </p>
+
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="border:1px solid #e2e8f0;border-radius:8px;border-collapse:collapse;margin:20px 0;overflow:hidden;">
+      <thead>
+        <tr style="background:#f8fafc;">
+          <th style="padding:10px 12px;font-size:12px;font-weight:700;color:#64748b;text-align:left;text-transform:uppercase;letter-spacing:0.5px;">Pedido</th>
+          <th style="padding:10px 12px;font-size:12px;font-weight:700;color:#64748b;text-align:right;text-transform:uppercase;letter-spacing:0.5px;">Total</th>
+        </tr>
+      </thead>
+      <tbody>${filas}</tbody>
+    </table>
+
+    <div style="text-align:right;margin-top:8px;">
+      <p style="font-size:18px;font-weight:800;color:#1e293b;margin:0;">
+        Total: <span style="color:${brandColor};">$${total.toFixed(2)}</span>
+      </p>
+    </div>
+
+    ${ctaButton('Completar mi pago', `${APP_URL}/mis-pedidos`, brandColor)}
+
+    ${divider}
+
+    <p style="margin:0;font-size:13px;color:#94a3b8;">
+      Si ya no ${varios ? 'te interesan estos pedidos' : 'te interesa este pedido'}, puedes ignorar este correo: ${varios ? 'se cancelarán' : 'se cancelará'} solo.
+    </p>
+  `;
+
+  return sendEmail({
+    to: buyerEmail,
+    subject: varios
+      ? `Tienes ${orders.length} pedidos esperando tu pago`
+      : `Tu pedido #${orders[0].orderNumber} está esperando tu pago`,
+    html: baseLayout({ brandName, brandColor, title: 'Pago pendiente', body }),
+    domain,
+  });
+}
