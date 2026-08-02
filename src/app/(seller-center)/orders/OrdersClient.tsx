@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { updateOrderStatus, deleteOrder, searchOrderVariants, updateOrderItems } from "@/app/actions/orders";
 import { releasePayment, refundPayment } from "@/app/actions/escrow";
+import { createCheckoutSession } from "@/app/actions/stripe";
 import Link from "next/link";
 
 // ── Modal para editar artículos de un pedido ─────────────────────────────────
@@ -298,6 +299,23 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller, isAdm
     const [notes, setNotes]           = useState<Record<string, string>>({});
     const [editingOrder, setEditingOrder] = useState<any | null>(null);
     const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+    const [paying, setPaying] = useState<string | null>(null);
+
+    const handleResumePayment = async (orderId: string) => {
+        setPaying(orderId);
+        try {
+            const res = await createCheckoutSession({ orderIds: [orderId] });
+            if (res.success && res.url) {
+                // No se limpia `paying`: el navegador ya se va a Stripe.
+                window.location.href = res.url;
+                return;
+            }
+            toast.error(res.error || "No se pudo iniciar el pago");
+        } catch {
+            toast.error("No se pudo iniciar el pago");
+        }
+        setPaying(null);
+    };
 
     const toggleOrder = (orderId: string) => {
         setExpandedOrders(prev => ({ ...prev, [orderId]: !prev[orderId] }));
@@ -684,6 +702,17 @@ export default function OrdersClient({ orders: initial, isBuyer, isSeller, isAdm
                                         {/* ── INFO COMPRADOR ── */}
                                         {isBuyer && (
                                             <>
+                                                {order.status === "PENDING_PAYMENT" && (
+                                                    <div className="bg-amber-50 dark:bg-amber-900/10 rounded-xl p-3 space-y-2.5">
+                                                        <p className="text-xs font-bold text-amber-700 dark:text-amber-400">💳 Este pedido está esperando tu pago</p>
+                                                        <button
+                                                            onClick={() => handleResumePayment(order.id)}
+                                                            disabled={paying === order.id}
+                                                            className="w-full py-3 bg-blue-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-blue-700 transition disabled:opacity-50">
+                                                            {paying === order.id ? "Redirigiendo..." : "💳 Pagar ahora"}
+                                                        </button>
+                                                    </div>
+                                                )}
                                                 {order.status === "PENDING" && <div className="bg-yellow-50 dark:bg-yellow-900/10 rounded-xl p-3"><p className="text-xs font-bold text-yellow-700 dark:text-yellow-400">⏳ Esperando confirmación del vendedor</p></div>}
                                                 {order.status === "ACCEPTED" && <div className="bg-blue-50 dark:bg-blue-900/10 rounded-xl p-3"><p className="text-xs font-bold text-blue-700 dark:text-blue-400">✅ Pedido aceptado — el vendedor lo está preparando</p></div>}
                                                 {order.status === "SHIPPED" && <div className="bg-purple-50 dark:bg-purple-900/10 rounded-xl p-3"><p className="text-xs font-bold text-purple-700 dark:text-purple-400">🚚 Tu pedido está en camino</p></div>}
