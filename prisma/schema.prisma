@@ -132,6 +132,7 @@ model StoreLocation {
   users                User[]
   transfersOut         StockTransfer[]       @relation("TransferSource")
   transfersIn          StockTransfer[]       @relation("TransferDest")
+  stockEntries         StockEntry[]          @relation("EntryLocation")
 }
 
 model User {
@@ -177,6 +178,7 @@ model User {
   requireCashSession        Boolean                @default(false)
   requireSalesperson        Boolean                @default(false)
   cashierCanDeleteSuspended Boolean                @default(true)
+  canRegisterStockEntry     Boolean                @default(false)
   locationId                String?
   resetToken                String?                @unique
   resetTokenExpiry          DateTime?
@@ -218,6 +220,8 @@ model User {
   buyerLoyaltyAccounts      LoyaltyAccount[]       @relation("BuyerLoyaltyAccounts")
   stockTransfers            StockTransfer[]        @relation("SellerStockTransfers")
   stockTransfersMade        StockTransfer[]        @relation("UserStockTransfers")
+  stockEntries              StockEntry[]           @relation("SellerStockEntries")
+  stockEntriesMade          StockEntry[]           @relation("UserStockEntries")
 
   @@unique([email, registeredDomain])
 }
@@ -291,6 +295,7 @@ model Product {
   variants             Variant[]
   wishlists            Wishlist[]
   tags                 Tag[]        @relation("ProductToTag")
+  stockEntries         StockEntry[]
 }
 
 model Variant {
@@ -312,6 +317,7 @@ model Variant {
   product            Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
   wishlistItems      Wishlist[]
   transferItems      StockTransferItem[]
+  stockEntryItems    StockEntryItem[]
 
   @@index([productId])
 }
@@ -330,6 +336,7 @@ model Supplier {
   updatedAt   DateTime  @updatedAt
   products    Product[]
   seller      User?     @relation(fields: [sellerId], references: [id])
+  stockEntries StockEntry[]
 
   @@unique([sellerId, name])
 }
@@ -826,5 +833,43 @@ model StockTransferItem {
   variant     Variant       @relation(fields: [variantId], references: [id])
   quantity    Int
   productName String
+  variantInfo String?
+}
+
+model StockEntry {
+  id              String         @id @default(cuid())
+  sellerId        String
+  seller          User           @relation("SellerStockEntries", fields: [sellerId], references: [id])
+  productId       String
+  product         Product        @relation(fields: [productId], references: [id])
+  productName     String
+  supplierId      String?
+  supplier        Supplier?      @relation(fields: [supplierId], references: [id])
+  supplierName    String?
+  locationId      String
+  location        StoreLocation  @relation("EntryLocation", fields: [locationId], references: [id])
+  userId          String?
+  user            User?          @relation("UserStockEntries", fields: [userId], references: [id])
+  folio           Int
+  totalItems      Int            @default(0)
+  notes           String?
+  status          String         @default("ACTIVE")
+  cancelledAt     DateTime?
+  cancelledByName String?
+  createdAt       DateTime       @default(now())
+  items           StockEntryItem[]
+
+  @@unique([sellerId, folio])
+  @@index([sellerId, createdAt])
+  @@index([productId, createdAt])
+}
+
+model StockEntryItem {
+  id          String     @id @default(cuid())
+  entryId     String
+  entry       StockEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  variantId   String
+  variant     Variant    @relation(fields: [variantId], references: [id])
+  quantity    Int
   variantInfo String?
 }
