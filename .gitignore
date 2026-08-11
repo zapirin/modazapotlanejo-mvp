@@ -63,3 +63,6 @@ eslint-report.json
 
 # Agents
 .agents/
+
+# Superpowers SDD scratch
+.superpowers/
