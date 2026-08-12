@@ -28,6 +28,7 @@ export default function StockEntryForm({
 
     const [product, setProduct] = useState<any>(null);
     const [loadingProduct, setLoadingProduct] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [quantities, setQuantities] = useState<Record<string, string>>({});
     const [notes, setNotes] = useState('');
     const [saving, setSaving] = useState(false);
@@ -58,11 +59,15 @@ export default function StockEntryForm({
     const loadProduct = async (productId: string, locId: string) => {
         if (!locId) return;
         setLoadingProduct(true);
+        setLoadError(null);
         const data = await getProductForEntry(productId, locId);
         setProduct(data);
         setQuantities({});
         setLoadingProduct(false);
-        if (!data) toast.error('No se pudo cargar el producto.');
+        if (!data) {
+            setLoadError('No se pudo cargar este modelo en la sucursal seleccionada. Puede que no tengas acceso a esa sucursal, o que el modelo ya no esté disponible.');
+            toast.error('No se pudo cargar el producto.');
+        }
     };
 
     useEffect(() => {
@@ -75,7 +80,7 @@ export default function StockEntryForm({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [locationId]);
 
-    const total = Object.values(quantities).reduce((s, v) => s + (parseInt(v, 10) || 0), 0);
+    const total = Object.values(quantities).reduce((s, v) => s + Math.max(0, parseInt(v, 10) || 0), 0);
 
     const handleSave = async () => {
         const items = Object.entries(quantities)
@@ -167,6 +172,13 @@ export default function StockEntryForm({
                     )}
 
                     {loadingProduct && <p className="text-sm text-gray-400">Cargando variantes…</p>}
+
+                    {loadError && !loadingProduct && (
+                        <div className="p-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-900">
+                            <p className="font-black text-sm text-red-600 mb-1">No se pudo cargar el modelo</p>
+                            <p className="text-xs text-red-500">{loadError}</p>
+                        </div>
+                    )}
 
                     {product && (
                         <>
