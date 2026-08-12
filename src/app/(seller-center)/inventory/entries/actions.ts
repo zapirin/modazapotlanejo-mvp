@@ -40,6 +40,29 @@ function folioText(folio: number): string {
     return `E-${String(folio).padStart(6, '0')}`;
 }
 
+function serializeEntry(entry: any) {
+    return {
+        id: entry.id,
+        folio: folioText(entry.folio),
+        createdAt: entry.createdAt,
+        productId: entry.productId,
+        productName: entry.productName,
+        supplierName: entry.supplierName,
+        locationName: entry.location?.name || '—',
+        userName: entry.user?.name || null,
+        totalItems: entry.totalItems,
+        notes: entry.notes,
+        status: entry.status,
+        cancelledAt: entry.cancelledAt,
+        cancelledByName: entry.cancelledByName,
+        items: (entry.items || []).map((it: any) => ({
+            id: it.id,
+            variantInfo: it.variantInfo,
+            quantity: it.quantity,
+        })),
+    };
+}
+
 export async function getEntryLocations() {
     const access: any = await resolveEntryAccess();
     if (access.error) return [];
@@ -254,5 +277,93 @@ export async function createStockEntry(input: {
     } catch (error: any) {
         console.error('Error al registrar la entrada:', error);
         return { success: false, error: 'No se pudo registrar la entrada.' };
+    }
+}
+
+export async function getProductStockEntries(productId: string) {
+    try {
+        const access: any = await resolveEntryAccess();
+        if (access.error) return { success: false, error: access.error, entries: [] };
+
+        const where: any = { sellerId: access.sellerId, productId };
+        if (access.allowedLocationIds) where.locationId = { in: access.allowedLocationIds };
+
+        const entries = await (prisma as any).stockEntry.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            take: 100,
+            include: {
+                items: { select: { id: true, variantInfo: true, quantity: true } },
+                location: { select: { name: true } },
+                user: { select: { name: true } },
+            },
+        });
+
+        return { success: true, entries: entries.map(serializeEntry) };
+    } catch (error: any) {
+        console.error('Error al cargar el historial de entradas:', error);
+        return { success: false, error: 'No se pudo cargar el historial.', entries: [] };
+    }
+}
+
+export async function getStockEntries(params: {
+    from?: string;
+    to?: string;
+    locationId?: string;
+    supplierId?: string;
+    page?: number;
+}) {
+    try {
+        const access: any = await resolveEntryAccess();
+        if (access.error) {
+            return { success: false, error: access.error, rows: [], total: 0, page: 1, totalPages: 1 };
+        }
+
+        const pageSize = 25;
+        const page = Math.max(1, params.page || 1);
+
+        const where: any = { sellerId: access.sellerId };
+        if (access.allowedLocationIds) where.locationId = { in: access.allowedLocationIds };
+        if (params.locationId) where.locationId = params.locationId;
+        if (params.supplierId) where.supplierId = params.supplierId;
+        if (params.from || params.to) {
+            where.createdAt = {};
+            if (params.from) where.createdAt.gte = new Date(params.from);
+            if (params.to) {
+                const to = new Date(params.to);
+                to.setHours(23, 59, 59, 999);
+                where.createdAt.lte = to;
+            }
+        }
+
+        if (params.locationId && access.allowedLocationIds && !access.allowedLocationIds.includes(params.locationId)) {
+            return { success: true, rows: [], total: 0, page: 1, totalPages: 1 };
+        }
+
+        const [total, entries] = await Promise.all([
+            (prisma as any).stockEntry.count({ where }),
+            (prisma as any).stockEntry.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip: (page - 1) * pageSize,
+                take: pageSize,
+                include: {
+                    items: { select: { id: true, variantInfo: true, quantity: true } },
+                    location: { select: { name: true } },
+                    user: { select: { name: true } },
+                },
+            }),
+        ]);
+
+        return {
+            success: true,
+            rows: entries.map(serializeEntry),
+            total,
+            page,
+            totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        };
+    } catch (error: any) {
+        console.error('Error al cargar las entradas:', error);
+        return { success: false, error: 'No se pudieron cargar las entradas.', rows: [], total: 0, page: 1, totalPages: 1 };
     }
 }
