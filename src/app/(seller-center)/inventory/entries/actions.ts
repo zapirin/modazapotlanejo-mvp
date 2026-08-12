@@ -40,6 +40,22 @@ function formatVariantLabel(variant: any): string {
     return 'Única';
 }
 
+// Ordena las variantes según el orden en que el vendedor definió los valores en
+// `variantOptions` (1, 3, 5, 7… / CH, MED, GDE…), no alfabéticamente. Es el mismo
+// criterio que ya usan la cuadrícula de Ajustar Stock, los códigos de barras y el
+// catálogo público. Sin `variantOptions`, se conserva el orden de creación.
+function sortVariantsByOptions(variants: any[], variantOptions: any): any[] {
+    const opts: any[] = Array.isArray(variantOptions) ? variantOptions : [];
+    if (opts.length === 0) return variants;
+    const sortKey = (v: any) => opts.map((opt: any) => {
+        const val = v.attributes?.[opt.name]
+            ?? (opt.name === 'Color' ? v.color : (opt.name === 'Talla' || opt.name === 'Tamaño') ? v.size : '');
+        const idx = (opt.values as string[]).indexOf(val);
+        return idx >= 0 ? String(idx).padStart(4, '0') : '9999';
+    }).join('-');
+    return variants.slice().sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+}
+
 function folioText(folio: number): string {
     return `E-${String(folio).padStart(6, '0')}`;
 }
@@ -140,6 +156,7 @@ export async function getProductForEntry(productId: string, locationId: string) 
         select: {
             id: true,
             name: true,
+            variantOptions: true,
             supplier: { select: { name: true } },
             variants: {
                 select: {
@@ -152,7 +169,7 @@ export async function getProductForEntry(productId: string, locationId: string) 
                         select: { stock: true },
                     },
                 },
-                orderBy: [{ color: 'asc' }, { size: 'asc' }],
+                orderBy: { createdAt: 'asc' },
             },
         },
     });
@@ -162,7 +179,7 @@ export async function getProductForEntry(productId: string, locationId: string) 
         id: product.id,
         name: product.name,
         supplierName: product.supplier?.name || null,
-        variants: product.variants.map((v: any) => ({
+        variants: sortVariantsByOptions(product.variants, product.variantOptions).map((v: any) => ({
             id: v.id,
             label: formatVariantLabel(v),
             currentStock: v.inventoryLevels?.[0]?.stock ?? 0,
@@ -310,7 +327,7 @@ export async function getProductStockEntries(productId: string) {
             orderBy: { createdAt: 'desc' },
             take: 100,
             include: {
-                items: { select: { id: true, variantInfo: true, quantity: true } },
+                items: { select: { id: true, variantInfo: true, quantity: true }, orderBy: { id: 'asc' } },
                 location: { select: { name: true } },
                 user: { select: { name: true } },
             },
@@ -367,7 +384,7 @@ export async function getStockEntries(params: {
                 skip: (page - 1) * pageSize,
                 take: pageSize,
                 include: {
-                    items: { select: { id: true, variantInfo: true, quantity: true } },
+                    items: { select: { id: true, variantInfo: true, quantity: true }, orderBy: { id: 'asc' } },
                     location: { select: { name: true } },
                     user: { select: { name: true } },
                 },
