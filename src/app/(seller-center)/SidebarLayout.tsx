@@ -215,7 +215,7 @@ export default function SidebarLayout({
               <span className="text-[9px] text-gray-400 group-hover:text-blue-500 transition-colors opacity-0 group-hover:opacity-100">↗</span>
             </a>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-wider font-semibold">
-              {user?.role === 'BUYER' ? 'Mi Cuenta' : 'Panel de Fabricante'}
+              {user?.role === 'BUYER' ? 'Mi Cuenta' : 'Panel de Vendedor'}
             </p>
           </div>
           {isDesktopCollapsed && (
@@ -407,6 +407,7 @@ export default function SidebarLayout({
                               { href: '/inventory', label: 'Todos los Productos' },
                               { href: '/products', label: '✏️ Gestión de Productos' },
                               { href: '/products/new', label: 'Nuevo Producto' },
+                              { href: '/inventory/entries', label: '📥 Entradas' },
                               { href: '/inventory/restock', label: '🔄 Resurtido desde Bodega' },
                               { href: '/inventory/brands', label: 'Marcas' },
                               { href: '/inventory/categories', label: 'Categorías' },
@@ -425,6 +426,17 @@ export default function SidebarLayout({
                       </div>
                   </div>
               </div>
+            )}
+
+            {user?.role === 'CASHIER' && user?.canRegisterStockEntry && (
+              <Link
+                href="/inventory/entries"
+                onClick={() => setSidebarOpen(false)}
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all duration-200 group ${pathname.startsWith('/inventory/entries') ? 'font-bold bg-gray-100 dark:bg-gray-800 text-foreground' : 'font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'}`}
+              >
+                <span className="text-lg group-hover:scale-110 transition-transform shrink-0">📥</span>
+                <span className={`whitespace-nowrap ${isDesktopCollapsed ? 'hidden' : 'block'}`}>Entradas</span>
+              </Link>
             )}
 
             {user?.role === 'SELLER' && (

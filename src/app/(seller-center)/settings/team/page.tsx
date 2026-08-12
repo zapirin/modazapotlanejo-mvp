@@ -24,6 +24,7 @@ export default function TeamPage() {
         allowedLocationIds: [] as string[],
         canRefund: true, canDiscount: true, canViewReports: false,
         canViewCommissions: false, canViewZCuts: false, canCreateProducts: false,
+        canRegisterStockEntry: false,
     });
 
     // ── Floor Salespeople ─────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ export default function TeamPage() {
     // ── Cashier helpers ───────────────────────────────────────────────────────
     const openCreateCashier = () => {
         setEditingCashier(null);
-        setCashierForm({ name: "", email: "", password: "", allowedLocationIds: [], canRefund: true, canDiscount: true, canViewReports: false, canViewCommissions: false, canViewZCuts: false, canCreateProducts: false });
+        setCashierForm({ name: "", email: "", password: "", allowedLocationIds: [], canRefund: true, canDiscount: true, canViewReports: false, canViewCommissions: false, canViewZCuts: false, canCreateProducts: false, canRegisterStockEntry: false });
         setShowCashierModal(true);
     };
 
@@ -72,6 +73,7 @@ export default function TeamPage() {
             canViewCommissions: cashier.canViewCommissions ?? false,
             canViewZCuts: cashier.canViewZCuts ?? false,
             canCreateProducts: cashier.canCreateProducts ?? false,
+            canRegisterStockEntry: cashier.canRegisterStockEntry ?? false,
         });
         setShowCashierModal(true);
     };
@@ -100,6 +102,7 @@ export default function TeamPage() {
                 canViewCommissions: (cashierForm as any).canViewCommissions,
                 canViewZCuts: (cashierForm as any).canViewZCuts,
                 canCreateProducts: cashierForm.canCreateProducts,
+                canRegisterStockEntry: cashierForm.canRegisterStockEntry,
                 ...(cashierForm.password ? { password: cashierForm.password } : {}),
             });
         } else {
@@ -330,6 +333,7 @@ export default function TeamPage() {
                                                     {cashier.canViewReports && <span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded-lg text-[9px] font-black uppercase tracking-wide text-gray-500">✓ Ventas</span>}
                                                     {cashier.canViewCommissions && <span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded-lg text-[9px] font-black uppercase tracking-wide text-gray-500">✓ Comisiones</span>}
                                                     {cashier.canViewZCuts && <span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded-lg text-[9px] font-black uppercase tracking-wide text-gray-500">✓ Cortes Z</span>}
+                                                    {cashier.canRegisterStockEntry && <span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded-lg text-[9px] font-black uppercase tracking-wide text-gray-500">✓ Entradas</span>}
                                                 </div>
                                             </div>
                                         );
@@ -511,6 +515,7 @@ export default function TeamPage() {
                                         { key: "canViewReports", label: "Puede ver reportes de ventas", desc: "Pestaña Ventas: top productos y proveedores" },
                                         { key: "canViewCommissions", label: "Puede ver comisiones", desc: "Pestaña Comisiones: desglose de vendedores de piso" },
                                         { key: "canViewZCuts", label: "Puede ver cortes Z", desc: "Pestaña Cortes Z: cierres de caja" },
+                                        { key: "canRegisterStockEntry", label: "Puede registrar entradas de mercancía", desc: "Captura lo que llega y lo suma al inventario de su sucursal" },
                                     ].map(perm => (
                                         <div key={perm.key} onClick={() => setCashierForm(p => ({ ...p, [perm.key]: !(p as any)[perm.key] }))}
                                             className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${(cashierForm as any)[perm.key] ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20" : "border-border hover:border-gray-300"}`}>
