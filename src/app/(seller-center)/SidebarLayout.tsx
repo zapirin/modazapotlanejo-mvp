@@ -215,7 +215,7 @@ export default function SidebarLayout({
               <span className="text-[9px] text-gray-400 group-hover:text-blue-500 transition-colors opacity-0 group-hover:opacity-100">↗</span>
             </a>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 uppercase tracking-wider font-semibold">
-              {user?.role === 'BUYER' ? 'Mi Cuenta' : 'Panel de Fabricante'}
+              {user?.role === 'BUYER' ? 'Mi Cuenta' : 'Panel de Vendedor'}
             </p>
           </div>
           {isDesktopCollapsed && (
