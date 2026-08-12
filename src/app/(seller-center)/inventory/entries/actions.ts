@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/app/actions/auth";
 import { revalidatePath } from "next/cache";
 
+// Prefijo para distinguir errores de negocio (mensaje seguro para el usuario)
+// de errores internos/de Prisma que no deben mostrarse tal cual.
+const ERROR_USUARIO = 'ERR_USR: ';
+
 // Quién puede tocar entradas y sobre qué sucursales.
 // SELLER: todas las suyas (allowedLocationIds = null significa "sin restricción").
 // CASHIER: solo si tiene el permiso, y solo sus sucursales asignadas.
@@ -70,6 +74,16 @@ export async function getEntryLocations() {
     if (access.allowedLocationIds) where.id = { in: access.allowedLocationIds };
     return await prisma.storeLocation.findMany({
         where,
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+    });
+}
+
+export async function getEntrySuppliers() {
+    const access: any = await resolveEntryAccess();
+    if (access.error) return [];
+    return await (prisma as any).supplier.findMany({
+        where: { sellerId: access.sellerId, isActive: true },
         select: { id: true, name: true },
         orderBy: { name: 'asc' },
     });
@@ -175,6 +189,9 @@ export async function createStockEntry(input: {
         }
         if (items.some(i => !Number.isInteger(i.quantity))) {
             return { success: false, error: 'Las cantidades deben ser números enteros.' };
+        }
+        if (items.some(i => i.quantity > 100000)) {
+            return { success: false, error: 'Alguna cantidad es demasiado grande. Revisa lo que capturaste.' };
         }
 
         const location = await prisma.storeLocation.findFirst({
@@ -324,21 +341,23 @@ export async function getStockEntries(params: {
 
         const where: any = { sellerId: access.sellerId };
         if (access.allowedLocationIds) where.locationId = { in: access.allowedLocationIds };
-        if (params.locationId) where.locationId = params.locationId;
         if (params.supplierId) where.supplierId = params.supplierId;
         if (params.from || params.to) {
             where.createdAt = {};
-            if (params.from) where.createdAt.gte = new Date(params.from);
+            if (params.from) {
+                const [y, m, d] = params.from.split('-').map(Number);
+                where.createdAt.gte = new Date(y, m - 1, d, 0, 0, 0, 0);
+            }
             if (params.to) {
-                const to = new Date(params.to);
-                to.setHours(23, 59, 59, 999);
-                where.createdAt.lte = to;
+                const [y, m, d] = params.to.split('-').map(Number);
+                where.createdAt.lte = new Date(y, m - 1, d, 23, 59, 59, 999);
             }
         }
 
         if (params.locationId && access.allowedLocationIds && !access.allowedLocationIds.includes(params.locationId)) {
-            return { success: true, rows: [], total: 0, page: 1, totalPages: 1 };
+            return { success: true, rows: [], total: 0, page, totalPages: 1 };
         }
+        if (params.locationId) where.locationId = params.locationId;
 
         const [total, entries] = await Promise.all([
             (prisma as any).stockEntry.count({ where }),
@@ -376,12 +395,22 @@ export async function cancelStockEntry(entryId: string) {
         }
 
         await prisma.$transaction(async (tx) => {
+            // Toma el candado de la fila: solo una transacción concurrente gana.
+            const claimed = await (tx as any).stockEntry.updateMany({
+                where: { id: entryId, sellerId: user.id, status: 'ACTIVE' },
+                data: {
+                    status: 'CANCELLED',
+                    cancelledAt: new Date(),
+                    cancelledByName: user.name || null,
+                },
+            });
+            if (claimed.count !== 1) throw new Error(ERROR_USUARIO + 'Esta entrada ya está cancelada.');
+
             const entry: any = await (tx as any).stockEntry.findFirst({
                 where: { id: entryId, sellerId: user.id },
                 include: { items: true },
             });
-            if (!entry) throw new Error('Entrada no encontrada.');
-            if (entry.status !== 'ACTIVE') throw new Error('Esta entrada ya está cancelada.');
+            if (!entry) throw new Error(ERROR_USUARIO + 'Entrada no encontrada.');
 
             // Primero se revisa TODO: si una sola variante no alcanza, no se toca nada.
             for (const item of entry.items) {
@@ -394,7 +423,7 @@ export async function cancelStockEntry(entryId: string) {
                     },
                 });
                 if (!level || level.stock < item.quantity) {
-                    throw new Error('No se puede cancelar: ya se vendieron piezas de esta entrada. Corrige con Ajustar Stock.');
+                    throw new Error(ERROR_USUARIO + 'No se puede cancelar: ya se vendieron piezas de esta entrada. Corrige con Ajustar Stock.');
                 }
             }
 
@@ -424,15 +453,6 @@ export async function cancelStockEntry(entryId: string) {
                     },
                 });
             }
-
-            await (tx as any).stockEntry.update({
-                where: { id: entry.id },
-                data: {
-                    status: 'CANCELLED',
-                    cancelledAt: new Date(),
-                    cancelledByName: user.name || null,
-                },
-            });
         });
 
         revalidatePath('/inventory');
@@ -441,6 +461,7 @@ export async function cancelStockEntry(entryId: string) {
         return { success: true };
     } catch (error: any) {
         console.error('Error al cancelar la entrada:', error);
-        return { success: false, error: error.message || 'No se pudo cancelar la entrada.' };
+        const msg = String(error?.message || '');
+        return { success: false, error: msg.startsWith(ERROR_USUARIO) ? msg.slice(ERROR_USUARIO.length) : 'No se pudo cancelar la entrada.' };
     }
 }

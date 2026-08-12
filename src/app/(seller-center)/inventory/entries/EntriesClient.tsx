@@ -2,8 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { getStockEntries, cancelStockEntry, getEntryLocations } from './actions';
-import { getSuppliers } from '../../products/new/actions';
+import { getStockEntries, cancelStockEntry, getEntryLocations, getEntrySuppliers } from './actions';
 import StockEntryForm from './StockEntryForm';
 
 export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
@@ -23,6 +22,7 @@ export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
     const [expanded, setExpanded] = useState<string | null>(null);
     const [showForm, setShowForm] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [cancelling, setCancelling] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -38,14 +38,16 @@ export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
 
     useEffect(() => {
         getEntryLocations().then(setLocations);
-        getSuppliers().then((s: any) => setSuppliers(Array.isArray(s) ? s : []));
+        getEntrySuppliers().then(setSuppliers);
     }, []);
 
     const handleCancel = async (entry: any) => {
         if (!confirm(`¿Cancelar la entrada ${entry.folio}? Se van a restar ${entry.totalItems} piezas del inventario.`)) return;
+        setCancelling(entry.id);
         const res = await cancelStockEntry(entry.id);
         if (res.success) { toast.success('Entrada cancelada'); load(); }
         else toast.error(res.error || 'No se pudo cancelar.');
+        setCancelling(null);
     };
 
     return (
@@ -151,7 +153,11 @@ export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
                                     </p>
                                 )}
                                 {canCancel && entry.status === 'ACTIVE' && (
-                                    <button onClick={() => handleCancel(entry)} className="text-[11px] font-black text-red-500 hover:underline">
+                                    <button
+                                        onClick={() => handleCancel(entry)}
+                                        disabled={cancelling === entry.id}
+                                        className="text-[11px] font-black text-red-500 hover:underline disabled:opacity-40"
+                                    >
                                         Cancelar esta entrada
                                     </button>
                                 )}

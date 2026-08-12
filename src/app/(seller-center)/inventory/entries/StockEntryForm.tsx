@@ -120,9 +120,9 @@ export default function StockEntryForm({
                 <div className="p-6 space-y-5 overflow-y-auto">
                     {!loadingLocations && locations.length === 0 && (
                         <div className="p-5 rounded-xl border border-dashed border-border text-center">
-                            <p className="font-black text-sm mb-1">No tienes sucursales dadas de alta</p>
+                            <p className="font-black text-sm mb-1">No hay sucursales disponibles</p>
                             <p className="text-xs text-gray-500">
-                                Crea una en <a href="/settings/locations" className="text-blue-600 underline">Configuración → Sucursales</a> para poder registrar entradas.
+                                Si eres el dueño, crea una en <a href="/settings/locations" className="text-blue-600 underline">Configuración → Sucursales</a>. Si eres cajero, pídele al dueño que te asigne una.
                             </p>
                         </div>
                     )}
