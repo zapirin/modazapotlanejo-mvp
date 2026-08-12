@@ -91,6 +91,13 @@ export async function getProductForEntry(productId: string, locationId: string) 
     const access: any = await resolveEntryAccess();
     if (access.error) return null;
 
+    const location = await prisma.storeLocation.findFirst({
+        where: { id: locationId, sellerId: access.sellerId },
+        select: { id: true },
+    });
+    if (!location) return null;
+    if (access.allowedLocationIds && !access.allowedLocationIds.includes(locationId)) return null;
+
     const product: any = await prisma.product.findFirst({
         where: { id: productId, sellerId: access.sellerId },
         select: {
