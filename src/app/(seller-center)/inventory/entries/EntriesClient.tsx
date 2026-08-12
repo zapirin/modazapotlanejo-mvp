@@ -22,6 +22,7 @@ export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
 
     const [expanded, setExpanded] = useState<string | null>(null);
     const [showForm, setShowForm] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -29,6 +30,7 @@ export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
         setRows(res.rows || []);
         setTotal(res.total || 0);
         setTotalPages(res.totalPages || 1);
+        setLoadError(res.success ? null : (res.error || 'No se pudieron cargar las entradas.'));
         setLoading(false);
     }, [from, to, locationId, supplierId, page]);
 
@@ -90,9 +92,16 @@ export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
                 </div>
             </div>
 
+            {loadError && !loading && (
+                <div className="bg-card border border-red-200 dark:border-red-900 rounded-2xl p-6 mb-4">
+                    <p className="font-black text-sm text-red-600 mb-1">No se pudieron cargar las entradas</p>
+                    <p className="text-xs text-red-500">{loadError}</p>
+                </div>
+            )}
+
             {loading && <p className="text-sm text-gray-400">Cargando…</p>}
 
-            {!loading && rows.length === 0 && (
+            {!loading && !loadError && rows.length === 0 && (
                 <div className="bg-card border border-dashed border-border rounded-2xl p-10 text-center">
                     <div className="text-4xl mb-3">📥</div>
                     <h2 className="text-lg font-bold mb-1">Todavía no hay entradas registradas</h2>
@@ -163,7 +172,7 @@ export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
             )}
 
             {showForm && (
-                <StockEntryForm onClose={() => setShowForm(false)} onSaved={() => { setPage(1); load(); }} />
+                <StockEntryForm onClose={() => setShowForm(false)} onSaved={() => { if (page === 1) { load(); } else { setPage(1); } }} />
             )}
         </div>
     );
