@@ -367,3 +367,80 @@ export async function getStockEntries(params: {
         return { success: false, error: 'No se pudieron cargar las entradas.', rows: [], total: 0, page: 1, totalPages: 1 };
     }
 }
+
+export async function cancelStockEntry(entryId: string) {
+    try {
+        const user: any = await getSessionUser();
+        if (!user || user.role !== 'SELLER') {
+            return { success: false, error: 'Solo el dueño de la tienda puede cancelar una entrada.' };
+        }
+
+        await prisma.$transaction(async (tx) => {
+            const entry: any = await (tx as any).stockEntry.findFirst({
+                where: { id: entryId, sellerId: user.id },
+                include: { items: true },
+            });
+            if (!entry) throw new Error('Entrada no encontrada.');
+            if (entry.status !== 'ACTIVE') throw new Error('Esta entrada ya está cancelada.');
+
+            // Primero se revisa TODO: si una sola variante no alcanza, no se toca nada.
+            for (const item of entry.items) {
+                const level = await tx.inventoryLevel.findUnique({
+                    where: {
+                        variantId_locationId: {
+                            variantId: item.variantId,
+                            locationId: entry.locationId,
+                        },
+                    },
+                });
+                if (!level || level.stock < item.quantity) {
+                    throw new Error('No se puede cancelar: ya se vendieron piezas de esta entrada. Corrige con Ajustar Stock.');
+                }
+            }
+
+            for (const item of entry.items) {
+                await tx.inventoryLevel.update({
+                    where: {
+                        variantId_locationId: {
+                            variantId: item.variantId,
+                            locationId: entry.locationId,
+                        },
+                    },
+                    data: { stock: { decrement: item.quantity } },
+                });
+
+                await tx.variant.update({
+                    where: { id: item.variantId },
+                    data: { stock: { decrement: item.quantity } },
+                });
+
+                await tx.inventoryMovement.create({
+                    data: {
+                        variantId: item.variantId,
+                        locationId: entry.locationId,
+                        type: 'ADJUSTMENT',
+                        quantity: -item.quantity,
+                        reason: `Cancelación de entrada ${folioText(entry.folio)}. Usuario: ${user.name || 'Sistema'}`,
+                    },
+                });
+            }
+
+            await (tx as any).stockEntry.update({
+                where: { id: entry.id },
+                data: {
+                    status: 'CANCELLED',
+                    cancelledAt: new Date(),
+                    cancelledByName: user.name || null,
+                },
+            });
+        });
+
+        revalidatePath('/inventory');
+        revalidatePath('/inventory/entries');
+        revalidatePath('/pos');
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error al cancelar la entrada:', error);
+        return { success: false, error: error.message || 'No se pudo cancelar la entrada.' };
+    }
+}
