@@ -152,7 +152,8 @@ export async function getProductForEntry(productId: string, locationId: string) 
     if (access.allowedLocationIds && !access.allowedLocationIds.includes(locationId)) return null;
 
     const product: any = await prisma.product.findFirst({
-        where: { id: productId, sellerId: access.sellerId },
+        // isActive: un modelo en la Papelera no recibe mercancía.
+        where: { id: productId, sellerId: access.sellerId, isActive: true },
         select: {
             id: true,
             name: true,
@@ -225,12 +226,16 @@ export async function createStockEntry(input: {
             select: {
                 id: true,
                 name: true,
+                isActive: true,
                 supplierId: true,
                 supplier: { select: { name: true } },
                 variants: { select: { id: true, color: true, size: true, attributes: true } },
             },
         });
         if (!product) return { success: false, error: 'Producto no válido.' };
+        if (!product.isActive) {
+            return { success: false, error: 'Este modelo está en la Papelera. Restáuralo antes de registrarle entradas.' };
+        }
 
         const variantMap = new Map<string, any>(product.variants.map((v: any) => [v.id, v]));
         if (items.some(i => !variantMap.has(i.variantId))) {
