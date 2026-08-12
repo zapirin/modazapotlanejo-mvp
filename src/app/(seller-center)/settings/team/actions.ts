@@ -21,6 +21,7 @@ export async function getSellerCashiers() {
                 allowedLocationIds: true,
                 canRefund: true, canDiscount: true, canViewReports: true,
                 canViewCommissions: true, canViewZCuts: true, canCreateProducts: true,
+                canRegisterStockEntry: true,
                 createdAt: true,
             },
             orderBy: { createdAt: "asc" },
@@ -43,6 +44,7 @@ export async function createCashier(data: {
     canViewCommissions: boolean;
     canViewZCuts: boolean;
     canCreateProducts: boolean;
+    canRegisterStockEntry: boolean;
 }) {
     try {
         const user = await getSessionUser();
@@ -79,6 +81,7 @@ export async function createCashier(data: {
                 canViewCommissions: data.canViewCommissions,
                 canViewZCuts: data.canViewZCuts,
                 canCreateProducts: data.canCreateProducts,
+                canRegisterStockEntry: data.canRegisterStockEntry,
                 isActive: true,
             },
         });
@@ -100,6 +103,7 @@ export async function updateCashier(cashierId: string, data: {
     canViewCommissions?: boolean;
     canViewZCuts?: boolean;
     canCreateProducts?: boolean;
+    canRegisterStockEntry?: boolean;
     canOpenDrawer?: boolean;
     isActive?: boolean;
     password?: string;
