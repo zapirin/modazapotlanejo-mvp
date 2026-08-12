@@ -1044,6 +1044,7 @@ export default function InventoryPage() {
                     productName={entriesProduct.name}
                     canCancel={true}
                     onClose={() => setEntriesProduct(null)}
+                    onChanged={() => loadInventory()}
                 />
             )}
         </div>

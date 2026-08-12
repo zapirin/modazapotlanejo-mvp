@@ -9,22 +9,26 @@ export default function ProductStockEntriesModal({
     productName,
     canCancel,
     onClose,
+    onChanged,
 }: {
     productId: string;
     productName: string;
     canCancel: boolean;
     onClose: () => void;
+    onChanged?: () => void;
 }) {
     const [entries, setEntries] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [expanded, setExpanded] = useState<string | null>(null);
+    const [cancelling, setCancelling] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
         const res = await getProductStockEntries(productId);
         setEntries(res.entries || []);
+        setLoadError(res.success ? null : (res.error || 'No se pudo cargar el historial.'));
         setLoading(false);
-        if (!res.success && res.error) toast.error(res.error);
     }, [productId]);
 
     useEffect(() => { load(); }, [load]);
@@ -35,9 +39,11 @@ export default function ProductStockEntriesModal({
 
     const handleCancel = async (entry: any) => {
         if (!confirm(`¿Cancelar la entrada ${entry.folio}? Se van a restar ${entry.totalItems} piezas del inventario.`)) return;
+        setCancelling(entry.id);
         const res = await cancelStockEntry(entry.id);
-        if (res.success) { toast.success('Entrada cancelada'); load(); }
+        if (res.success) { toast.success('Entrada cancelada'); load(); onChanged?.(); }
         else toast.error(res.error || 'No se pudo cancelar.');
+        setCancelling(null);
     };
 
     return (
@@ -54,7 +60,14 @@ export default function ProductStockEntriesModal({
                 <div className="p-6 overflow-y-auto space-y-2">
                     {loading && <p className="text-sm text-gray-400">Cargando…</p>}
 
-                    {!loading && entries.length === 0 && (
+                    {loadError && !loading && (
+                        <div className="p-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-900">
+                            <p className="font-black text-sm text-red-600 mb-1">No se pudo cargar el historial</p>
+                            <p className="text-xs text-red-500">{loadError}</p>
+                        </div>
+                    )}
+
+                    {!loading && !loadError && entries.length === 0 && (
                         <div className="border border-dashed border-border rounded-xl p-8 text-center">
                             <p className="font-bold mb-1">Sin entradas registradas</p>
                             <p className="text-xs text-gray-500">
@@ -102,7 +115,11 @@ export default function ProductStockEntriesModal({
                                         </p>
                                     )}
                                     {canCancel && entry.status === 'ACTIVE' && (
-                                        <button onClick={() => handleCancel(entry)} className="text-[11px] font-black text-red-500 hover:underline">
+                                        <button
+                                            onClick={() => handleCancel(entry)}
+                                            disabled={cancelling === entry.id}
+                                            className="text-[11px] font-black text-red-500 hover:underline disabled:opacity-40"
+                                        >
                                             Cancelar esta entrada
                                         </button>
                                     )}
