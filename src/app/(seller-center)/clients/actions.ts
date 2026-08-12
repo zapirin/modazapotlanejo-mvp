@@ -65,6 +65,10 @@ export async function searchClients(query: string) {
 
 export async function getClientById(clientId: string) {
     try {
+        // Sin este guardia, Prisma trata `id: undefined` como "sin filtro" y
+        // findFirst devuelve un cliente cualquiera en lugar de fallar.
+        if (!clientId) return { success: false, error: 'Cliente no válido.' };
+
         const user = await getSessionUser();
         const sellerId = await getEffectiveSellerId(user);
 
@@ -106,6 +110,9 @@ export async function getClientById(clientId: string) {
 
 export async function updateClient(clientId: string, data: { name: string; email?: string; phone?: string }) {
     try {
+        // Sin guardia, `id: undefined` en un updateMany renombraría a TODOS los clientes.
+        if (!clientId) return { success: false, error: 'Cliente no válido.' };
+
         const user = await getSessionUser();
         const sellerId = await getEffectiveSellerId(user);
 
@@ -142,6 +149,10 @@ export async function updateClient(clientId: string, data: { name: string; email
 
 export async function deleteClient(clientId: string) {
     try {
+        // Sin guardia, el updateMany de más abajo desvincularía de su cliente
+        // TODAS las ventas de la base, no solo las de este.
+        if (!clientId) return { success: false, error: 'Cliente no válido.' };
+
         const user = await getSessionUser();
         const sellerId = await getEffectiveSellerId(user);
 
