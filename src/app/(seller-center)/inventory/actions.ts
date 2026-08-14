@@ -221,11 +221,27 @@ export async function getProductSalesHistory(
     }
 }
 
+// Vendedor al que pertenece la sesión: el propio SELLER, o el vendedor que
+// gestiona al CASHIER. Cualquier otro rol queda fuera.
+async function resolveSaleOwnerId(user: any): Promise<string | null> {
+    if (!user) return null;
+    if (user.role === 'SELLER') return user.id;
+    if (user.role === 'CASHIER') {
+        const cashier = await (prisma.user as any).findUnique({
+            where: { id: user.id },
+            select: { managedBySellerId: true },
+        });
+        return cashier?.managedBySellerId || null;
+    }
+    return null;
+}
+
 // Obtener una venta completa para reimpresión (con aislamiento por seller)
 export async function getSaleForReprint(saleId: string) {
     try {
         const user = await getSessionUser();
-        if (!user || user.role !== 'SELLER') return null;
+        const ownerId = await resolveSaleOwnerId(user);
+        if (!ownerId) return null;
 
         const sale = await prisma.sale.findUnique({
             where: { id: saleId },
@@ -246,7 +262,7 @@ export async function getSaleForReprint(saleId: string) {
         });
 
         if (!sale) return null;
-        if (sale.sellerId && sale.sellerId !== user.id) return null;
+        if (sale.sellerId && sale.sellerId !== ownerId) return null;
         return sale;
     } catch (error) {
         console.error('Error fetching sale for reprint:', error);
