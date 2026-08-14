@@ -28,10 +28,15 @@ export default function ClientHistoryClient({ clientId }: { clientId: string }) 
     const handleOpenTicket = async (saleId: string) => {
         if (openingSaleId) return;            // ya hay una abriéndose: ignora más clics
         setOpeningSaleId(saleId);
-        const sale = await getSaleForReprint(saleId);
-        setOpeningSaleId(null);
-        if (sale) setTicketSale(sale);
-        else toast.error('No se pudo abrir el ticket.');
+        try {
+            const sale = await getSaleForReprint(saleId);
+            if (sale) setTicketSale(sale);
+            else toast.error('No se pudo abrir el ticket.');
+        } catch {
+            toast.error('No se pudo abrir el ticket.');
+        } finally {
+            setOpeningSaleId(null);
+        }
     };
 
     if (isLoading) {
@@ -132,12 +137,12 @@ export default function ClientHistoryClient({ clientId }: { clientId: string }) 
                                             key={sale.id}
                                             role="button"
                                             tabIndex={0}
-                                            aria-label={`Ver ticket de la venta ${sale.receiptNumber ? `#PDV${sale.receiptNumber}` : ''}`}
+                                            aria-label={sale.receiptNumber ? `Ver ticket de la venta #PDV${sale.receiptNumber}` : 'Ver ticket de la venta'}
                                             onClick={() => handleOpenTicket(sale.id)}
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenTicket(sale.id); }
                                             }}
-                                            className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors focus:outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20"
+                                            className={`cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors focus:outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 ${openingSaleId === sale.id ? 'opacity-50' : ''}`}
                                         >
                                             <td className="px-6 py-4">
                                                 <div className="font-bold text-foreground">

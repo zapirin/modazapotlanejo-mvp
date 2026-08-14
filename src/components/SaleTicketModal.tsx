@@ -48,13 +48,17 @@ export default function SaleTicketModal({
     // El logo y el nombre de la tienda los resuelve el propio modal, para que
     // ninguna pantalla que lo use tenga que acordarse de pasarlos.
     const [config, setConfig] = useState<any>(null);
+    const [configLista, setConfigLista] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
-        getStoreSettings().then(res => {
-            if (cancelled) return;
-            if (res.success) setConfig(res.data);
-        });
+        getStoreSettings()
+            .then(res => {
+                if (cancelled) return;
+                if (res.success) setConfig(res.data);
+            })
+            .catch(() => { /* sin configuración se imprime igual, solo sin logo */ })
+            .finally(() => { if (!cancelled) setConfigLista(true); });
         return () => { cancelled = true; };
     }, []);
 
@@ -84,7 +88,8 @@ export default function SaleTicketModal({
                     >Cerrar</button>
                     <button
                         onClick={() => printSaleTicket(TICKET_ELEMENT_ID)}
-                        className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-colors flex justify-center items-center gap-2"
+                        disabled={!configLista}
+                        className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-colors flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >🖨️ Imprimir</button>
                 </div>
             </div>
