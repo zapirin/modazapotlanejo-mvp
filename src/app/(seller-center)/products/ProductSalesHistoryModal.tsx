@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { getProductSalesHistory, getSaleForReprint } from '../inventory/actions';
-import SaleTicket from '../pos/SaleTicket';
+import SaleTicketModal from '@/components/SaleTicketModal';
 
 const STATUS_LABEL: Record<string, string> = {
     COMPLETED: 'Completada',
@@ -20,35 +20,6 @@ const STATUS_COLOR: Record<string, string> = {
     RETURNED: 'bg-orange-100 text-orange-700',
 };
 
-const printSaleTicket = (elementId: string) => {
-    const el = document.getElementById(elementId);
-    if (!el) return;
-    const bodyChildren = Array.from(document.body.children) as HTMLElement[];
-    const savedStyles: { el: HTMLElement; display: string }[] = [];
-    bodyChildren.forEach(child => {
-        savedStyles.push({ el: child, display: child.style.display });
-        child.style.display = 'none';
-    });
-    const printArea = document.createElement('div');
-    printArea.style.cssText = 'background:white;margin:0;padding:0;width:100%;display:flex;justify-content:center;';
-    printArea.innerHTML = el.outerHTML;
-    printArea.querySelectorAll('[class]').forEach(node => { (node as HTMLElement).style.boxShadow = 'none'; });
-    document.body.appendChild(printArea);
-    const origBg = document.body.style.background;
-    const origMargin = document.body.style.margin;
-    document.body.style.background = 'white';
-    document.body.style.margin = '0';
-    try { window.print(); } catch (err) { console.error(err); }
-    const restore = () => {
-        printArea.remove();
-        document.body.style.background = origBg;
-        document.body.style.margin = origMargin;
-        savedStyles.forEach(({ el: child, display }) => { child.style.display = display; });
-    };
-    window.addEventListener('afterprint', restore, { once: true });
-    setTimeout(restore, 3000);
-};
-
 export default function ProductSalesHistoryModal({
     productId,
     productName,
@@ -63,7 +34,6 @@ export default function ProductSalesHistoryModal({
     const [page, setPage] = useState(1);
     const [status, setStatus] = useState('all');
     const [reprintSale, setReprintSale] = useState<any | null>(null);
-    const [globalConfig, setGlobalConfig] = useState<any>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -74,19 +44,9 @@ export default function ProductSalesHistoryModal({
             else alert(res.error || 'Error al cargar historial.');
             setLoading(false);
         });
-        
-        // Cargar config global para el logo del ticket (solo una vez)
-        if (!globalConfig) {
-            import('../settings/actions').then(({ getStoreSettings }) => {
-                getStoreSettings().then(res => {
-                    if (cancelled) return;
-                    if (res.success) setGlobalConfig(res.data);
-                });
-            });
-        }
-        
+
         return () => { cancelled = true; };
-    }, [productId, page, status, globalConfig]);
+    }, [productId, page, status]);
 
     const handleViewTicket = async (saleId: string) => {
         const sale = await getSaleForReprint(saleId);
@@ -211,36 +171,7 @@ export default function ProductSalesHistoryModal({
             </div>
 
             {reprintSale && (
-                <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4" onClick={() => setReprintSale(null)}>
-                    <div className="bg-card w-full max-w-md rounded-3xl shadow-2xl flex flex-col max-h-[90dvh] overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="p-5 border-b border-border bg-gray-50 dark:bg-gray-800/50 rounded-t-3xl shrink-0 flex justify-between items-center">
-                            <div>
-                                <h3 className="text-lg font-black text-foreground">🖨️ Ticket #{reprintSale.receiptNumber || reprintSale.id.slice(-6)}</h3>
-                                <p className="text-xs text-gray-500 mt-0.5">{new Date(reprintSale.createdAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</p>
-                            </div>
-                            <button onClick={() => setReprintSale(null)} className="w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 hover:text-red-500 flex items-center justify-center font-bold transition-colors">✕</button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900 flex justify-center">
-                            <SaleTicket 
-                                sale={reprintSale} 
-                                elementId="history-reprint" 
-                                isReprint 
-                                logoUrl={globalConfig?.logoUrl}
-                                storeName={globalConfig?.storeName}
-                            />
-                        </div>
-                        <div className="p-4 bg-card border-t border-border flex gap-3 rounded-b-3xl">
-                            <button
-                                onClick={() => setReprintSale(null)}
-                                className="flex-1 py-3 rounded-xl border border-border text-sm font-bold text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                            >Cerrar</button>
-                            <button
-                                onClick={() => printSaleTicket('history-reprint')}
-                                className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-colors flex justify-center items-center gap-2"
-                            >🖨️ Imprimir</button>
-                        </div>
-                    </div>
-                </div>
+                <SaleTicketModal sale={reprintSale} onClose={() => setReprintSale(null)} />
             )}
         </div>
     );

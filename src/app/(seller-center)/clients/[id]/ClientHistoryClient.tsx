@@ -3,10 +3,15 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getClientById } from '../actions';
+import { toast } from 'sonner';
+import SaleTicketModal from '@/components/SaleTicketModal';
+import { getSaleForReprint } from '../../inventory/actions';
 
 export default function ClientHistoryClient({ clientId }: { clientId: string }) {
     const [client, setClient] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [ticketSale, setTicketSale] = useState<any | null>(null);
+    const [openingSaleId, setOpeningSaleId] = useState<string | null>(null);
 
     useEffect(() => {
         const loadClientData = async () => {
@@ -19,6 +24,20 @@ export default function ClientHistoryClient({ clientId }: { clientId: string }) 
         };
         loadClientData();
     }, [clientId]);
+
+    const handleOpenTicket = async (saleId: string) => {
+        if (openingSaleId) return;            // ya hay una abriéndose: ignora más clics
+        setOpeningSaleId(saleId);
+        try {
+            const sale = await getSaleForReprint(saleId);
+            if (sale) setTicketSale(sale);
+            else toast.error('No se pudo abrir el ticket.');
+        } catch {
+            toast.error('No se pudo abrir el ticket.');
+        } finally {
+            setOpeningSaleId(null);
+        }
+    };
 
     if (isLoading) {
         return (
@@ -36,6 +55,11 @@ export default function ClientHistoryClient({ clientId }: { clientId: string }) 
             </div>
         );
     }
+
+    // Solo las ventas completadas cuentan como compra: las canceladas y las
+    // suspendidas se siguen viendo en la tabla, pero no suman.
+    const ventasCompletadas = (client.sales || []).filter((s: any) => s.status === 'COMPLETED');
+    const totalComprado = ventasCompletadas.reduce((acc: number, s: any) => acc + (s.total || 0), 0);
 
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -57,7 +81,10 @@ export default function ClientHistoryClient({ clientId }: { clientId: string }) 
                 <div className="flex gap-4 w-full md:w-auto">
                     <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-border shadow-sm flex-1 md:flex-none md:min-w-[150px]">
                         <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">Ventas</p>
-                        <p className="text-xl font-black">{client.sales?.length || 0}</p>
+                        <p className="text-xl font-black">{ventasCompletadas.length}</p>
+                        <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                            ${totalComprado.toFixed(2)}
+                        </p>
                     </div>
                     <div className={`p-4 rounded-2xl border shadow-sm flex-1 md:flex-none md:min-w-[180px] ${
                         client.storeCredit > 0 ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' :
@@ -96,6 +123,7 @@ export default function ClientHistoryClient({ clientId }: { clientId: string }) 
                                     <th className="px-6 py-4 text-center">Descuento</th>
                                     <th className="px-6 py-4 text-right">Total Pagado / Cargado</th>
                                     <th className="px-6 py-4 text-right">Saldo Adeudado (Si Layaway)</th>
+                                    <th className="px-4 py-4 w-10"><span className="sr-only">Ver ticket</span></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
@@ -113,7 +141,17 @@ export default function ClientHistoryClient({ clientId }: { clientId: string }) 
                                     }
 
                                     return (
-                                        <tr key={sale.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                        <tr
+                                            key={sale.id}
+                                            role="button"
+                                            tabIndex={0}
+                                            aria-label={sale.receiptNumber ? `Ver ticket de la venta #PDV${sale.receiptNumber}` : 'Ver ticket de la venta'}
+                                            onClick={() => handleOpenTicket(sale.id)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenTicket(sale.id); }
+                                            }}
+                                            className={`cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors focus:outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 ${openingSaleId === sale.id ? 'opacity-50' : ''}`}
+                                        >
                                             <td className="px-6 py-4">
                                                 <div className="font-bold text-foreground">
                                                     {sale.receiptNumber ? `#PDV${sale.receiptNumber}` : sale.id.split('-')[0].toUpperCase()}
@@ -146,6 +184,9 @@ export default function ClientHistoryClient({ clientId }: { clientId: string }) 
                                                     <span className="font-bold text-orange-600 dark:text-orange-400">${sale.balance?.toFixed(2) || '0.00'}</span>
                                                 ) : <span className="text-gray-400">-</span>}
                                             </td>
+                                            <td className="px-4 py-4 text-right text-gray-300 dark:text-gray-600">
+                                                {openingSaleId === sale.id ? '⋯' : '›'}
+                                            </td>
                                         </tr>
                                     );
                                 })}
@@ -160,6 +201,10 @@ export default function ClientHistoryClient({ clientId }: { clientId: string }) 
                     </div>
                 )}
             </div>
+
+            {ticketSale && (
+                <SaleTicketModal sale={ticketSale} onClose={() => setTicketSale(null)} />
+            )}
         </div>
     );
 }
