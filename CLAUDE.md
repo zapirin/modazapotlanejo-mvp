@@ -73,6 +73,8 @@ Criterios de éxito sólidos te permiten iterar de forma independiente. Criterio
 - Antes de cada transferencia al servidor, **listar explícitamente los archivos a subir y esperar confirmación del usuario** antes de proceder.
 - Solo transferir los archivos de código fuente que fueron modificados en esa tarea específica.
 - Después de transferir, verificar con `ls -la` que los archivos llegaron con el tamaño correcto.
+- **Después de `npm run build`, copiar el arranque regenerado:** `cp .next/standalone/server.js server.js`. El proyecto usa `output: "standalone"`, y ese `server.js` **lleva la configuración de `next.config.ts` escrita adentro**, congelada al momento de generarse. Si no se copia, el servidor sigue arrancando con la configuración del día que se creó y **todo cambio a `next.config.ts` queda invisible en producción**. Pasó: el archivo quedó congelado del 2026-03-31 y durante meses ignoró la lista `allowedOrigins`, provocando más de mil "Invalid Server Actions request" a visitantes reales.
+- El orden correcto del deploy es: transferir archivos → `npm run build` → `cp .next/standalone/server.js server.js` → `pm2 restart modazapo`.
 
 ## Reglas generales al editar código
 
