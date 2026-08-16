@@ -387,7 +387,7 @@ export async function updateOrderStatus(orderId: string, status: string, sellerN
                     shippingCost: updatedOrder.shippingCost,
                 });
             } catch (e) {
-                console.error("Loyalty earn on delivery failed:", e);
+                console.error("Loyalty earn on delivery failed:", updatedOrder.id, e);
             }
         }
 
@@ -397,7 +397,7 @@ export async function updateOrderStatus(orderId: string, status: string, sellerN
             try {
                 await revertOrderLoyalty(updatedOrder.id);
             } catch (e) {
-                console.error("Loyalty revert failed:", e);
+                console.error("Loyalty revert failed:", updatedOrder.id, e);
             }
         }
 
@@ -433,7 +433,7 @@ export async function deleteOrder(orderId: string) {
         try {
             await revertOrderLoyalty(orderId);
         } catch (e) {
-            console.error("Loyalty revert on delete failed:", e);
+            console.error("Loyalty revert on delete failed:", orderId, e);
         }
 
         await prisma.order.delete({ where: { id: orderId } });
@@ -526,7 +526,7 @@ export async function updateOrderItems(orderId: string, items: {
             });
             await tx.order.update({
                 where: { id: orderId },
-                data: { total: newTotal, commissionAmount, sellerEarnings }
+                data: { total: newTotal + (order.shippingCost || 0), commissionAmount, sellerEarnings }
             });
         });
 
