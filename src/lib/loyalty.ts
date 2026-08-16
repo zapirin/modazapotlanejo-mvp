@@ -261,13 +261,15 @@ export async function earnPointsForDeliveredOrder(order: {
     });
 }
 
-// Deshace todos los movimientos de puntos ligados a un pedido: quita lo ganado
-// y devuelve lo canjeado. Funciona para ambos casos con la misma resta porque
-// EARN guarda los puntos en positivo y REDEEM en negativo.
-// Idempotente: borra los movimientos, así que repetirla no hace nada.
 // Deshace los movimientos de puntos que cumplan el filtro, DENTRO de una
 // transacción que ya abrió quien llama. Sirve igual para un pedido en línea
 // (`{ orderId }`) que para una venta de mostrador (`{ saleId }`).
+//
+// `tx` DEBE ser la transacción de un `$transaction`, no el cliente `prisma`
+// suelto: si falla a medio camino, los saldos ya ajustados tienen que revertirse
+// junto con el borrado de los movimientos.
+//
+// Idempotente: borra los movimientos, así que repetirla no hace nada.
 //
 // Acumula el neto por cuenta y aplica el tope de cero UNA sola vez. Hacerlo
 // movimiento por movimiento daría resultados distintos según el orden en que
@@ -282,6 +284,14 @@ export async function revertLoyaltyMovements(
     tx: any,
     where: { orderId: string } | { saleId: string }
 ) {
+    // Guardia contra el identificador vacío: Prisma descarta las claves con
+    // valor `undefined`, así que un `{ saleId: undefined }` se volvería `{}` y el
+    // `deleteMany` de abajo vaciaría la tabla de puntos COMPLETA, de todos los
+    // vendedores. Hoy ningún llamador puede llegar aquí sin identificador, pero
+    // el costo de equivocarse es demasiado alto para dejarlo al tipado.
+    const id = (where as any).orderId ?? (where as any).saleId;
+    if (!id) throw new Error("revertLoyaltyMovements requiere orderId o saleId");
+
     const txns = await tx.loyaltyTransaction.findMany({ where });
     if (txns.length === 0) return { reverted: 0 };
 
@@ -303,6 +313,8 @@ export async function revertLoyaltyMovements(
     return { reverted: txns.length };
 }
 
+// Deshace los puntos de un pedido en línea. Toma primero un candado sobre la
+// fila del pedido para que revertir y otorgar simultáneos no se intercalen.
 export async function revertOrderLoyalty(orderId: string) {
     return prisma.$transaction(async (tx: any) => {
         await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
