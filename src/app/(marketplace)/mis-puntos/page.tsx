@@ -7,10 +7,10 @@ export default async function MisPuntosPage() {
     const user = await getSessionUser();
     if (!user) redirect("/login");
     if (user.role !== "BUYER") redirect("/");
-    const { accounts } = await getMyLoyalty();
+    const { accounts, pending } = await getMyLoyalty();
     return (
         <div className="max-w-4xl mx-auto px-4 py-8">
-            <LoyaltyAccountClient accounts={accounts} />
+            <LoyaltyAccountClient accounts={accounts} pending={pending} />
         </div>
     );
 }

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { getSessionUser } from "@/app/actions/auth";
 import { revalidatePath } from "next/cache";
+import { earnPointsForDeliveredOrder, revertOrderLoyalty } from "@/lib/loyalty";
 
 // Libera el pago al vendedor (comprador confirmó recepción o admin lo aprueba)
 export async function releasePayment(orderId: string) {
@@ -71,6 +72,20 @@ export async function releasePayment(orderId: string) {
             }
         });
 
+        // Los puntos se ganan al entregar. Éste es el camino real de las compras
+        // pagadas en línea: el comprador confirma recepción o el admin libera.
+        try {
+            await earnPointsForDeliveredOrder({
+                id: order.id,
+                sellerId: order.sellerId,
+                buyerId: order.buyerId,
+                total: order.total,
+                shippingCost: order.shippingCost,
+            });
+        } catch (e) {
+            console.error("Loyalty earn on release failed:", orderId, e);
+        }
+
         revalidatePath("/orders");
         revalidatePath("/dashboard");
         revalidatePath("/admin/marketplace");
@@ -113,6 +128,14 @@ export async function refundPayment(orderId: string) {
             where: { id: orderId },
             data: { status: "REFUNDED", refundedAt: new Date() }
         });
+
+        // Se deshace todo lo de puntos: se devuelve lo que el comprador canjeó
+        // y se quita lo que hubiera ganado.
+        try {
+            await revertOrderLoyalty(orderId);
+        } catch (e) {
+            console.error("Loyalty revert on refund failed:", orderId, e);
+        }
 
         revalidatePath("/orders");
         revalidatePath("/dashboard");

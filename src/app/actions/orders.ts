@@ -11,7 +11,7 @@ import {
   sendLowInventoryAlert,
   sendOrderUpdatedToBuyer,
 } from "@/lib/email/templates";
-import { earnPoints, redeemPoints, pointsToMXN, getProgram } from "@/lib/loyalty";
+import { redeemPoints, pointsToMXN, getProgram, earnPointsForDeliveredOrder, revertOrderLoyalty } from "@/lib/loyalty";
 import { calculateAutoDiscount } from "@/lib/discountUtils";
 
 interface OrderItemInput {
@@ -217,18 +217,6 @@ export async function createOrder(data: {
                 console.error("Loyalty redeem failed:", e);
             }
         }
-        if (finalTotal > 0) {
-            try {
-                await earnPoints({
-                    sellerId: data.sellerId,
-                    customer: { buyerId: user.id },
-                    amountMXN: finalTotal,
-                    orderId: order.id,
-                });
-            } catch (e) {
-                console.error("Loyalty earn failed:", e);
-            }
-        }
 
         revalidatePath("/orders");
         return { success: true, orderId: order.id, orderNumber: order.orderNumber };
@@ -388,6 +376,31 @@ export async function updateOrderStatus(orderId: string, status: string, sellerN
             }
         }
 
+        // Los puntos se ganan hasta que el pedido se entrega.
+        if (status === 'COMPLETED') {
+            try {
+                await earnPointsForDeliveredOrder({
+                    id: updatedOrder.id,
+                    sellerId: updatedOrder.sellerId,
+                    buyerId: updatedOrder.buyerId,
+                    total: updatedOrder.total,
+                    shippingCost: updatedOrder.shippingCost,
+                });
+            } catch (e) {
+                console.error("Loyalty earn on delivery failed:", updatedOrder.id, e);
+            }
+        }
+
+        // Si el pedido se cae, se deshace todo lo de puntos: se quita lo ganado
+        // (si ya se había entregado) y se devuelve lo que el comprador canjeó.
+        if (status === 'CANCELLED' || status === 'REJECTED' || status === 'REFUNDED') {
+            try {
+                await revertOrderLoyalty(updatedOrder.id);
+            } catch (e) {
+                console.error("Loyalty revert failed:", updatedOrder.id, e);
+            }
+        }
+
         revalidatePath("/orders");
         revalidatePath("/dashboard");
         return { success: true };
@@ -413,6 +426,14 @@ export async function deleteOrder(orderId: string) {
         // Solo el vendedor o admin puede borrar
         if (user.role !== "ADMIN" && order.sellerId !== user.id) {
             return { success: false, error: "Sin permiso" };
+        }
+
+        // Antes de borrar, deshacer los puntos para no dejar movimientos
+        // apuntando a un pedido que ya no existe.
+        try {
+            await revertOrderLoyalty(orderId);
+        } catch (e) {
+            console.error("Loyalty revert on delete failed:", orderId, e);
         }
 
         await prisma.order.delete({ where: { id: orderId } });
@@ -505,7 +526,7 @@ export async function updateOrderItems(orderId: string, items: {
             });
             await tx.order.update({
                 where: { id: orderId },
-                data: { total: newTotal, commissionAmount, sellerEarnings }
+                data: { total: newTotal + (order.shippingCost || 0), commissionAmount, sellerEarnings }
             });
         });
 

@@ -6,6 +6,7 @@ import {
     getAccountBalance,
     pointsToMXN,
     mxnToPoints,
+    getPendingPointsByBuyer,
 } from "@/lib/loyalty";
 import { prisma } from "@/lib/prisma";
 
@@ -59,18 +60,21 @@ export async function pointsValueMXN(sellerId: string, points: number) {
 
 export async function getMyLoyalty() {
     const user = await getSessionUser();
-    if (!user) return { accounts: [] as any[] };
-    const accounts = await (prisma as any).loyaltyAccount.findMany({
-        where: { buyerId: user.id },
-        include: {
-            seller: { select: { id: true, name: true, businessName: true, logoUrl: true, sellerSlug: true } },
-            transactions: {
-                orderBy: { createdAt: "desc" },
-                take: 50,
+    if (!user) return { accounts: [] as any[], pending: [] as any[] };
+    const [accounts, pending] = await Promise.all([
+        (prisma as any).loyaltyAccount.findMany({
+            where: { buyerId: user.id },
+            include: {
+                seller: { select: { id: true, name: true, businessName: true, logoUrl: true, sellerSlug: true } },
+                transactions: {
+                    orderBy: { createdAt: "desc" },
+                    take: 50,
+                },
             },
-        },
-        orderBy: { updatedAt: "desc" },
-    });
-    return { accounts };
+            orderBy: { updatedAt: "desc" },
+        }),
+        getPendingPointsByBuyer(user.id),
+    ]);
+    return { accounts, pending };
 }
 
