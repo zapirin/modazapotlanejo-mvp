@@ -208,8 +208,10 @@ export async function listSellerAccounts(sellerId: string) {
 }
 
 // Otorga los puntos de un pedido ya entregado.
-// Idempotente: si ese pedido ya tiene un movimiento EARN, no hace nada. Así,
-// marcar dos veces como entregado no duplica los puntos.
+// Todo ocurre en una sola transacción que primero toma un candado sobre la fila
+// del pedido: así, dos "marcar como entregado" simultáneos se serializan y el
+// segundo ya ve el movimiento del primero. Por eso no se reutiliza earnPoints:
+// esa función abre su propia transacción y Prisma no permite anidarlas.
 export async function earnPointsForDeliveredOrder(order: {
     id: string;
     sellerId: string;
@@ -217,21 +219,48 @@ export async function earnPointsForDeliveredOrder(order: {
     total: number;
     shippingCost: number;
 }) {
-    const yaOtorgado = await (prisma as any).loyaltyTransaction.findFirst({
-        where: { orderId: order.id, type: "EARN" },
-        select: { id: true },
-    });
-    if (yaOtorgado) return { earned: 0, skipped: true as const };
-
     // Los puntos se ganan sobre la mercancía, no sobre el envío.
     const base = (order.total || 0) - (order.shippingCost || 0);
     if (base <= 0) return { earned: 0, skipped: true as const };
 
-    return earnPoints({
-        sellerId: order.sellerId,
-        customer: { buyerId: order.buyerId },
-        amountMXN: base,
-        orderId: order.id,
+    const program = await getProgram(order.sellerId);
+    if (!program || !program.isActive) return { earned: 0, skipped: true as const };
+
+    const points = mxnToPoints(base, program.earnRate);
+    if (points <= 0) return { earned: 0, skipped: true as const };
+
+    return prisma.$transaction(async (tx: any) => {
+        await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${order.id} FOR UPDATE`;
+
+        const yaOtorgado = await tx.loyaltyTransaction.findFirst({
+            where: { orderId: order.id, type: "EARN" },
+            select: { id: true },
+        });
+        if (yaOtorgado) return { earned: 0, skipped: true as const };
+
+        let account = await tx.loyaltyAccount.findUnique({
+            where: { sellerId_buyerId: { sellerId: order.sellerId, buyerId: order.buyerId } },
+        });
+        if (!account) {
+            account = await tx.loyaltyAccount.create({
+                data: { sellerId: order.sellerId, buyerId: order.buyerId, balance: 0 },
+            });
+        }
+
+        const updated = await tx.loyaltyAccount.update({
+            where: { id: account.id },
+            data: { balance: { increment: points } },
+        });
+        await tx.loyaltyTransaction.create({
+            data: {
+                accountId: account.id,
+                type: "EARN",
+                points,
+                amountMXN: base,
+                orderId: order.id,
+            },
+        });
+        return { earned: points, balance: updated.balance, skipped: false as const };
     });
 }
 
@@ -244,12 +273,20 @@ export async function revertOrderLoyalty(orderId: string) {
         const txns = await tx.loyaltyTransaction.findMany({ where: { orderId } });
         if (txns.length === 0) return { reverted: 0 };
 
+        // Se acumula el neto por cuenta y se aplica UNA sola vez. Aplicar el tope
+        // de cero movimiento por movimiento daría resultados distintos según el
+        // orden en que vinieran, y en saldos bajos llega a inventar puntos.
+        const netoPorCuenta = new Map<string, number>();
         for (const t of txns) {
-            const account = await tx.loyaltyAccount.findUnique({ where: { id: t.accountId } });
+            netoPorCuenta.set(t.accountId, (netoPorCuenta.get(t.accountId) || 0) + t.points);
+        }
+
+        for (const [accountId, neto] of netoPorCuenta) {
+            const account = await tx.loyaltyAccount.findUnique({ where: { id: accountId } });
             if (!account) continue;
             await tx.loyaltyAccount.update({
-                where: { id: account.id },
-                data: { balance: Math.max(0, account.balance - t.points) },
+                where: { id: accountId },
+                data: { balance: Math.max(0, account.balance - neto) },
             });
         }
 
