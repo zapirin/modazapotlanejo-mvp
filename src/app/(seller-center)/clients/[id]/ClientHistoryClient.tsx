@@ -56,6 +56,11 @@ export default function ClientHistoryClient({ clientId }: { clientId: string }) 
         );
     }
 
+    // Solo las ventas completadas cuentan como compra: las canceladas y las
+    // suspendidas se siguen viendo en la tabla, pero no suman.
+    const ventasCompletadas = (client.sales || []).filter((s: any) => s.status === 'COMPLETED');
+    const totalComprado = ventasCompletadas.reduce((acc: number, s: any) => acc + (s.total || 0), 0);
+
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-6">
             {/* Header & Stats */}
@@ -76,7 +81,10 @@ export default function ClientHistoryClient({ clientId }: { clientId: string }) 
                 <div className="flex gap-4 w-full md:w-auto">
                     <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-border shadow-sm flex-1 md:flex-none md:min-w-[150px]">
                         <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">Ventas</p>
-                        <p className="text-xl font-black">{client.sales?.length || 0}</p>
+                        <p className="text-xl font-black">{ventasCompletadas.length}</p>
+                        <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                            ${totalComprado.toFixed(2)}
+                        </p>
                     </div>
                     <div className={`p-4 rounded-2xl border shadow-sm flex-1 md:flex-none md:min-w-[180px] ${
                         client.storeCredit > 0 ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' :
