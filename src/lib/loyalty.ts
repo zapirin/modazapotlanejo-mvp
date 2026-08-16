@@ -206,3 +206,93 @@ export async function listSellerAccounts(sellerId: string) {
         orderBy: { updatedAt: "desc" },
     });
 }
+
+// Otorga los puntos de un pedido ya entregado.
+// Idempotente: si ese pedido ya tiene un movimiento EARN, no hace nada. Así,
+// marcar dos veces como entregado no duplica los puntos.
+export async function earnPointsForDeliveredOrder(order: {
+    id: string;
+    sellerId: string;
+    buyerId: string;
+    total: number;
+    shippingCost: number;
+}) {
+    const yaOtorgado = await (prisma as any).loyaltyTransaction.findFirst({
+        where: { orderId: order.id, type: "EARN" },
+        select: { id: true },
+    });
+    if (yaOtorgado) return { earned: 0, skipped: true as const };
+
+    // Los puntos se ganan sobre la mercancía, no sobre el envío.
+    const base = (order.total || 0) - (order.shippingCost || 0);
+    if (base <= 0) return { earned: 0, skipped: true as const };
+
+    return earnPoints({
+        sellerId: order.sellerId,
+        customer: { buyerId: order.buyerId },
+        amountMXN: base,
+        orderId: order.id,
+    });
+}
+
+// Deshace todos los movimientos de puntos ligados a un pedido: quita lo ganado
+// y devuelve lo canjeado. Funciona para ambos casos con la misma resta porque
+// EARN guarda los puntos en positivo y REDEEM en negativo.
+// Idempotente: borra los movimientos, así que repetirla no hace nada.
+export async function revertOrderLoyalty(orderId: string) {
+    return prisma.$transaction(async (tx: any) => {
+        const txns = await tx.loyaltyTransaction.findMany({ where: { orderId } });
+        if (txns.length === 0) return { reverted: 0 };
+
+        for (const t of txns) {
+            const account = await tx.loyaltyAccount.findUnique({ where: { id: t.accountId } });
+            if (!account) continue;
+            await tx.loyaltyAccount.update({
+                where: { id: account.id },
+                data: { balance: Math.max(0, account.balance - t.points) },
+            });
+        }
+
+        await tx.loyaltyTransaction.deleteMany({ where: { orderId } });
+        return { reverted: txns.length };
+    });
+}
+
+// Estados en los que un pedido ya se pagó pero todavía no se entrega.
+// PENDING y PENDING_PAYMENT quedan fuera a propósito: no hay pago confirmado.
+const ESTADOS_PAGADO_SIN_ENTREGAR = ["PAID", "ACCEPTED", "SHIPPED"];
+
+// Puntos que el comprador ganará cuando le entreguen lo que ya pagó.
+// NO se guardan en ningún lado: se calculan cada vez que se piden. Esa es la
+// razón por la que puede verlos sin poder gastarlos — nunca entran a su saldo.
+export async function getPendingPointsByBuyer(buyerId: string) {
+    const orders = await (prisma as any).order.findMany({
+        where: { buyerId, status: { in: ESTADOS_PAGADO_SIN_ENTREGAR } },
+        select: {
+            sellerId: true,
+            total: true,
+            shippingCost: true,
+            seller: { select: { id: true, name: true, businessName: true, logoUrl: true, sellerSlug: true } },
+        },
+    });
+    if (orders.length === 0) return [];
+
+    const sellerIds = [...new Set(orders.map((o: any) => o.sellerId))] as string[];
+    const programs = await (prisma as any).loyaltyProgram.findMany({
+        where: { sellerId: { in: sellerIds }, isActive: true },
+        select: { sellerId: true, earnRate: true },
+    });
+    const tasaPorVendedor = new Map<string, number>(programs.map((p: any) => [p.sellerId, p.earnRate]));
+
+    const acumulado = new Map<string, { sellerId: string; points: number; seller: any }>();
+    for (const o of orders) {
+        const tasa = tasaPorVendedor.get(o.sellerId);
+        if (!tasa) continue;
+        const pts = mxnToPoints((o.total || 0) - (o.shippingCost || 0), tasa);
+        if (pts <= 0) continue;
+        const previo = acumulado.get(o.sellerId);
+        if (previo) previo.points += pts;
+        else acumulado.set(o.sellerId, { sellerId: o.sellerId, points: pts, seller: o.seller });
+    }
+    return Array.from(acumulado.values());
+}
