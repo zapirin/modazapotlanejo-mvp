@@ -38,7 +38,8 @@ for (const e of aCorregir) {
         where: { id: e.accountId },
         select: { balance: true, buyer: { select: { name: true } } },
     });
-    console.log(`  pedido ${o.orderNumber} (${o.status})  ${e.points} pts  comprador: ${acc?.buyer?.name || '?'}  saldo actual: ${acc?.balance ?? '?'}`);
+    const quitar = Math.min(acc?.balance ?? 0, e.points);
+    console.log(`  pedido ${o.orderNumber} (${o.status})  ${e.points} pts  comprador: ${acc?.buyer?.name || '?'}  saldo actual: ${acc?.balance ?? '?'}  → se quitarán ${quitar} pts y se borrará el movimiento`);
 }
 
 if (!aplicar) {

@@ -64,8 +64,12 @@ export default function LoyaltyAccountClient({ accounts, pending = [] }: { accou
             <div>
                 <h1 className="text-3xl font-black tracking-tight">Mis Puntos</h1>
                 <p className="text-sm text-gray-500 mt-1">
-                    Tienes <strong>{totalPoints.toLocaleString()}</strong> puntos repartidos en {accounts.length} tienda
-                    {accounts.length === 1 ? "" : "s"}.
+                    {accounts.length > 0 && (
+                        <>
+                            Tienes <strong>{totalPoints.toLocaleString()}</strong> puntos repartidos en {accounts.length} tienda
+                            {accounts.length === 1 ? "" : "s"}.
+                        </>
+                    )}
                     {pending.length > 0 && (
                         <> Además tienes <strong>{pending.reduce((s, p) => s + p.points, 0).toLocaleString()}</strong> puntos por confirmar de pedidos que vienen en camino; se activan cuando te los entreguen.</>
                     )}
