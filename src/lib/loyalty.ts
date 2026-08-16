@@ -238,14 +238,11 @@ export async function earnPointsForDeliveredOrder(order: {
         });
         if (yaOtorgado) return { earned: 0, skipped: true as const };
 
-        let account = await tx.loyaltyAccount.findUnique({
+        const account = await tx.loyaltyAccount.upsert({
             where: { sellerId_buyerId: { sellerId: order.sellerId, buyerId: order.buyerId } },
+            update: {},
+            create: { sellerId: order.sellerId, buyerId: order.buyerId, balance: 0 },
         });
-        if (!account) {
-            account = await tx.loyaltyAccount.create({
-                data: { sellerId: order.sellerId, buyerId: order.buyerId, balance: 0 },
-            });
-        }
 
         const updated = await tx.loyaltyAccount.update({
             where: { id: account.id },
@@ -270,6 +267,8 @@ export async function earnPointsForDeliveredOrder(order: {
 // Idempotente: borra los movimientos, así que repetirla no hace nada.
 export async function revertOrderLoyalty(orderId: string) {
     return prisma.$transaction(async (tx: any) => {
+        await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+
         const txns = await tx.loyaltyTransaction.findMany({ where: { orderId } });
         if (txns.length === 0) return { reverted: 0 };
 
@@ -306,6 +305,7 @@ export async function getPendingPointsByBuyer(buyerId: string) {
     const orders = await (prisma as any).order.findMany({
         where: { buyerId, status: { in: ESTADOS_PAGADO_SIN_ENTREGAR } },
         select: {
+            id: true,
             sellerId: true,
             total: true,
             shippingCost: true,
@@ -313,6 +313,14 @@ export async function getPendingPointsByBuyer(buyerId: string) {
         },
     });
     if (orders.length === 0) return [];
+
+    // Los pedidos creados antes de este cambio ya tienen sus puntos otorgados:
+    // no deben aparecer como "por confirmar" o prometeríamos algo que no llega.
+    const yaOtorgados = await (prisma as any).loyaltyTransaction.findMany({
+        where: { orderId: { in: orders.map((o: any) => o.id) }, type: "EARN" },
+        select: { orderId: true },
+    });
+    const conPuntosYa = new Set(yaOtorgados.map((t: any) => t.orderId));
 
     const sellerIds = [...new Set(orders.map((o: any) => o.sellerId))] as string[];
     const programs = await (prisma as any).loyaltyProgram.findMany({
@@ -323,6 +331,7 @@ export async function getPendingPointsByBuyer(buyerId: string) {
 
     const acumulado = new Map<string, { sellerId: string; points: number; seller: any }>();
     for (const o of orders) {
+        if (conPuntosYa.has(o.id)) continue;
         const tasa = tasaPorVendedor.get(o.sellerId);
         if (!tasa) continue;
         const pts = mxnToPoints((o.total || 0) - (o.shippingCost || 0), tasa);
