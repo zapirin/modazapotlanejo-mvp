@@ -26,11 +26,23 @@ type Account = {
     transactions: Transaction[];
 };
 
-export default function LoyaltyAccountClient({ accounts }: { accounts: Account[] }) {
+type Pending = {
+    sellerId: string;
+    points: number;
+    seller: {
+        id: string;
+        name: string;
+        businessName: string | null;
+        logoUrl: string | null;
+        sellerSlug: string | null;
+    };
+};
+
+export default function LoyaltyAccountClient({ accounts, pending = [] }: { accounts: Account[]; pending?: Pending[] }) {
     const [openId, setOpenId] = useState<string | null>(null);
     const totalPoints = accounts.reduce((s, a) => s + a.balance, 0);
 
-    if (accounts.length === 0) {
+    if (accounts.length === 0 && pending.length === 0) {
         return (
             <div className="text-center py-20">
                 <h1 className="text-3xl font-black mb-2">Mis Puntos</h1>
@@ -54,6 +66,9 @@ export default function LoyaltyAccountClient({ accounts }: { accounts: Account[]
                 <p className="text-sm text-gray-500 mt-1">
                     Tienes <strong>{totalPoints.toLocaleString()}</strong> puntos repartidos en {accounts.length} tienda
                     {accounts.length === 1 ? "" : "s"}.
+                    {pending.length > 0 && (
+                        <> Además tienes <strong>{pending.reduce((s, p) => s + p.points, 0).toLocaleString()}</strong> puntos por confirmar de pedidos que vienen en camino; se activan cuando te los entreguen.</>
+                    )}
                 </p>
             </div>
 
@@ -83,9 +98,18 @@ export default function LoyaltyAccountClient({ accounts }: { accounts: Account[]
                                     <p className="font-black truncate">{storeName}</p>
                                     <p className="text-xs text-gray-500">{acc.transactions.length} movimiento{acc.transactions.length === 1 ? "" : "s"}</p>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-right shrink-0">
                                     <p className="text-2xl font-black text-amber-600">{acc.balance.toLocaleString()}</p>
-                                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">puntos</p>
+                                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">disponibles</p>
+                                    {(() => {
+                                        const pend = pending.find(p => p.sellerId === acc.sellerId);
+                                        if (!pend) return null;
+                                        return (
+                                            <p className="text-[11px] font-bold text-gray-400 mt-1">
+                                                +{pend.points.toLocaleString()} por confirmar
+                                            </p>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                             <div className="px-5 pb-3 flex gap-2">
@@ -163,6 +187,29 @@ export default function LoyaltyAccountClient({ accounts }: { accounts: Account[]
                         </div>
                     );
                 })}
+                {pending
+                    .filter(p => !accounts.some(a => a.sellerId === p.sellerId))
+                    .map(p => {
+                        const nombre = p.seller.businessName || p.seller.name;
+                        return (
+                            <div key={p.sellerId} className="rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+                                <div className="w-full flex items-center gap-3 p-5">
+                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-lg font-black">
+                                        {nombre.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-black truncate">{nombre}</p>
+                                        <p className="text-xs text-gray-500">Aún sin puntos disponibles</p>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                        <p className="text-2xl font-black text-gray-300 dark:text-gray-600">0</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">disponibles</p>
+                                        <p className="text-[11px] font-bold text-gray-400 mt-1">+{p.points.toLocaleString()} por confirmar</p>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
             </div>
         </div>
     );
