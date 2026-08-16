@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from '@/generated/client';
 import { getSessionUser } from '@/app/actions/auth';
 import { sendLowInventoryAlert, sendDigitalTicketEmail } from "@/lib/email/templates";
-import { earnPoints, redeemPoints, pointsToMXN, getProgram } from "@/lib/loyalty";
+import { earnPoints, redeemPoints, pointsToMXN, getProgram, revertLoyaltyMovements } from "@/lib/loyalty";
 import { postProductToSocialMedia } from "@/lib/socialMedia";
 
 // ---------------------------------------------------------------------------
@@ -1006,26 +1006,7 @@ export async function deleteSale(saleId: string) {
             }
 
             // 2.5 Revert Loyalty Points
-            const loyaltyTxns = await tx.loyaltyTransaction.findMany({
-                where: { saleId: sale.id }
-            });
-
-            for (const ltxn of loyaltyTxns) {
-                const account = await tx.loyaltyAccount.findUnique({
-                    where: { id: ltxn.accountId }
-                });
-                if (account) {
-                    const newBalance = Math.max(0, account.balance - ltxn.points);
-                    await tx.loyaltyAccount.update({
-                        where: { id: account.id },
-                        data: { balance: newBalance }
-                    });
-                }
-            }
-
-            await tx.loyaltyTransaction.deleteMany({
-                where: { saleId: sale.id }
-            });
+            await revertLoyaltyMovements(tx, { saleId: sale.id });
 
             // 3. Mark as cancelled
             const updatedSale = await tx.sale.update({
@@ -1225,26 +1206,7 @@ export async function updateSale(saleId: string, data: {
             }
 
             // 3.5 Revert Old Loyalty Points
-            const oldLoyaltyTxns = await tx.loyaltyTransaction.findMany({
-                where: { saleId: oldSale.id }
-            });
-
-            for (const ltxn of oldLoyaltyTxns) {
-                const account = await tx.loyaltyAccount.findUnique({
-                    where: { id: ltxn.accountId }
-                });
-                if (account) {
-                    const newBalance = Math.max(0, account.balance - ltxn.points);
-                    await tx.loyaltyAccount.update({
-                        where: { id: account.id },
-                        data: { balance: newBalance }
-                    });
-                }
-            }
-
-            await tx.loyaltyTransaction.deleteMany({
-                where: { saleId: oldSale.id }
-            });
+            await revertLoyaltyMovements(tx, { saleId: oldSale.id });
 
             // 4. Determine New Status & Apply changes
             let finalStatus = "COMPLETED";
