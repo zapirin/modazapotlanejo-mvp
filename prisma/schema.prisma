@@ -133,6 +133,7 @@ model StoreLocation {
   transfersOut         StockTransfer[]       @relation("TransferSource")
   transfersIn          StockTransfer[]       @relation("TransferDest")
   stockEntries         StockEntry[]          @relation("EntryLocation")
+  purchaseNotes        PurchaseNote[]        @relation("PurchaseNoteLocation")
 }
 
 model User {
@@ -222,6 +223,10 @@ model User {
   stockTransfersMade        StockTransfer[]        @relation("UserStockTransfers")
   stockEntries              StockEntry[]           @relation("SellerStockEntries")
   stockEntriesMade          StockEntry[]           @relation("UserStockEntries")
+  purchaseNotes             PurchaseNote[]         @relation("SellerPurchaseNotes")
+  purchaseNotesMade         PurchaseNote[]         @relation("UserPurchaseNotes")
+  supplierPayments          SupplierPayment[]      @relation("SellerSupplierPayments")
+  supplierPaymentsMade      SupplierPayment[]      @relation("UserSupplierPayments")
 
   @@unique([email, registeredDomain])
 }
@@ -296,6 +301,7 @@ model Product {
   wishlists            Wishlist[]
   tags                 Tag[]        @relation("ProductToTag")
   stockEntries         StockEntry[]
+  purchaseItems        PurchaseNoteItem[]
 }
 
 model Variant {
@@ -318,6 +324,7 @@ model Variant {
   wishlistItems      Wishlist[]
   transferItems      StockTransferItem[]
   stockEntryItems    StockEntryItem[]
+  purchaseItems      PurchaseNoteItem[]
 
   @@index([productId])
 }
@@ -337,6 +344,8 @@ model Supplier {
   products    Product[]
   seller      User?     @relation(fields: [sellerId], references: [id])
   stockEntries StockEntry[]
+  purchaseNotes PurchaseNote[]
+  payments    SupplierPayment[]
 
   @@unique([sellerId, name])
 }
@@ -424,6 +433,7 @@ model PaymentMethod {
   seller               User?                 @relation(fields: [sellerId], references: [id])
   sales                Sale[]
   storeAccountPayments StoreAccountPayment[]
+  supplierPayments     SupplierPayment[]
 
   @@unique([sellerId, name])
 }
@@ -872,4 +882,120 @@ model StockEntryItem {
   variant     Variant    @relation(fields: [variantId], references: [id])
   quantity    Int
   variantInfo String?
+}
+
+/// Nota de compra. INMUTABLE en cantidades y dinero: corregir = cancelar y
+/// recapturar. Solo se editan invoiceNumber y notes.
+model PurchaseNote {
+  id       String @id @default(cuid())
+  sellerId String
+  seller   User   @relation("SellerPurchaseNotes", fields: [sellerId], references: [id])
+
+  folio Int              // serie propia, se muestra C-000001
+  supplierId   String
+  supplier     Supplier @relation(fields: [supplierId], references: [id])
+  supplierName String    // snapshot
+
+  invoiceNumber String?  // folio del papel del proveedor, texto libre, no único
+  noteDate      DateTime // fecha del documento, distinta de createdAt
+
+  locationId String
+  location   StoreLocation @relation("PurchaseNoteLocation", fields: [locationId], references: [id])
+  userId     String?
+  user       User?  @relation("UserPurchaseNotes", fields: [userId], references: [id])
+
+  /// Etiqueta derivada por el servidor: "CASH" si el abono inicial cubrió el
+  /// total, "CREDIT" si quedó saldo. Sirve para filtrar y reportar; NO es la
+  /// fuente de verdad del adeudo — esa es `balance`.
+  paymentType String
+  creditDays  Int?      // plazo aplicado al saldo que quedó
+  dueDate     DateTime? // noteDate + creditDays, congelado al guardar
+
+  // ── DINERO (Float, round2 SIEMPRE antes de escribir) ──
+  total      Float     // Σ lineTotal, calculado en servidor, nunca se recalcula
+  paidAmount Float @default(0)
+  balance    Float @default(0)
+  paidAt     DateTime?
+
+  totalItems Int     @default(0)
+  notes      String?
+
+  status          String    @default("ACTIVE")  // "ACTIVE" | "CANCELLED"
+  cancelledAt     DateTime?
+  cancelledByName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items    PurchaseNoteItem[]
+  payments SupplierPayment[]
+
+  @@unique([sellerId, folio])
+  @@index([sellerId, noteDate])
+  @@index([sellerId, supplierId, status])
+  @@index([sellerId, status, dueDate])   // antigüedad de saldos
+}
+
+/// Un renglón = una variante. La agrupación por producto que ve el usuario se
+/// reconstruye con productId + lineOrder.
+model PurchaseNoteItem {
+  id             String       @id @default(cuid())
+  purchaseNoteId String
+  purchaseNote   PurchaseNote @relation(fields: [purchaseNoteId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  variantId String
+  variant   Variant @relation(fields: [variantId], references: [id])
+
+  productName String   // snapshots: la nota se reimprime aunque renombren
+  variantInfo String?
+
+  quantity  Int
+  unitCost  Float      // costo de ESTA remesa
+  lineTotal Float      // round2(quantity * unitCost)
+  lineOrder Int @default(0)
+
+  @@index([purchaseNoteId])
+  @@index([productId])       // "¿a cómo me ha costado este producto?"
+  @@index([variantId])
+}
+
+/// Abono a una nota. Libro mayor auditable de pagos a proveedores.
+model SupplierPayment {
+  id String @id @default(cuid())
+
+  // sellerId y supplierId denormalizados a propósito: el aislamiento por
+  // vendedor debe expresarse en el WHERE de esta tabla, sin depender de un
+  // join. Un filtro de seguridad que vive en un join se olvida algún día.
+  sellerId   String
+  seller     User     @relation("SellerSupplierPayments", fields: [sellerId], references: [id])
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  purchaseNoteId String
+  purchaseNote   PurchaseNote @relation(fields: [purchaseNoteId], references: [id], onDelete: Cascade)
+
+  amount Float
+  paidAt DateTime
+
+  paymentMethodId String?
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+
+  /// "INITIAL" = abono capturado al guardar la nota.
+  /// "MANUAL"  = abono posterior, desde Cuentas por Pagar.
+  /// La distinción es lo que permite cancelar una nota recién capturada por
+  /// dedazo sin permitir cancelar una que ya tiene pagos reales encima.
+  source String @default("MANUAL")
+  notes  String?
+  userId String?
+  user   User?   @relation("UserSupplierPayments", fields: [userId], references: [id])
+
+  status          String    @default("ACTIVE")  // "ACTIVE" | "CANCELLED"
+  cancelledAt     DateTime?
+  cancelledByName String?
+  createdAt       DateTime  @default(now())
+
+  @@index([purchaseNoteId, status])
+  @@index([sellerId, supplierId, paidAt])
 }
