@@ -16,6 +16,9 @@ const MAX_PRODUCTOS_POR_NOTA = 60;
 const MAX_RENGLONES_POR_NOTA = 300;
 const MAX_VARIANTES_PRODUCTO_NUEVO = 100;
 
+// Plazo típico del dueño para lo que queda a deber, si no se captura otro.
+const PLAZO_POR_OMISION = 30;
+
 // Copiados a propósito de `inventory/entries/actions.ts`: ese archivo es
 // "use server" y exportar ahí un helper lo volvería un endpoint HTTP público.
 
@@ -95,7 +98,9 @@ export async function getPurchaseFormData() {
             orderBy: { name: 'asc' },
         }),
         prisma.paymentMethod.findMany({
-            where: { sellerId: access.sellerId, isActive: true },
+            // Los métodos globales (sellerId: null, el Efectivo universal) los
+            // usan todos los vendedores. Mismo patrón que la pantalla de clientes.
+            where: { isActive: true, OR: [{ sellerId: access.sellerId }, { sellerId: null }] },
             select: { id: true, name: true },
             orderBy: { name: 'asc' },
         }),
@@ -372,7 +377,13 @@ export async function createPurchaseNote(input: {
 
             if (abono > 0 && input.initialPayment.paymentMethodId) {
                 const metodo = await prisma.paymentMethod.findFirst({
-                    where: { id: input.initialPayment.paymentMethodId, sellerId: access.sellerId, isActive: true },
+                    // Mismo filtro que getPurchaseFormData: si se ofrece en la
+                    // lista, se tiene que poder guardar.
+                    where: {
+                        id: input.initialPayment.paymentMethodId,
+                        isActive: true,
+                        OR: [{ sellerId: access.sellerId }, { sellerId: null }],
+                    },
                     select: { id: true },
                 });
                 if (!metodo) return { success: false, error: 'Forma de pago no válida.' };
@@ -561,10 +572,16 @@ export async function createPurchaseNote(input: {
             paidAt = new Date();
         }
         const paymentType = balance === 0 ? 'CASH' : 'CREDIT';
+        // Si quedó saldo y nadie capturó plazo, se aplica el típico de 30 días y
+        // se guarda: una nota sin vencimiento no aparecería en ninguna caja de
+        // antigüedad de Cuentas por Pagar, justo la pantalla que existe para no
+        // perder de vista las deudas.
+        let plazoAplicado: number | null = null;
         let dueDate: Date | null = null;
-        if (balance > 0 && creditDays !== null) {
+        if (balance > 0) {
+            plazoAplicado = (creditDays !== null && creditDays > 0) ? creditDays : PLAZO_POR_OMISION;
             dueDate = new Date(noteDate.getTime());
-            dueDate.setDate(dueDate.getDate() + creditDays);
+            dueDate.setDate(dueDate.getDate() + plazoAplicado);
         }
 
         // ── 3. Una sola transacción, con reintento del folio duplicado ─────
@@ -590,7 +607,7 @@ export async function createPurchaseNote(input: {
                             locationId: input.locationId,
                             userId: access.user.id,
                             paymentType,
-                            creditDays: balance > 0 ? creditDays : null,
+                            creditDays: plazoAplicado,
                             dueDate,
                             total,
                             paidAmount,
@@ -654,10 +671,14 @@ export async function createPurchaseNote(input: {
 
                     // Costo de la remesa y precio de venta capturado.
                     for (const [productId, acumulado] of actualizacionesProducto.entries()) {
-                        const data: any = {
-                            cost: acumulado.piezas > 0 ? round2(acumulado.importe / acumulado.piezas) : 0,
-                        };
-                        if (acumulado.price !== null) data.price = acumulado.price;
+                        const costoRemesa = acumulado.piezas > 0 ? round2(acumulado.importe / acumulado.piezas) : 0;
+                        // Una remesa de bonificación (costo 0) es legítima, pero no
+                        // debe borrar el costo del producto y arruinar los reportes
+                        // de utilidad: en ese caso se conserva el que ya tenía.
+                        const data: any = {};
+                        if (costoRemesa > 0) data.cost = costoRemesa;
+                        if (acumulado.price !== null && acumulado.price > 0) data.price = acumulado.price;
+                        if (Object.keys(data).length === 0) continue;
                         // updateMany para conservar el sellerId dentro del WHERE (I1).
                         await tx.product.updateMany({
                             where: { id: productId, sellerId: access.sellerId },
