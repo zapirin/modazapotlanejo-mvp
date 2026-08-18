@@ -115,39 +115,63 @@ export async function getPurchaseFormData() {
     return { suppliers, locations, paymentMethods };
 }
 
-export async function searchProductsForPurchase(query: string) {
+// La búsqueda es SIEMPRE dentro de un proveedor: se ofrecen sus modelos y los
+// que todavía no tienen proveedor (esos se le asignan al guardar la nota). Los
+// modelos de OTRO proveedor no se ofrecen: es decisión del dueño.
+export async function searchProductsForPurchase(query: string, supplierId: string) {
+    const vacio = { delProveedor: [] as any[], sinProveedor: [] as any[] };
+
     const access: any = await resolveEntryAccess();
-    if (access.error) return [];
+    if (access.error) return vacio;
     const q = (query || '').trim();
-    if (q.length < 2) return [];
+    if (q.length < 2) return vacio;
 
-    const products = await prisma.product.findMany({
-        where: {
-            sellerId: access.sellerId,
-            isActive: true,
-            OR: [
-                { name: { contains: q, mode: 'insensitive' } },
-                { sku: { contains: q, mode: 'insensitive' } },
-            ],
-        },
-        select: {
-            id: true,
-            name: true,
-            sku: true,
-            images: true,
-            supplier: { select: { name: true } },
-        },
-        orderBy: { name: 'asc' },
-        take: 20,
+    // Un id vacío desaparecería del WHERE (Prisma descarta `undefined`) y la
+    // búsqueda devolvería el catálogo de cualquier proveedor.
+    if (!supplierId) return vacio;
+    const supplier: any = await (prisma as any).supplier.findFirst({
+        where: { id: supplierId, sellerId: access.sellerId },
+        select: { id: true },
     });
+    if (!supplier) return vacio;
 
-    return products.map((p: any) => ({
+    const base = {
+        sellerId: access.sellerId,
+        isActive: true,
+        OR: [
+            { name: { contains: q, mode: 'insensitive' as const } },
+            { sku: { contains: q, mode: 'insensitive' as const } },
+        ],
+    };
+    const seleccion = { id: true, name: true, sku: true, images: true };
+    const orden = { name: 'asc' as const };
+
+    const [delProveedor, sinProveedor] = await Promise.all([
+        prisma.product.findMany({
+            where: { ...base, supplierId: supplier.id },
+            select: seleccion,
+            orderBy: orden,
+            take: 20,
+        }),
+        prisma.product.findMany({
+            where: { ...base, supplierId: null },
+            select: seleccion,
+            orderBy: orden,
+            take: 20,
+        }),
+    ]);
+
+    const mapear = (p: any) => ({
         id: p.id,
         name: p.name,
         sku: p.sku,
         image: p.images?.[0] || null,
-        supplierName: p.supplier?.name || null,
-    }));
+    });
+
+    return {
+        delProveedor: delProveedor.map(mapear),
+        sinProveedor: sinProveedor.map(mapear),
+    };
 }
 
 export async function getProductVariantsForPurchase(productId: string, locationId: string) {
@@ -433,7 +457,9 @@ export async function createPurchaseNote(input: {
         if (idsExistentes.length > 0) {
             const encontrados: any[] = await prisma.product.findMany({
                 where: { id: { in: idsExistentes }, sellerId: access.sellerId, isActive: true },
-                select: { id: true, name: true },
+                // supplierId: para asignarle este proveedor a los modelos que
+                // todavía no tienen ninguno (los que ya tienen NO se tocan).
+                select: { id: true, name: true, supplierId: true },
             });
             for (const p of encontrados) productosExistentes.set(p.id, p);
             if (encontrados.length !== idsExistentes.length) {
@@ -606,6 +632,15 @@ export async function createPurchaseNote(input: {
             actualizacionesProducto.set(r.productId, acumulado);
         }
 
+        // Los modelos que todavía no tenían proveedor se quedan con el de esta
+        // nota. Los que ya tenían uno NO se tocan. Los productos nuevos nacen
+        // con el proveedor de la nota desde `createProduct`, así que no entran.
+        const productosSinProveedor = new Set(
+            Array.from(productosExistentes.values())
+                .filter((p: any) => !p.supplierId)
+                .map((p: any) => p.id as string)
+        );
+
         // Dinero de la nota, derivado en el servidor.
         const paidAmount = round2(abono);
         let balance = round2(total - paidAmount);
@@ -727,6 +762,10 @@ export async function createPurchaseNote(input: {
                         const data: any = {};
                         if (costoRemesa > 0) data.cost = costoRemesa;
                         if (acumulado.price !== null && acumulado.price > 0) data.price = acumulado.price;
+                        // Se le queda el proveedor de la nota al modelo que no
+                        // tenía ninguno, aunque la remesa haya sido de regalo y
+                        // no haya costo ni precio que actualizar.
+                        if (productosSinProveedor.has(productId)) data.supplierId = supplier.id;
                         if (Object.keys(data).length === 0) continue;
                         // updateMany para conservar el sellerId dentro del WHERE (I1).
                         await tx.product.updateMany({
