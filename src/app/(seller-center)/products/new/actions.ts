@@ -1724,8 +1724,10 @@ export async function deleteProduct(productId: string) {
 export async function getSuppliers() {
     try {
         const user = await getSessionUser();
+        const effectiveSellerId = await getEffectiveSellerId(user) || user?.id;
+        if (!effectiveSellerId) return [];
         return await (prisma as any).supplier.findMany({
-            where: { sellerId: user?.id || null, isActive: true },
+            where: { sellerId: effectiveSellerId, isActive: true },
             orderBy: { name: 'asc' }
         });
     } catch (error) {
@@ -1738,8 +1740,11 @@ export async function createSupplier(name: string) {
         const user = await getSessionUser();
         if (!name.trim()) return { success: false, error: "El nombre del proveedor no puede estar vacío" };
 
+        const effectiveSellerId = await getEffectiveSellerId(user) || user?.id;
+        if (!effectiveSellerId) return { success: false, error: "No autorizado" };
+
         const existing = await (prisma as any).supplier.findFirst({
-            where: { name: { equals: name.trim(), mode: 'insensitive' } }
+            where: { sellerId: effectiveSellerId, name: { equals: name.trim(), mode: 'insensitive' } }
         });
 
         if (existing) return { success: true, supplier: existing };
@@ -1747,7 +1752,7 @@ export async function createSupplier(name: string) {
         const supplier = await (prisma as any).supplier.create({
             data: {
                 name: name.trim(),
-                sellerId: user?.id || null
+                sellerId: effectiveSellerId
             }
         });
 
