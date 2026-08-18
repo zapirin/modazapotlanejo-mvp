@@ -64,10 +64,11 @@ export async function getSuppliers() {
 export async function createSupplier(data: { name: string; notes?: string }) {
     try {
         const user = await getSessionUser();
+        const sellerId = await getEffectiveSellerId(user);
         if (!data.name.trim()) return { success: false, error: "El nombre es obligatorio" };
 
         const existing = await prisma.supplier.findFirst({
-            where: { name: { equals: data.name.trim(), mode: 'insensitive' } }
+            where: { sellerId, name: { equals: data.name.trim(), mode: 'insensitive' } }
         });
 
         if (existing) return { success: false, error: "Ya existe un proveedor con este nombre" };
@@ -76,7 +77,7 @@ export async function createSupplier(data: { name: string; notes?: string }) {
             data: {
                 name: data.name.trim(),
                 notes: data.notes || null,
-                sellerId: await getEffectiveSellerId(user)
+                sellerId
             }
         });
 
@@ -89,24 +90,30 @@ export async function createSupplier(data: { name: string; notes?: string }) {
 
 export async function updateSupplier(id: string, data: { name: string; notes?: string }) {
     try {
+        const user = await getSessionUser();
+        const sellerId = await getEffectiveSellerId(user);
+        if (!sellerId) return { success: false, error: "No autorizado" };
         if (!data.name.trim()) return { success: false, error: "El nombre es obligatorio" };
 
         const existing = await prisma.supplier.findFirst({
-            where: { 
+            where: {
+                sellerId,
                 name: { equals: data.name.trim(), mode: 'insensitive' },
-                id: { not: id } 
+                id: { not: id }
             }
         });
 
         if (existing) return { success: false, error: "Ya existe otro proveedor con este nombre" };
 
-        await prisma.supplier.update({
-            where: { id },
+        const result = await prisma.supplier.updateMany({
+            where: { id, sellerId },
             data: {
                 name: data.name.trim(),
                 notes: data.notes || null
             }
         });
+
+        if (result.count === 0) return { success: false, error: "Proveedor no encontrado." };
 
         revalidatePath("/inventory/suppliers");
         return { success: true };
@@ -117,11 +124,17 @@ export async function updateSupplier(id: string, data: { name: string; notes?: s
 
 export async function deleteSupplier(id: string) {
     try {
+        const user = await getSessionUser();
+        const sellerId = await getEffectiveSellerId(user);
+        if (!sellerId) return { success: false, error: "No autorizado" };
+
         // Soft delete
-        await prisma.supplier.update({
-            where: { id },
+        const result = await prisma.supplier.updateMany({
+            where: { id, sellerId },
             data: { isActive: false }
         });
+
+        if (result.count === 0) return { success: false, error: "Proveedor no encontrado." };
 
         // Optionally, detach from products
         // await prisma.product.updateMany({
