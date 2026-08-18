@@ -19,6 +19,9 @@ const MAX_VARIANTES_PRODUCTO_NUEVO = 100;
 // Plazo típico del dueño para lo que queda a deber, si no se captura otro.
 const PLAZO_POR_OMISION = 30;
 
+// Techo del dinero por pieza: arriba de esto es un dedazo, no una compra.
+const MAX_COSTO_UNITARIO = 1000000;
+
 // Copiados a propósito de `inventory/entries/actions.ts`: ese archivo es
 // "use server" y exportar ahí un helper lo volvería un endpoint HTTP público.
 
@@ -211,12 +214,15 @@ export async function createPurchaseNote(input: {
     }[];
 }) {
     // Productos dados de alta fuera de la transacción: si la transacción falla,
-    // hay que borrarlos (compensación).
+    // hay que borrarlos (compensación). El sellerId se guarda aparte porque la
+    // limpieza vive en el `catch`, fuera del alcance de `access`.
     const createdProductIds: string[] = [];
+    let sellerIdDeLaNota: string | null = null;
 
     try {
         const access: any = await resolveEntryAccess();
         if (access.error) return { success: false, error: access.error };
+        sellerIdDeLaNota = access.sellerId;
 
         // ── 1. Validar TODO antes de crear nada ────────────────────────────
         const lines = input.lines || [];
@@ -226,6 +232,12 @@ export async function createPurchaseNote(input: {
         if (lines.length > MAX_PRODUCTOS_POR_NOTA) {
             return { success: false, error: `Una nota no puede tener más de ${MAX_PRODUCTOS_POR_NOTA} productos. Divídela en dos notas.` };
         }
+
+        // Prisma DESCARTA las claves `undefined`: con un id vacío, la condición
+        // `id` desaparece del WHERE y `findFirst` devolvería el primer proveedor
+        // del vendedor. La nota quedaría cargada a quien nadie eligió.
+        if (!input.supplierId) return { success: false, error: 'Elige un proveedor.' };
+        if (!input.locationId) return { success: false, error: 'Elige la sucursal donde entró la mercancía.' };
 
         const supplier: any = await (prisma as any).supplier.findFirst({
             where: { id: input.supplierId, sellerId: access.sellerId },
@@ -260,8 +272,13 @@ export async function createPurchaseNote(input: {
         let creditDays: number | null = null;
         if (input.creditDays !== undefined && input.creditDays !== null) {
             const dias = Number(input.creditDays);
-            if (!Number.isInteger(dias) || dias < 0 || dias > 365) {
-                return { success: false, error: 'El plazo debe ser un número entero de días entre 0 y 365.' };
+            if (!Number.isInteger(dias) || dias > 365) {
+                return { success: false, error: 'El plazo debe ser un número entero de días, máximo 365.' };
+            }
+            // Un plazo de 0 no significa nada: o se captura un plazo real, o no
+            // se captura y entra el de omisión.
+            if (dias < 1) {
+                return { success: false, error: 'El plazo debe ser de al menos 1 día.' };
             }
             creditDays = dias;
         }
@@ -290,11 +307,14 @@ export async function createPurchaseNote(input: {
             if (!Number.isFinite(unitCost) || unitCost < 0) {
                 return { success: false, error: `El costo del renglón ${i + 1} no es válido.` };
             }
+            if (unitCost > MAX_COSTO_UNITARIO) {
+                return { success: false, error: `El costo del renglón ${i + 1} es demasiado alto. Revisa lo que capturaste.` };
+            }
 
             let salePrice: number | null = null;
             if (linea.salePrice !== undefined && linea.salePrice !== null && String(linea.salePrice) !== '') {
                 const precio = Number(linea.salePrice);
-                if (!Number.isFinite(precio) || precio < 0) {
+                if (!Number.isFinite(precio) || precio < 0 || precio > MAX_COSTO_UNITARIO) {
                     return { success: false, error: `El precio de venta del renglón ${i + 1} no es válido.` };
                 }
                 salePrice = round2(precio);
@@ -331,6 +351,11 @@ export async function createPurchaseNote(input: {
                 }
                 if (opciones.some(o => !o?.name?.trim() || !Array.isArray(o?.values) || o.values.length === 0)) {
                     return { success: false, error: `Las tallas o colores del producto nuevo "${nombre}" están incompletos.` };
+                }
+                // Sin precio, el modelo nacería vendible en el punto de venta al
+                // precio de costo (createProduct deja isPOS en true).
+                if (!(salePrice !== null && salePrice > 0)) {
+                    return { success: false, error: `Falta el precio de venta de "${nombre}". Un producto nuevo no puede quedar sin precio.` };
                 }
                 const combos = generateCombinations(opciones);
                 if (combos.length === 0) {
@@ -489,12 +514,13 @@ export async function createPurchaseNote(input: {
                 }
             }
 
-            const precioBase = l.salePrice !== null ? l.salePrice : l.unitCost;
+            // El precio de venta es obligatorio para un producto nuevo (validado
+            // arriba): nunca se vende al costo por omisión.
             const creado: any = await createProduct({
                 name: nombre,
                 description: "",
                 supplierId: supplier.id,
-                basePrice: String(precioBase),
+                basePrice: String(l.salePrice),
                 cost: String(l.unitCost),
                 isOnline: false,
                 images: [],
@@ -502,7 +528,10 @@ export async function createPurchaseNote(input: {
                 variantsData: combos.map(c => ({ attributes: c, stock: 0 })),
             });
             if (!creado?.success || !creado?.productId) {
-                throw new Error(ERROR_USUARIO + (creado?.error || `No se pudo dar de alta el producto nuevo "${nombre}".`));
+                // El error de `createProduct` puede ser un mensaje crudo de la
+                // base ("Error de base de datos: ..."): al log, no a la pantalla.
+                console.error(`Error al dar de alta el producto nuevo "${nombre}" desde una compra:`, creado?.error);
+                throw new Error(ERROR_USUARIO + `No se pudo dar de alta el producto "${nombre}". Revisa que el nombre no esté repetido en tu catálogo.`);
             }
             createdProductIds.push(creado.productId);
 
@@ -569,7 +598,9 @@ export async function createPurchaseNote(input: {
             // Nunca comparar contra cero exacto: un residuo de coma flotante
             // dejaría la nota "pendiente" para siempre.
             balance = 0;
-            paidAt = new Date();
+            // La nota solo puede quedar saldada aquí por el abono inicial, así
+            // que se salda en la fecha de la nota, igual que ese abono.
+            paidAt = noteDate;
         }
         const paymentType = balance === 0 ? 'CASH' : 'CREDIT';
         // Si quedó saldo y nadie capturó plazo, se aplica el típico de 30 días y
@@ -627,7 +658,9 @@ export async function createPurchaseNote(input: {
                                 supplierId: supplier.id,
                                 purchaseNoteId: nota.id,
                                 amount: paidAmount,
-                                paidAt: new Date(),
+                                // La fecha de la nota, no la de hoy: una nota
+                                // antedatada caería en el mes equivocado.
+                                paidAt: noteDate,
                                 paymentMethodId,
                                 source: 'INITIAL',
                                 userId: access.user.id,
@@ -709,9 +742,12 @@ export async function createPurchaseNote(input: {
         // Compensación best-effort: los productos nuevos se crearon fuera de la
         // transacción, así que el rollback no los borra. Va en su propio
         // try/catch para que un fallo de limpieza no tape el error original.
-        if (createdProductIds.length > 0) {
+        if (createdProductIds.length > 0 && sellerIdDeLaNota) {
             try {
-                await prisma.product.deleteMany({ where: { id: { in: createdProductIds } } });
+                // El sellerId también aquí: es el único WHERE del archivo que borra.
+                await prisma.product.deleteMany({
+                    where: { id: { in: createdProductIds }, sellerId: sellerIdDeLaNota },
+                });
             } catch (limpieza: any) {
                 console.error('No se pudieron borrar los productos creados para la nota:', limpieza);
             }
