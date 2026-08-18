@@ -3,30 +3,11 @@
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/app/actions/auth";
 import { revalidatePath } from "next/cache";
+import { resolveEntryAccess } from "@/lib/sellerAccess";
 
 // Prefijo para distinguir errores de negocio (mensaje seguro para el usuario)
 // de errores internos/de Prisma que no deben mostrarse tal cual.
 const ERROR_USUARIO = 'ERR_USR: ';
-
-// Quién puede tocar entradas y sobre qué sucursales.
-// SELLER: todas las suyas (allowedLocationIds = null significa "sin restricción").
-// CASHIER: solo si tiene el permiso, y solo sus sucursales asignadas.
-async function resolveEntryAccess(): Promise<any> {
-    const user: any = await getSessionUser();
-    if (!user) return { error: 'No autorizado.' };
-    if (user.role === 'SELLER') {
-        return { user, sellerId: user.id, allowedLocationIds: null };
-    }
-    if (user.role === 'CASHIER' && user.canRegisterStockEntry) {
-        if (!user.managedBySellerId) return { error: 'No autorizado.' };
-        return {
-            user,
-            sellerId: user.managedBySellerId,
-            allowedLocationIds: user.allowedLocationIds || [],
-        };
-    }
-    return { error: 'No autorizado.' };
-}
 
 // Mismo criterio de nombre de variante que usa la pantalla de inventario.
 function formatVariantLabel(variant: any): string {

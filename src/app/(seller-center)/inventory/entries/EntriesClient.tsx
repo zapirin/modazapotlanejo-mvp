@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { getStockEntries, cancelStockEntry, getEntryLocations, getEntrySuppliers } from './actions';
-import StockEntryForm from './StockEntryForm';
 
 export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
     const [rows, setRows] = useState<any[]>([]);
@@ -20,7 +19,6 @@ export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
     const [supplierId, setSupplierId] = useState('');
 
     const [expanded, setExpanded] = useState<string | null>(null);
-    const [showForm, setShowForm] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [cancelling, setCancelling] = useState<string | null>(null);
 
@@ -57,12 +55,6 @@ export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
                     <h1 className="text-2xl font-black">📥 Entradas de Mercancía</h1>
                     <p className="text-xs text-gray-400 font-medium">{total} entrada{total === 1 ? '' : 's'} registrada{total === 1 ? '' : 's'}</p>
                 </div>
-                <button
-                    onClick={() => setShowForm(true)}
-                    className="px-5 py-3 bg-blue-600 text-white rounded-xl font-black uppercase tracking-widest text-xs hover:bg-blue-700 transition"
-                >
-                    + Nueva Entrada
-                </button>
             </div>
 
             <div className="bg-card border border-border rounded-2xl p-4 mb-6 grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -107,7 +99,6 @@ export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
                 <div className="bg-card border border-dashed border-border rounded-2xl p-10 text-center">
                     <div className="text-4xl mb-3">📥</div>
                     <h2 className="text-lg font-bold mb-1">Todavía no hay entradas registradas</h2>
-                    <p className="text-gray-500 text-sm">Cuando te llegue mercancía, regístrala con “+ Nueva Entrada”.</p>
                 </div>
             )}
 
@@ -175,10 +166,6 @@ export default function EntriesClient({ canCancel }: { canCancel: boolean }) {
                     <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
                         className="px-4 py-2 border border-border rounded-xl text-xs font-black uppercase disabled:opacity-30">Siguiente</button>
                 </div>
-            )}
-
-            {showForm && (
-                <StockEntryForm onClose={() => setShowForm(false)} onSaved={() => { if (page === 1) { load(); } else { setPage(1); } }} />
             )}
         </div>
     );

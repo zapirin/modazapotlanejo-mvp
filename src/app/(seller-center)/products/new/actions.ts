@@ -103,10 +103,13 @@ export async function createProduct(data: {
             return { success: false, error: "El precio base debe ser un número válido." };
         }
 
+        const effectiveSellerId = await getEffectiveSellerId(user) || user?.id;
+
         const existingProduct = await prisma.product.findFirst({
             where: {
                 name: { equals: data.name.trim(), mode: 'insensitive' },
-                isActive: true
+                isActive: true,
+                sellerId: effectiveSellerId
             }
         });
 
@@ -174,7 +177,7 @@ export async function createProduct(data: {
 
                 sku: (data as any).sku || null,
                 images: data.images || [],
-                sellerId: await getEffectiveSellerId(user) || user?.id,
+                sellerId: effectiveSellerId,
                 variants: {
                     create: variantsToCreate,
                 },
