@@ -19,7 +19,14 @@ type Renglon = {
     nombre: string;
     sku?: string | null;
     unitCost: string;
+    // Lo que costó la vez pasada. Solo se muestra como ayuda: el costo se
+    // captura siempre, cambia en cada remesa y define cuánto se le debe al
+    // proveedor.
+    costoAnterior: number | null;
     salePrice: string;
+    // El precio con el que se prellenó el renglón, para mandar el precio solo si
+    // el dueño lo cambió aquí.
+    salePriceOriginal: string;
     // Para un producto existente la llave es el id de la variante; para uno
     // nuevo es el JSON de la combinación, que es lo que espera la action.
     variantes: { key: string; label: string; currentStock: number | null }[];
@@ -89,6 +96,10 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
 
     const [recargandoStocks, setRecargandoStocks] = useState(false);
     const [guardando, setGuardando] = useState(false);
+    // Candado síncrono: el estado y el `disabled` no alcanzan si llegan dos
+    // toques en el mismo tick de React, y el servidor no es idempotente (serían
+    // dos notas y el doble de inventario).
+    const guardandoRef = useRef(false);
     const [formNuevo, setFormNuevo] = useState(false);
 
     // ── Datos del formulario ───────────────────────────────────────────────
@@ -149,7 +160,9 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
             nombre: producto.name,
             sku: producto.sku,
             unitCost: '',
+            costoAnterior: null,
             salePrice: '',
+            salePriceOriginal: '',
             variantes: [],
             cantidades: {},
             cargando: true,
@@ -167,8 +180,13 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
                     cargando: false,
                     errorCarga: false,
                     nombre: data.name,
-                    unitCost: data.currentCost !== null && data.currentCost !== undefined ? String(data.currentCost) : '',
+                    // El costo NO se prellena: prellenado, un renglón que nadie
+                    // tocó se guardaría con el costo de la remesa anterior y la
+                    // nota quedaría con un total —y una deuda— equivocados.
+                    unitCost: '',
+                    costoAnterior: (data.currentCost !== null && data.currentCost !== undefined) ? Number(data.currentCost) : null,
                     salePrice: data.currentPrice ? String(data.currentPrice) : '',
+                    salePriceOriginal: data.currentPrice ? String(data.currentPrice) : '',
                     variantes: (data.variants || []).map((v: any) => ({
                         key: v.id,
                         label: v.label,
@@ -289,7 +307,9 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
             esNuevo: true,
             nombre: datos.nombre,
             unitCost: '',
+            costoAnterior: null,
             salePrice: datos.precio,
+            salePriceOriginal: '',
             variantOptions: datos.opciones,
             variantes: combos.map(c => ({
                 key: JSON.stringify(c),
@@ -305,8 +325,14 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
     };
 
     // ── Guardar ────────────────────────────────────────────────────────────
+    // No hay borrador: cerrar con renglones capturados los pierde todos.
+    const cerrar = () => {
+        if (renglones.length > 0 && !confirm('Vas a perder lo que llevas capturado. ¿Cerrar de todos modos?')) return;
+        onClose();
+    };
+
     const guardar = async () => {
-        if (guardando) return;
+        if (guardando || guardandoRef.current) return;
 
         if (renglones.length === 0) { toast.error('Agrega al menos un producto a la nota.'); return; }
         if (!supplierId) { toast.error('Elige el proveedor.'); return; }
@@ -355,16 +381,23 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
             if (montoAbono > total) { toast.error('El abono no puede ser mayor que el total de la nota.'); return; }
         }
 
+        // El precio de un producto existente solo se manda si se cambió aquí: si
+        // alguien lo movió desde otra pantalla con el carrito abierto, reenviar el
+        // prellenado revertiría ese cambio en silencio. Para un producto nuevo el
+        // precio es obligatorio y siempre va.
         const lineas = renglones.map(r => ({
             productId: r.esNuevo ? undefined : r.productId,
             newProduct: r.esNuevo ? { name: r.nombre, variantOptions: r.variantOptions || [] } : undefined,
             unitCost: Number(r.unitCost),
-            salePrice: r.salePrice.trim() === '' ? undefined : Number(r.salePrice),
+            salePrice: (r.salePrice.trim() === '' || (!r.esNuevo && r.salePrice === r.salePriceOriginal))
+                ? undefined
+                : Number(r.salePrice),
             quantities: r.variantes
                 .map(v => ({ variantKey: v.key, quantity: enteroPositivo(r.cantidades[v.key] || '') }))
                 .filter(q => q.quantity > 0),
         }));
 
+        guardandoRef.current = true;
         setGuardando(true);
         try {
             const res: any = await createPurchaseNote({
@@ -391,6 +424,7 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
             console.error('Error al guardar la nota de compra:', error);
             toast.error('No se pudo guardar la nota. Revisa tu conexión y vuelve a intentar.');
         } finally {
+            guardandoRef.current = false;
             setGuardando(false);
         }
     };
@@ -406,7 +440,7 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
                     </p>
                 </div>
                 <button
-                    onClick={onClose}
+                    onClick={cerrar}
                     className="px-4 py-2 border border-border rounded-xl font-black uppercase tracking-widest text-[10px] text-gray-500 shrink-0"
                 >
                     Cerrar
@@ -525,6 +559,11 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
                                                 placeholder="0.00"
                                                 className="mt-1 w-full p-3 rounded-xl border border-border bg-transparent font-black text-sm"
                                             />
+                                            {r.costoAnterior !== null && (
+                                                <p className="mt-1 text-[10px] text-gray-400 font-medium">
+                                                    La vez pasada te costó {pesos(r.costoAnterior)}
+                                                </p>
+                                            )}
                                         </div>
                                         <div>
                                             <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">
@@ -757,7 +796,10 @@ function FormProductoNuevo({
     const opcionesLimpias = opciones
         .map(o => ({
             name: o.name.trim(),
-            values: o.values.split(',').map(v => v.trim()).filter(Boolean),
+            // "S, M, S" se queda en "S, M": un valor repetido generaría dos veces
+            // la misma combinación y el servidor lo rechazaría hasta el final,
+            // con todo ya capturado.
+            values: [...new Set(o.values.split(',').map(v => v.trim()).filter(Boolean))],
         }))
         .filter(o => o.name && o.values.length > 0);
 
