@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { resolveEntryAccess } from "@/lib/sellerAccess";
 import { round2, CENTAVO } from "@/lib/money";
 import { createProduct } from "@/app/(seller-center)/products/new/actions";
+import { getSessionUser } from "@/app/actions/auth";
 
 // Prefijo para distinguir errores de negocio (mensaje seguro para el usuario)
 // de errores internos/de Prisma que no deben mostrarse tal cual.
@@ -758,5 +759,259 @@ export async function createPurchaseNote(input: {
             success: false,
             error: msg.startsWith(ERROR_USUARIO) ? msg.slice(ERROR_USUARIO.length) : 'No se pudo guardar la nota de compra.',
         };
+    }
+}
+
+export async function getPurchaseNotes(params: {
+    from?: string;
+    to?: string;
+    supplierId?: string;
+    status?: string;
+    soloConSaldo?: boolean;
+    page?: number;
+}) {
+    try {
+        const access: any = await resolveEntryAccess();
+        if (access.error) {
+            return { success: false, error: access.error, rows: [], total: 0, page: 1, totalPages: 1 };
+        }
+
+        const pageSize = 25;
+        const page = Math.max(1, params.page || 1);
+
+        const where: any = { sellerId: access.sellerId };
+        if (access.allowedLocationIds) where.locationId = { in: access.allowedLocationIds };
+        if (params.status) where.status = params.status;
+        if (params.soloConSaldo) where.balance = { gt: CENTAVO };
+
+        // Un proveedor del filtro tiene que ser del vendedor: si no, la nota
+        // vacía es la respuesta correcta, no "ignorar el filtro".
+        if (params.supplierId) {
+            const supplier = await (prisma as any).supplier.findFirst({
+                where: { id: params.supplierId, sellerId: access.sellerId },
+                select: { id: true },
+            });
+            if (!supplier) return { success: true, rows: [], total: 0, page, totalPages: 1 };
+            where.supplierId = params.supplierId;
+        }
+
+        // Fechas locales, no UTC: `new Date('2026-08-17')` cae a medianoche UTC
+        // y un filtro "de hoy a hoy" sale vacío. Mismo patrón que getStockEntries.
+        if (params.from || params.to) {
+            where.noteDate = {};
+            if (params.from) {
+                const [y, m, d] = params.from.split('-').map(Number);
+                where.noteDate.gte = new Date(y, m - 1, d, 0, 0, 0, 0);
+            }
+            if (params.to) {
+                const [y, m, d] = params.to.split('-').map(Number);
+                where.noteDate.lte = new Date(y, m - 1, d, 23, 59, 59, 999);
+            }
+        }
+
+        const [total, notes] = await Promise.all([
+            (prisma as any).purchaseNote.count({ where }),
+            (prisma as any).purchaseNote.findMany({
+                where,
+                orderBy: { noteDate: 'desc' },
+                skip: (page - 1) * pageSize,
+                take: pageSize,
+                include: {
+                    location: { select: { name: true } },
+                    user: { select: { name: true } },
+                },
+            }),
+        ]);
+
+        return {
+            success: true,
+            rows: notes.map((n: any) => ({
+                id: n.id,
+                folio: folioText(n.folio),
+                noteDate: n.noteDate,
+                supplierName: n.supplierName,
+                invoiceNumber: n.invoiceNumber,
+                locationName: n.location?.name || '—',
+                userName: n.user?.name || null,
+                totalItems: n.totalItems,
+                total: n.total,
+                paidAmount: n.paidAmount,
+                balance: n.balance,
+                dueDate: n.dueDate,
+                paidAt: n.paidAt,
+                paymentType: n.paymentType,
+                status: n.status,
+                cancelledAt: n.cancelledAt,
+                cancelledByName: n.cancelledByName,
+            })),
+            total,
+            page,
+            totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        };
+    } catch (error: any) {
+        console.error('Error al cargar las notas de compra:', error);
+        return { success: false, error: 'No se pudieron cargar las notas de compra.', rows: [], total: 0, page: 1, totalPages: 1 };
+    }
+}
+
+export async function getPurchaseNote(id: string) {
+    try {
+        const access: any = await resolveEntryAccess();
+        if (access.error) return null;
+        // Un id vacío borraría la condición del WHERE y traería la primera
+        // nota del vendedor: nunca consultar sin id.
+        if (!id) return null;
+
+        const where: any = { id, sellerId: access.sellerId };
+        if (access.allowedLocationIds) where.locationId = { in: access.allowedLocationIds };
+
+        const note: any = await (prisma as any).purchaseNote.findFirst({
+            where,
+            include: {
+                location: { select: { name: true } },
+                user: { select: { name: true } },
+                items: { orderBy: { lineOrder: 'asc' } },
+                payments: {
+                    where: { status: 'ACTIVE' },
+                    include: { paymentMethod: { select: { name: true } } },
+                    orderBy: { paidAt: 'asc' },
+                },
+            },
+        });
+        if (!note) return null;
+
+        return {
+            id: note.id,
+            folio: folioText(note.folio),
+            noteDate: note.noteDate,
+            supplierName: note.supplierName,
+            invoiceNumber: note.invoiceNumber,
+            locationName: note.location?.name || '—',
+            userName: note.user?.name || null,
+            totalItems: note.totalItems,
+            total: note.total,
+            paidAmount: note.paidAmount,
+            balance: note.balance,
+            dueDate: note.dueDate,
+            paidAt: note.paidAt,
+            paymentType: note.paymentType,
+            status: note.status,
+            cancelledAt: note.cancelledAt,
+            cancelledByName: note.cancelledByName,
+            items: note.items.map((it: any) => ({
+                productName: it.productName,
+                variantInfo: it.variantInfo,
+                quantity: it.quantity,
+                unitCost: it.unitCost,
+                lineTotal: it.lineTotal,
+            })),
+            payments: note.payments.map((p: any) => ({
+                amount: p.amount,
+                paidAt: p.paidAt,
+                paymentMethodName: p.paymentMethod?.name || null,
+                source: p.source,
+                notes: p.notes,
+            })),
+        };
+    } catch (error: any) {
+        console.error('Error al cargar la nota de compra:', error);
+        return null;
+    }
+}
+
+export async function cancelPurchaseNote(id: string) {
+    try {
+        const user: any = await getSessionUser();
+        if (!user || user.role !== 'SELLER') {
+            return { success: false, error: 'Solo el dueño de la tienda puede cancelar una nota de compra.' };
+        }
+        // Un id vacío borraría la condición del WHERE del candado y cancelaría
+        // la primera nota activa del vendedor: nunca operar sin id.
+        if (!id) return { success: false, error: 'Nota no encontrada.' };
+
+        await prisma.$transaction(async (tx) => {
+            // Candado atómico: sellerId + status ACTIVE + sin abonos MANUALES
+            // activos, todo dentro del WHERE. Los abonos INITIAL sí se cancelan
+            // junto con la nota (es el dedazo recién capturado); los MANUAL son
+            // dinero que ya salió y no tienen nota de crédito, así que bloquean
+            // la cancelación.
+            const claimed = await (tx as any).purchaseNote.updateMany({
+                where: {
+                    id, sellerId: user.id, status: 'ACTIVE',
+                    payments: { none: { status: 'ACTIVE', source: 'MANUAL' } },
+                },
+                data: { status: 'CANCELLED', cancelledAt: new Date(), cancelledByName: user.name || null },
+            });
+            if (claimed.count !== 1) {
+                throw new Error(ERROR_USUARIO + 'No se puede cancelar: esta nota ya tiene abonos registrados. Cancela primero los abonos en Cuentas por Pagar.');
+            }
+
+            const note: any = await (tx as any).purchaseNote.findFirst({
+                where: { id, sellerId: user.id },
+                include: { items: true },
+            });
+            if (!note) throw new Error(ERROR_USUARIO + 'Nota no encontrada.');
+
+            // Primero se revisa TODO: si a un solo renglón no le alcanza, no se
+            // toca nada. Nunca se deja stock negativo.
+            for (const item of note.items) {
+                const level = await tx.inventoryLevel.findUnique({
+                    where: {
+                        variantId_locationId: {
+                            variantId: item.variantId,
+                            locationId: note.locationId,
+                        },
+                    },
+                });
+                if (!level || level.stock < item.quantity) {
+                    throw new Error(ERROR_USUARIO + 'No se puede cancelar: ya se vendieron piezas de esta compra. Corrige con Ajustar Stock.');
+                }
+            }
+
+            for (const item of note.items) {
+                await tx.inventoryLevel.update({
+                    where: {
+                        variantId_locationId: {
+                            variantId: item.variantId,
+                            locationId: note.locationId,
+                        },
+                    },
+                    data: { stock: { decrement: item.quantity } },
+                });
+
+                await tx.variant.update({
+                    where: { id: item.variantId },
+                    data: { stock: { decrement: item.quantity } },
+                });
+            }
+
+            await tx.inventoryMovement.createMany({
+                data: note.items.map((item: any) => ({
+                    variantId: item.variantId,
+                    locationId: note.locationId,
+                    type: 'ADJUSTMENT',
+                    quantity: -item.quantity,
+                    reason: `Cancelación de compra ${folioText(note.folio)}. Usuario: ${user.name || 'Sistema'}`,
+                })),
+            });
+
+            // Los abonos INITIAL de esta nota se cancelan junto con ella.
+            // Product.cost y Product.price NO se revierten: eran una
+            // instantánea del momento de la compra y no hay a qué valor
+            // "correcto" volver.
+            await (tx as any).supplierPayment.updateMany({
+                where: { purchaseNoteId: note.id, source: 'INITIAL', status: 'ACTIVE' },
+                data: { status: 'CANCELLED', cancelledAt: new Date(), cancelledByName: user.name || null },
+            });
+        }, { timeout: 60000, maxWait: 20000 });
+
+        revalidatePath('/inventory');
+        revalidatePath('/inventory/purchases');
+        revalidatePath('/pos');
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error al cancelar la nota de compra:', error);
+        const msg = String(error?.message || '');
+        return { success: false, error: msg.startsWith(ERROR_USUARIO) ? msg.slice(ERROR_USUARIO.length) : 'No se pudo cancelar la nota de compra.' };
     }
 }
