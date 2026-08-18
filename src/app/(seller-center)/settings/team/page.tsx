@@ -515,7 +515,7 @@ export default function TeamPage() {
                                         { key: "canViewReports", label: "Puede ver reportes de ventas", desc: "Pestaña Ventas: top productos y proveedores" },
                                         { key: "canViewCommissions", label: "Puede ver comisiones", desc: "Pestaña Comisiones: desglose de vendedores de piso" },
                                         { key: "canViewZCuts", label: "Puede ver cortes Z", desc: "Pestaña Cortes Z: cierres de caja" },
-                                        { key: "canRegisterStockEntry", label: "Puede registrar entradas de mercancía", desc: "Captura lo que llega y lo suma al inventario de su sucursal" },
+                                        { key: "canRegisterStockEntry", label: "Puede registrar compras a proveedor", desc: "Captura notas de compra, da de alta productos nuevos y registra deuda con proveedores." },
                                     ].map(perm => (
                                         <div key={perm.key} onClick={() => setCashierForm(p => ({ ...p, [perm.key]: !(p as any)[perm.key] }))}
                                             className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${(cashierForm as any)[perm.key] ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20" : "border-border hover:border-gray-300"}`}>
