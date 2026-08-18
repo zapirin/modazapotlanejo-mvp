@@ -9,6 +9,7 @@ import {
     getProductVariantsForPurchase,
     createPurchaseNote,
 } from './actions';
+import { createSupplier } from '@/app/(seller-center)/inventory/suppliers/actions';
 
 // Un renglón del carrito = un producto. El costo y el precio se capturan una
 // sola vez aquí; las cantidades van por variante.
@@ -70,6 +71,15 @@ function combinaciones(opciones: { name: string; values: string[] }[]): Record<s
 let contadorRenglones = 0;
 const nuevaLlave = () => `r${++contadorRenglones}`;
 
+// Resultados del buscador, en dos grupos: los del proveedor elegido y los que
+// todavía no tienen proveedor.
+type Resultados = { delProveedor: any[]; sinProveedor: any[] };
+const SIN_RESULTADOS: Resultados = { delProveedor: [], sinProveedor: [] };
+
+// Arriba de esta cantidad de proveedores, la lista se vuelve incómoda de
+// recorrer a ojo y aparece el buscador.
+const PROVEEDORES_PARA_BUSCADOR = 8;
+
 export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
     const [suppliers, setSuppliers] = useState<any[]>([]);
     const [locations, setLocations] = useState<any[]>([]);
@@ -86,11 +96,25 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
     const [paymentMethodId, setPaymentMethodId] = useState('');
     const [creditDays, setCreditDays] = useState('');
 
+    // Paso 1: el proveedor. Sin él no se puede agregar nada a la nota.
+    const [filtroProveedor, setFiltroProveedor] = useState('');
+    const [formProveedor, setFormProveedor] = useState(false);
+    const [nombreProveedor, setNombreProveedor] = useState('');
+    const [notasProveedor, setNotasProveedor] = useState('');
+    const [creandoProveedor, setCreandoProveedor] = useState(false);
+
     const [query, setQuery] = useState('');
-    const [resultados, setResultados] = useState<any[]>([]);
+    const [resultados, setResultados] = useState<Resultados>(SIN_RESULTADOS);
     const [buscando, setBuscando] = useState(false);
+    const totalResultados = resultados.delProveedor.length + resultados.sinProveedor.length;
+    // El lector de código de barras teclea sobre lo que tenga el foco: en cuanto
+    // hay proveedor, el foco se va al buscador.
+    const inputBusqueda = useRef<HTMLInputElement>(null);
 
     const [renglones, setRenglones] = useState<Renglon[]>([]);
+    // Un solo renglón abierto a la vez: el que se acaba de agregar, que es
+    // donde el dueño va a capturar las cantidades.
+    const [expandido, setExpandido] = useState<string | null>(null);
     const renglonesRef = useRef<Renglon[]>([]);
     renglonesRef.current = renglones;
 
@@ -128,32 +152,47 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
         return () => { vivo = false; };
     }, []);
 
+    useEffect(() => {
+        if (supplierId) inputBusqueda.current?.focus();
+    }, [supplierId]);
+
     // ── Buscador con retraso ───────────────────────────────────────────────
     useEffect(() => {
-        if (query.trim().length < 2) { setResultados([]); setBuscando(false); return; }
+        if (!supplierId || query.trim().length < 2) { setResultados(SIN_RESULTADOS); setBuscando(false); return; }
         setBuscando(true);
         const t = setTimeout(async () => {
             try {
-                const res = await searchProductsForPurchase(query);
-                setResultados(res || []);
+                const res: any = await searchProductsForPurchase(query, supplierId);
+                setResultados({ delProveedor: res?.delProveedor || [], sinProveedor: res?.sinProveedor || [] });
             } catch (error: any) {
                 console.error('Error al buscar productos:', error);
-                setResultados([]);
+                setResultados(SIN_RESULTADOS);
                 toast.error('No se pudo buscar. Revisa tu conexión.');
             } finally {
                 setBuscando(false);
             }
         }, 350);
         return () => clearTimeout(t);
-    }, [query]);
+    }, [query, supplierId]);
 
     const agregarExistente = useCallback(async (producto: any) => {
+        if (!supplierId) { toast.error('Elige primero el proveedor.'); return; }
         if (!locationId) { toast.error('Elige primero la sucursal donde entró la mercancía.'); return; }
         setQuery('');
-        setResultados([]);
+        setResultados(SIN_RESULTADOS);
+
+        // Ya capturado: no se duplica el renglón, se sube al tope y se abre.
+        const yaEsta = renglonesRef.current.find(r => !r.esNuevo && r.productId === producto.id);
+        if (yaEsta) {
+            setRenglones(prev => [yaEsta, ...prev.filter(r => r.key !== yaEsta.key)]);
+            setExpandido(yaEsta.key);
+            toast.info(`"${yaEsta.nombre}" ya estaba en la nota. Lo subí hasta arriba.`);
+            return;
+        }
 
         const key = nuevaLlave();
-        setRenglones(prev => [...prev, {
+        // El renglón nuevo va hasta arriba y abierto: es donde se va a capturar.
+        setRenglones(prev => [{
             key,
             esNuevo: false,
             productId: producto.id,
@@ -168,7 +207,8 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
             cargando: true,
             errorCarga: false,
             stockDesconocido: false,
-        }]);
+        }, ...prev]);
+        setExpandido(key);
 
         try {
             const data: any = await getProductVariantsForPurchase(producto.id, locationId);
@@ -199,22 +239,26 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
             setRenglones(prev => prev.map(r => r.key === key ? { ...r, cargando: false, errorCarga: true } : r));
             toast.error('No se pudieron cargar las tallas de ese modelo. Quita el renglón y vuelve a agregarlo.');
         }
-    }, [locationId]);
+    }, [locationId, supplierId]);
 
     // El lector de código de barras teclea muy rápido y manda Enter: si hay un
     // solo resultado, se agrega directo sin esperar al retraso.
     const alPresionarEnter = async () => {
         const q = query.trim();
         if (q.length < 2) return;
-        if (resultados.length === 1) { agregarExistente(resultados[0]); return; }
+        if (!supplierId) { toast.error('Elige primero el proveedor.'); return; }
+        const encontrados = [...resultados.delProveedor, ...resultados.sinProveedor];
+        if (encontrados.length === 1) { agregarExistente(encontrados[0]); return; }
         setBuscando(true);
         try {
-            const res = await searchProductsForPurchase(q);
-            if ((res || []).length === 1) {
-                agregarExistente(res[0]);
+            const res: any = await searchProductsForPurchase(q, supplierId);
+            const grupos: Resultados = { delProveedor: res?.delProveedor || [], sinProveedor: res?.sinProveedor || [] };
+            const todos = [...grupos.delProveedor, ...grupos.sinProveedor];
+            if (todos.length === 1) {
+                agregarExistente(todos[0]);
             } else {
-                setResultados(res || []);
-                if ((res || []).length === 0) toast.error('Sin resultados para lo que capturaste.');
+                setResultados(grupos);
+                if (todos.length === 0) toast.error('Sin resultados para lo que capturaste.');
             }
         } catch (error: any) {
             console.error('Error al buscar productos:', error);
@@ -302,8 +346,9 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
 
     const agregarNuevo = (datos: { nombre: string; precio: string; opciones: { name: string; values: string[] }[] }) => {
         const combos = combinaciones(datos.opciones);
-        setRenglones(prev => [...prev, {
-            key: nuevaLlave(),
+        const key = nuevaLlave();
+        setRenglones(prev => [{
+            key,
             esNuevo: true,
             nombre: datos.nombre,
             unitCost: '',
@@ -320,9 +365,71 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
             cargando: false,
             errorCarga: false,
             stockDesconocido: false,
-        }]);
+        }, ...prev]);
+        setExpandido(key);
         setFormNuevo(false);
     };
+
+    // ── Paso 1: el proveedor ───────────────────────────────────────────────
+    const proveedorElegido = suppliers.find(s => s.id === supplierId) || null;
+
+    // Los renglones capturados son modelos del proveedor anterior: cambiar de
+    // proveedor los deja sin sentido, así que se avisa y se limpian.
+    const cambiarProveedor = () => {
+        if (renglones.length > 0 && !confirm('Los productos que llevas capturados son de este proveedor y se van a quitar de la nota. ¿Cambiar de proveedor?')) return;
+        setRenglones([]);
+        setExpandido(null);
+        setSupplierId('');
+        setQuery('');
+        setResultados(SIN_RESULTADOS);
+        setFiltroProveedor('');
+    };
+
+    const crearProveedor = async () => {
+        if (creandoProveedor) return;
+        const nombre = nombreProveedor.trim();
+        if (!nombre) { toast.error('Captura el nombre del proveedor.'); return; }
+
+        setCreandoProveedor(true);
+        try {
+            const res: any = await createSupplier({ name: nombre, notes: notasProveedor.trim() || undefined });
+            if (!res?.success) {
+                toast.error(res?.error || 'No se pudo crear el proveedor.');
+                return;
+            }
+            // `createSupplier` no devuelve el id: se recarga la lista y se busca
+            // por nombre para dejarlo elegido.
+            const data: any = await getPurchaseFormData();
+            if (data?.error) {
+                // Con la sesión vencida la respuesta trae la lista vacía. Como el
+                // paso 1 es bloqueante, guardarla dejaría al dueño atorado en
+                // "no tienes proveedores" justo después de crear uno.
+                toast.error(data.error);
+                return;
+            }
+            const lista: any[] = data?.suppliers || [];
+            setSuppliers(lista);
+            const creado = lista.find(s => String(s.name).trim().toLowerCase() === nombre.toLowerCase());
+            if (creado) {
+                setSupplierId(creado.id);
+                toast.success(`Proveedor "${creado.name}" creado y elegido.`);
+            } else {
+                toast.success('Proveedor creado. Elígelo de la lista.');
+            }
+            setFormProveedor(false);
+            setNombreProveedor('');
+            setNotasProveedor('');
+        } catch (error: any) {
+            console.error('Error al crear el proveedor:', error);
+            toast.error('No se pudo crear el proveedor. Revisa tu conexión y vuelve a intentar.');
+        } finally {
+            setCreandoProveedor(false);
+        }
+    };
+
+    const proveedoresFiltrados = filtroProveedor.trim() === ''
+        ? suppliers
+        : suppliers.filter(s => String(s.name).toLowerCase().includes(filtroProveedor.trim().toLowerCase()));
 
     // ── Guardar ────────────────────────────────────────────────────────────
     // No hay borrador: cerrar con renglones capturados los pierde todos.
@@ -461,50 +568,185 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Carrito */}
                         <div className="lg:col-span-2 space-y-4">
+                            {/* Paso 1: sin proveedor no se captura nada */}
+                            {!proveedorElegido ? (
+                                <div className="bg-card border border-border rounded-2xl p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Paso 1 · Proveedor</p>
+                                            <p className="font-black text-sm">¿A quién le compraste?</p>
+                                        </div>
+                                        <button
+                                            onClick={() => setFormProveedor(v => !v)}
+                                            className="px-4 py-2 border border-border rounded-xl font-black uppercase tracking-widest text-[10px] shrink-0"
+                                        >
+                                            + Proveedor nuevo
+                                        </button>
+                                    </div>
+
+                                    {formProveedor && (
+                                        <div className="mt-3 border border-border rounded-xl p-3 space-y-3">
+                                            <div>
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Nombre del proveedor</label>
+                                                <input
+                                                    autoFocus
+                                                    value={nombreProveedor}
+                                                    onChange={e => setNombreProveedor(e.target.value)}
+                                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); crearProveedor(); } }}
+                                                    placeholder="Ej. FOXXY JEANS"
+                                                    className="mt-1 w-full p-3 rounded-xl border border-border bg-transparent font-bold text-sm"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Notas (opcional)</label>
+                                                <input
+                                                    value={notasProveedor}
+                                                    onChange={e => setNotasProveedor(e.target.value)}
+                                                    placeholder="Ej. teléfono, dirección…"
+                                                    className="mt-1 w-full p-3 rounded-xl border border-border bg-transparent font-bold text-sm"
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={() => setFormProveedor(false)}
+                                                    className="flex-1 px-4 py-3 border border-border rounded-xl font-black uppercase tracking-widest text-[10px] text-gray-500"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                                <button
+                                                    onClick={crearProveedor}
+                                                    disabled={creandoProveedor}
+                                                    className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] disabled:opacity-40"
+                                                >
+                                                    {creandoProveedor ? 'Creando…' : 'Crear y elegir'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {suppliers.length > PROVEEDORES_PARA_BUSCADOR && (
+                                        <input
+                                            value={filtroProveedor}
+                                            onChange={e => setFiltroProveedor(e.target.value)}
+                                            placeholder="Buscar proveedor…"
+                                            className="mt-3 w-full p-3 rounded-xl border border-border bg-transparent font-bold text-sm"
+                                        />
+                                    )}
+
+                                    {suppliers.length === 0 ? (
+                                        <p className="mt-3 text-xs text-gray-500">
+                                            Todavía no tienes proveedores activos. Da uno de alta con “+ Proveedor nuevo”.
+                                        </p>
+                                    ) : proveedoresFiltrados.length === 0 ? (
+                                        <p className="mt-3 text-xs text-gray-400">Ningún proveedor se llama así.</p>
+                                    ) : (
+                                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-72 overflow-y-auto">
+                                            {proveedoresFiltrados.map(s => (
+                                                <button
+                                                    key={s.id}
+                                                    onClick={() => { setSupplierId(s.id); setFiltroProveedor(''); }}
+                                                    className="text-left p-3 rounded-xl border border-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors font-black text-sm"
+                                                >
+                                                    {s.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="bg-card border border-border rounded-2xl p-4 flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Proveedor</p>
+                                        <p className="font-black text-base truncate">{proveedorElegido.name}</p>
+                                    </div>
+                                    <button
+                                        onClick={cambiarProveedor}
+                                        className="px-4 py-2 border border-border rounded-xl font-black uppercase tracking-widest text-[10px] shrink-0"
+                                    >
+                                        Cambiar
+                                    </button>
+                                </div>
+                            )}
+
                             <div className="bg-card border border-border rounded-2xl p-4">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">
                                     Buscar modelo o escanear código
                                 </label>
                                 <div className="mt-2 flex flex-col sm:flex-row gap-2">
                                     <input
-                                        autoFocus
+                                        ref={inputBusqueda}
+                                        disabled={!supplierId}
                                         value={query}
                                         onChange={e => setQuery(e.target.value)}
                                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); alPresionarEnter(); } }}
                                         placeholder="Nombre o SKU del modelo…"
-                                        className="flex-1 p-3 rounded-xl border border-border bg-transparent font-bold text-sm"
+                                        className="flex-1 p-3 rounded-xl border border-border bg-transparent font-bold text-sm disabled:opacity-40"
                                     />
                                     <button
                                         onClick={() => setFormNuevo(true)}
-                                        className="px-4 py-3 border border-border rounded-xl font-black uppercase tracking-widest text-[10px] shrink-0"
+                                        disabled={!supplierId}
+                                        className="px-4 py-3 border border-border rounded-xl font-black uppercase tracking-widest text-[10px] shrink-0 disabled:opacity-40"
                                     >
                                         + Producto nuevo
                                     </button>
                                 </div>
 
-                                {!locationId && (
+                                {!supplierId && (
+                                    <p className="mt-2 text-xs text-amber-600 font-bold">
+                                        Elige primero el proveedor.
+                                    </p>
+                                )}
+                                {supplierId && !locationId && (
                                     <p className="mt-2 text-xs text-amber-600 font-bold">
                                         Elige primero la sucursal donde entró la mercancía.
                                     </p>
                                 )}
                                 {buscando && <p className="mt-2 text-xs text-gray-400">Buscando…</p>}
-                                {!buscando && query.trim().length >= 2 && resultados.length === 0 && (
-                                    <p className="mt-2 text-xs text-gray-400">Sin resultados. Puedes darlo de alta con “+ Producto nuevo”.</p>
+                                {!buscando && supplierId && query.trim().length >= 2 && totalResultados === 0 && (
+                                    <p className="mt-2 text-xs text-gray-400">
+                                        Sin resultados entre los modelos de {proveedorElegido?.name} ni entre los que no tienen proveedor. Puedes darlo de alta con “+ Producto nuevo”.
+                                    </p>
                                 )}
 
                                 <div className="mt-2 space-y-1 max-h-72 overflow-y-auto">
-                                    {resultados.map(r => (
-                                        <button
-                                            key={r.id}
-                                            onClick={() => agregarExistente(r)}
-                                            className="w-full text-left p-3 rounded-xl border border-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-                                        >
-                                            <p className="font-black text-sm">{r.name}</p>
-                                            <p className="text-[10px] text-gray-400 font-medium">
-                                                {r.sku ? `SKU ${r.sku} · ` : ''}{r.supplierName || 'Sin proveedor'}
+                                    {resultados.delProveedor.length > 0 && (
+                                        <>
+                                            <p className="pt-1 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                                De {proveedorElegido?.name}
                                             </p>
-                                        </button>
-                                    ))}
+                                            {resultados.delProveedor.map(r => (
+                                                <button
+                                                    key={r.id}
+                                                    onClick={() => agregarExistente(r)}
+                                                    className="w-full text-left p-3 rounded-xl border border-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                                                >
+                                                    <p className="font-black text-sm">{r.name}</p>
+                                                    {r.sku && <p className="text-[10px] text-gray-400 font-medium">SKU {r.sku}</p>}
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
+
+                                    {resultados.sinProveedor.length > 0 && (
+                                        <>
+                                            <p className="pt-3 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                                Sin proveedor asignado
+                                            </p>
+                                            <p className="text-[10px] text-gray-400 font-medium">
+                                                Al guardar la compra se le asignan a {proveedorElegido?.name}.
+                                            </p>
+                                            {resultados.sinProveedor.map(r => (
+                                                <button
+                                                    key={r.id}
+                                                    onClick={() => agregarExistente(r)}
+                                                    className="w-full text-left p-3 rounded-xl border border-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                                                >
+                                                    <p className="font-black text-sm">{r.name}</p>
+                                                    {r.sku && <p className="text-[10px] text-gray-400 font-medium">SKU {r.sku}</p>}
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
                                 </div>
                             </div>
 
@@ -512,7 +754,7 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
                                 <p className="text-xs text-gray-400 font-bold">Actualizando existencias de la sucursal…</p>
                             )}
 
-                            {renglones.length === 0 && (
+                            {supplierId && renglones.length === 0 && (
                                 <div className="bg-card border border-dashed border-border rounded-2xl p-8 md:p-10 text-center">
                                     <div className="text-4xl mb-3">🛒</div>
                                     <h3 className="text-base font-black mb-1">La nota está vacía</h3>
@@ -525,27 +767,43 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
                             {renglones.map((r, i) => (
                                 <div key={r.key} className="bg-card border border-border rounded-2xl p-4">
                                     <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="font-black text-sm truncate">
-                                                {i + 1}. {r.nombre}
-                                                {r.esNuevo && (
-                                                    <span className="ml-2 px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-wide">
-                                                        Nuevo
-                                                    </span>
-                                                )}
-                                            </p>
-                                            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest truncate">
-                                                {r.sku ? `SKU ${r.sku} · ` : ''}{piezasRenglon(r)} pieza{piezasRenglon(r) === 1 ? '' : 's'}
-                                            </p>
-                                        </div>
-                                        <button
-                                            onClick={() => quitar(r.key)}
-                                            className="text-[11px] font-black text-red-500 hover:underline shrink-0"
+                                        <div
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => setExpandido(expandido === r.key ? null : r.key)}
+                                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandido(expandido === r.key ? null : r.key); } }}
+                                            className="min-w-0 flex-1 flex items-start gap-2 cursor-pointer text-left"
                                         >
-                                            Quitar
-                                        </button>
+                                            <span className="text-gray-400 text-sm shrink-0">{expandido === r.key ? '▾' : '▸'}</span>
+                                            <div className="min-w-0">
+                                                <p className="font-black text-sm truncate">
+                                                    {i + 1}. {r.nombre}
+                                                    {r.esNuevo && (
+                                                        <span className="ml-2 px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-wide">
+                                                            Nuevo
+                                                        </span>
+                                                    )}
+                                                </p>
+                                                <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest truncate">
+                                                    {r.sku ? `SKU ${r.sku} · ` : ''}
+                                                    Costo {r.unitCost.trim() === '' ? '—' : pesos(Number(r.unitCost) || 0)} ·
+                                                    {' '}Precio {r.salePrice.trim() === '' ? '—' : pesos(Number(r.salePrice) || 0)} ·
+                                                    {' '}{piezasRenglon(r)} pieza{piezasRenglon(r) === 1 ? '' : 's'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="shrink-0 text-right">
+                                            <p className="text-sm font-black">{pesos(subtotalRenglon(r))}</p>
+                                            <button
+                                                onClick={() => quitar(r.key)}
+                                                className="text-[11px] font-black text-red-500 hover:underline"
+                                            >
+                                                Quitar
+                                            </button>
+                                        </div>
                                     </div>
 
+                                    {expandido === r.key && (<>
                                     <div className="mt-3 grid grid-cols-2 gap-3">
                                         <div>
                                             <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Costo unitario</label>
@@ -624,10 +882,7 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
                                             Este modelo no tiene tallas ni colores. Agrégalos en Editar Producto.
                                         </p>
                                     )}
-
-                                    <p className="mt-3 text-right text-sm font-black">
-                                        Subtotal: {pesos(subtotalRenglon(r))}
-                                    </p>
+                                    </>)}
                                 </div>
                             ))}
                         </div>
@@ -648,23 +903,6 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
                                     {locations.length === 0 && (
                                         <p className="mt-1 text-[11px] text-gray-500">
                                             No tienes sucursales disponibles. Crea una en Configuración → Sucursales.
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Proveedor</label>
-                                    <select
-                                        value={supplierId}
-                                        onChange={e => setSupplierId(e.target.value)}
-                                        className="mt-1 w-full p-3 rounded-xl border border-border bg-transparent font-bold text-sm"
-                                    >
-                                        <option value="">Elige un proveedor…</option>
-                                        {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                    </select>
-                                    {suppliers.length === 0 && (
-                                        <p className="mt-1 text-[11px] text-gray-500">
-                                            No tienes proveedores activos. Da uno de alta en Inventario → Proveedores.
                                         </p>
                                     )}
                                 </div>
