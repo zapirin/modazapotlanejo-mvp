@@ -451,12 +451,23 @@ export async function createPurchaseNote(input: {
             }
         }
 
-        // Productos existentes: que sean del vendedor y estén fuera de la Papelera.
+        // Productos existentes: que sean del vendedor, estén fuera de la Papelera
+        // y sean de este proveedor o de ninguno. La regla de que no se compre un
+        // modelo de OTRO proveedor la decidió el dueño, así que vive aquí y no
+        // solo en el buscador de la pantalla: un cliente manipulado podría
+        // mandar el id de un modelo del proveedor B en una nota del A y le
+        // reescribiría el costo y el precio con los de esta remesa. Si alguno no
+        // pasa, faltará en el resultado y lo rechaza la comparación de abajo.
         const idsExistentes = Array.from(new Set(validadas.filter(l => l.productId).map(l => l.productId as string)));
         const productosExistentes = new Map<string, any>();
         if (idsExistentes.length > 0) {
             const encontrados: any[] = await prisma.product.findMany({
-                where: { id: { in: idsExistentes }, sellerId: access.sellerId, isActive: true },
+                where: {
+                    id: { in: idsExistentes },
+                    sellerId: access.sellerId,
+                    isActive: true,
+                    OR: [{ supplierId: supplier.id }, { supplierId: null }],
+                },
                 // supplierId: para asignarle este proveedor a los modelos que
                 // todavía no tienen ninguno (los que ya tienen NO se tocan).
                 select: { id: true, name: true, supplierId: true },

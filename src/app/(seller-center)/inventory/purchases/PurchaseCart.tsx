@@ -400,6 +400,13 @@ export default function PurchaseCart({ onClose, onSaved }: { onClose: () => void
             // `createSupplier` no devuelve el id: se recarga la lista y se busca
             // por nombre para dejarlo elegido.
             const data: any = await getPurchaseFormData();
+            if (data?.error) {
+                // Con la sesión vencida la respuesta trae la lista vacía. Como el
+                // paso 1 es bloqueante, guardarla dejaría al dueño atorado en
+                // "no tienes proveedores" justo después de crear uno.
+                toast.error(data.error);
+                return;
+            }
             const lista: any[] = data?.suppliers || [];
             setSuppliers(lista);
             const creado = lista.find(s => String(s.name).trim().toLowerCase() === nombre.toLowerCase());
