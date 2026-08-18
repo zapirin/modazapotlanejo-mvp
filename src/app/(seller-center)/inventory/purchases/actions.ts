@@ -103,7 +103,9 @@ export async function getPurchaseFormData() {
         }),
         prisma.paymentMethod.findMany({
             // Los métodos globales (sellerId: null, el Efectivo universal) los
-            // usan todos los vendedores. Mismo patrón que la pantalla de clientes.
+            // usan todos los vendedores, así que aquí también se ofrecen. Ojo:
+            // la pantalla de clientes NO los incluye; no es una inconsistencia
+            // que haya que "arreglar" allá, es otra decisión.
             where: { isActive: true, OR: [{ sellerId: access.sellerId }, { sellerId: null }] },
             select: { id: true, name: true },
             orderBy: { name: 'asc' },
@@ -268,6 +270,14 @@ export async function createPurchaseNote(input: {
         const noteDate = new Date(anio, mes - 1, dia, 12, 0, 0, 0);
         if (isNaN(noteDate.getTime()) || noteDate.getMonth() !== mes - 1 || noteDate.getDate() !== dia) {
             return { success: false, error: 'La fecha de la nota no es válida.' };
+        }
+        // Un dedazo de año (2062) crearía una deuda cuyo vencimiento cae fuera de
+        // toda caja de antigüedad: nunca se vería como vencida.
+        const topeFuturo = new Date();
+        topeFuturo.setDate(topeFuturo.getDate() + 7);
+        topeFuturo.setHours(23, 59, 59, 999);
+        if (noteDate.getTime() > topeFuturo.getTime()) {
+            return { success: false, error: 'La fecha de la nota está muy adelantada. Revisa el año que capturaste.' };
         }
 
         let creditDays: number | null = null;
@@ -529,10 +539,15 @@ export async function createPurchaseNote(input: {
                 variantsData: combos.map(c => ({ attributes: c, stock: 0 })),
             });
             if (!creado?.success || !creado?.productId) {
-                // El error de `createProduct` puede ser un mensaje crudo de la
-                // base ("Error de base de datos: ..."): al log, no a la pantalla.
                 console.error(`Error al dar de alta el producto nuevo "${nombre}" desde una compra:`, creado?.error);
-                throw new Error(ERROR_USUARIO + `No se pudo dar de alta el producto "${nombre}". Revisa que el nombre no esté repetido en tu catálogo.`);
+                // El motivo real se le dice al dueño (puede ser "llegaste al
+                // límite de productos de tu plan", y renombrar no lo arregla).
+                // La única excepción es el mensaje crudo de la base
+                // ("Error de base de datos: ..."), que no se muestra tal cual.
+                const detalle = (creado?.error && !creado.error.startsWith('Error de base de datos:'))
+                    ? creado.error
+                    : 'Revisa que el nombre no esté repetido en tu catálogo.';
+                throw new Error(ERROR_USUARIO + `No se pudo dar de alta "${nombre}". ${detalle}`);
             }
             createdProductIds.push(creado.productId);
 
@@ -722,6 +737,12 @@ export async function createPurchaseNote(input: {
 
                     return folio;
                 }, { timeout: 60000, maxWait: 20000 });
+                // La transacción se comprometió: los productos nuevos ya tienen
+                // renglones de la nota apuntándoles y NO se pueden borrar. Si algo
+                // fallara de aquí en adelante, la compensación del `catch` haría
+                // más daño que bien (borrado fallido + "no se pudo guardar" sobre
+                // una nota que sí existe, y el dueño recapturaría duplicado).
+                createdProductIds.length = 0;
                 break;
             } catch (error: any) {
                 // I5: dos capturas simultáneas pueden pelearse el mismo folio.
@@ -782,7 +803,12 @@ export async function getPurchaseNotes(params: {
         const where: any = { sellerId: access.sellerId };
         if (access.allowedLocationIds) where.locationId = { in: access.allowedLocationIds };
         if (params.status) where.status = params.status;
-        if (params.soloConSaldo) where.balance = { gt: CENTAVO };
+        if (params.soloConSaldo) {
+            // Una nota cancelada no debe nada (al cancelarla se le pone saldo 0),
+            // así que "Solo con saldo" es una consulta sobre notas activas.
+            where.balance = { gt: CENTAVO };
+            where.status = 'ACTIVE';
+        }
 
         // Un proveedor del filtro tiene que ser del vendedor: si no, la nota
         // vacía es la respuesta correcta, no "ignorar el filtro".
@@ -813,7 +839,9 @@ export async function getPurchaseNotes(params: {
             (prisma as any).purchaseNote.count({ where }),
             (prisma as any).purchaseNote.findMany({
                 where,
-                orderBy: { noteDate: 'desc' },
+                // Segundo criterio para desempatar: con solo la fecha, dos notas
+                // del mismo día pueden repetirse o saltarse entre páginas.
+                orderBy: [{ noteDate: 'desc' }, { folio: 'desc' }],
                 skip: (page - 1) * pageSize,
                 take: pageSize,
                 include: {
@@ -940,9 +968,29 @@ export async function cancelPurchaseNote(id: string) {
                     id, sellerId: user.id, status: 'ACTIVE',
                     payments: { none: { status: 'ACTIVE', source: 'MANUAL' } },
                 },
-                data: { status: 'CANCELLED', cancelledAt: new Date(), cancelledByName: user.name || null },
+                // Una nota cancelada no le debe nada al proveedor: se le quita el
+                // abonado y el saldo junto con el estado. Si no, seguiría saliendo
+                // en "Solo con saldo" y el renglón diría "Abonado $500" mientras el
+                // detalle, que solo muestra abonos activos, dice "Sin abonos".
+                data: {
+                    status: 'CANCELLED',
+                    cancelledAt: new Date(),
+                    cancelledByName: user.name || null,
+                    paidAmount: 0,
+                    balance: 0,
+                    paidAt: null,
+                },
             });
             if (claimed.count !== 1) {
+                // La misma condición falla por tres motivos distintos: decirle
+                // siempre "ya tiene abonos" manda al dueño a buscar abonos que no
+                // existen.
+                const actual: any = await (tx as any).purchaseNote.findFirst({
+                    where: { id, sellerId: user.id },
+                    select: { status: true },
+                });
+                if (!actual) throw new Error(ERROR_USUARIO + 'Esa nota de compra no existe.');
+                if (actual.status === 'CANCELLED') throw new Error(ERROR_USUARIO + 'Esta nota ya estaba cancelada.');
                 throw new Error(ERROR_USUARIO + 'No se puede cancelar: esta nota ya tiene abonos registrados. Cancela primero los abonos en Cuentas por Pagar.');
             }
 
