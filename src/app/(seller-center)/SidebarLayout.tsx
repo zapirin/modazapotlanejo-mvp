@@ -165,6 +165,14 @@ export default function SidebarLayout({
               </Link>
             )}
 
+            {(user as any).canRegisterStockEntry && (
+              <Link href="/inventory/purchases" onClick={() => setSidebarOpen(false)}
+                className={`flex items-center gap-2 px-2 py-3 rounded-xl font-black text-xs transition-all ${pathname.startsWith('/inventory/purchases') ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}>
+                <span className="text-base shrink-0">🧾</span>
+                {isSidebarOpen && <span className="uppercase tracking-wider truncate">Compras</span>}
+              </Link>
+            )}
+
             <button onClick={toggleDarkMode}
               className="w-full flex items-center gap-2 px-2 py-3 rounded-xl font-black text-xs transition-all text-gray-400 hover:bg-white/10 hover:text-white"
               title="Cambiar tema oscuro/claro">
@@ -427,17 +435,6 @@ export default function SidebarLayout({
                       </div>
                   </div>
               </div>
-            )}
-
-            {user?.role === 'CASHIER' && user?.canRegisterStockEntry && (
-              <Link
-                href="/inventory/purchases"
-                onClick={() => setSidebarOpen(false)}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all duration-200 group ${pathname.startsWith('/inventory/purchases') ? 'font-bold bg-gray-100 dark:bg-gray-800 text-foreground' : 'font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'}`}
-              >
-                <span className="text-lg group-hover:scale-110 transition-transform shrink-0">📥</span>
-                <span className={`whitespace-nowrap ${isDesktopCollapsed ? 'hidden' : 'block'}`}>Compras</span>
-              </Link>
             )}
 
             {user?.role === 'SELLER' && (
