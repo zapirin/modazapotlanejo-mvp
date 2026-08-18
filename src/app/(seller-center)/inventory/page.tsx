@@ -8,7 +8,6 @@ import { adjustProductStock, adjustProductStockGrid } from './actions';
 import InventoryRealtimeSync from '@/components/InventoryRealtimeSync';
 import BulkActionsModal from '../products/BulkActionsModal';
 import ProductSalesHistoryModal from '../products/ProductSalesHistoryModal';
-import StockEntryForm from './entries/StockEntryForm';
 import ProductStockEntriesModal from './entries/ProductStockEntriesModal';
 import { useCallback } from 'react';
 
@@ -63,7 +62,6 @@ export default function InventoryPage() {
     const [isDuplicating, setIsDuplicating] = useState<string | null>(null);
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [historyProduct, setHistoryProduct] = useState<{ id: string; name: string } | null>(null);
-    const [entryProduct, setEntryProduct] = useState<{ id: string; name: string } | null>(null);
     const [entriesProduct, setEntriesProduct] = useState<{ id: string; name: string } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -842,12 +840,6 @@ export default function InventoryPage() {
                                                         </button>
                                                         <button
                                                             className="w-full text-left px-5 py-3 flex text-sm font-bold text-foreground hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-                                                            onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); setEntryProduct({ id: product.id, name: product.name }); }}
-                                                        >
-                                                            📥 Registrar Entrada
-                                                        </button>
-                                                        <button
-                                                            className="w-full text-left px-5 py-3 flex text-sm font-bold text-foreground hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                                                             onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); setEntriesProduct({ id: product.id, name: product.name }); }}
                                                         >
                                                             📦 Entradas de este Modelo
@@ -1027,14 +1019,6 @@ export default function InventoryPage() {
                     productId={historyProduct.id}
                     productName={historyProduct.name}
                     onClose={() => setHistoryProduct(null)}
-                />
-            )}
-
-            {entryProduct && (
-                <StockEntryForm
-                    initialProductId={entryProduct.id}
-                    onClose={() => setEntryProduct(null)}
-                    onSaved={() => { setEntryProduct(null); loadInventory(); }}
                 />
             )}
 
