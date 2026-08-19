@@ -102,3 +102,9 @@ Todas las credenciales reales (SSH, DB, Resend, Skydropx, Stripe) están en **SE
 - Ruta del proyecto: `/var/www/modazapo`
 - Deploy: transferir archivos con `base64 | ssh | base64 -d` (SCP falla con rutas que tienen paréntesis como `(marketplace)`)
 - Después de transferir: `npm run build && pm2 restart modazapo`
+
+## Prisma Client tras cambios de esquema
+
+- **`npm run build` NO regenera el Prisma Client.** Solo `npm install` lo hace (por el script `postinstall: prisma generate` de `package.json`). Si el deploy es "transferir archivos → build → restart" sin `npm install`, cualquier cambio a `prisma/schema.prisma` queda con el cliente viejo en el servidor, aunque el código fuente y la base de datos ya tengan los campos nuevos.
+- Síntoma: errores tipo `Invalid prisma.<modelo>.updateMany() invocation` en campos que sí existen en la base, o campos que la UI lee como `undefined`/`null` aunque el dato sí esté guardado.
+- Después de cualquier cambio a `schema.prisma` que se despliegue, el orden correcto es: transferir → `npx prisma generate` → `npm run build` → `cp .next/standalone/server.js server.js` → `pm2 restart modazapo`.

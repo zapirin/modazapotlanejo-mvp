@@ -425,6 +425,7 @@ export default function SidebarLayout({
                               { href: '/products', label: '✏️ Gestión de Productos' },
                               { href: '/products/new', label: 'Nuevo Producto' },
                               { href: '/inventory/purchases', label: '🧾 Compras' },
+                              { href: '/inventory/payables', label: '💳 Cuentas por Pagar' },
                               { href: '/inventory/restock', label: '🔄 Resurtido desde Bodega' },
                               { href: '/inventory/brands', label: 'Marcas' },
                               { href: '/inventory/categories', label: 'Categorías' },
