@@ -347,6 +347,15 @@ export async function createStoreLocation(name: string) {
         const effectiveSellerId = await getEffectiveSellerId(user);
         if (!effectiveSellerId) throw new Error("Accediendo como visitante sin permisos.");
 
+        const seller = await prisma.user.findUnique({
+            where: { id: effectiveSellerId },
+            select: { maxLocations: true }
+        });
+        const current = await prisma.storeLocation.count({ where: { sellerId: effectiveSellerId } });
+        if (seller && current >= seller.maxLocations) {
+            throw new Error(`Tu plan permite máximo ${seller.maxLocations} locación${seller.maxLocations > 1 ? 'es' : ''}. Contacta al administrador para aumentar tu límite.`);
+        }
+
         const location = await prisma.storeLocation.create({
             data: {
                 name,
@@ -1658,13 +1667,18 @@ export async function getBrands() {
 export async function createBrand(name: string) {
     try {
         if (!name.trim()) return { success: false, error: "El nombre no puede estar vacío" };
+        const user = await getSessionUser();
         const existing = await prisma.brand.findFirst({
             where: { name: { equals: name.trim(), mode: 'insensitive' } }
         });
         if (existing) return { success: true, brand: existing };
 
         const brand = await prisma.brand.create({
-            data: { name: name.trim() }
+            data: {
+                name: name.trim(),
+                createdByName: user?.name || null,
+                reviewedAt: user?.role === 'ADMIN' ? new Date() : null
+            }
         });
         return { success: true, brand };
     } catch (e: any) {

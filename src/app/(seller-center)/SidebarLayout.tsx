@@ -367,6 +367,15 @@ export default function SidebarLayout({
                 </Link>
 
                 <Link
+                    href="/inventory/brands"
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all duration-200 group ${pathname.startsWith('/inventory/brands') ? 'font-bold bg-blue-50 text-blue-600 dark:bg-blue-900/20' : 'font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'}`}
+                >
+                    <span className="text-lg group-hover:scale-110 transition-transform shrink-0">🏷️</span>
+                    <span className={`whitespace-nowrap ${isDesktopCollapsed ? 'hidden' : 'block'}`}>Marcas</span>
+                </Link>
+
+                <Link
                     href="/settings/profile"
                     onClick={() => setSidebarOpen(false)}
                     className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all duration-200 group ${pathname.startsWith('/settings/profile') ? 'font-bold bg-blue-50 text-blue-600 dark:bg-blue-900/20' : 'font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'}`}

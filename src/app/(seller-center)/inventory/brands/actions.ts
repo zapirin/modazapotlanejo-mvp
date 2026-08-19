@@ -38,7 +38,9 @@ export async function createBrand(data: { name: string }) {
 
         await prisma.brand.create({
             data: {
-                name: data.name.trim()
+                name: data.name.trim(),
+                createdByName: user.name || null,
+                reviewedAt: new Date()
             }
         });
 
@@ -70,9 +72,31 @@ export async function updateBrand(id: string, data: { name: string }) {
         await prisma.brand.update({
             where: { id },
             data: {
-                name: data.name.trim()
+                name: data.name.trim(),
+                reviewedAt: new Date()
             }
         });
+
+        revalidatePath("/inventory/brands");
+        return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+export async function approveBrand(id: string) {
+    try {
+        const user = await getSessionUser();
+        if (user?.role !== 'ADMIN') {
+            return { success: false, error: "No tiene permisos para revisar marcas" };
+        }
+
+        const result = await prisma.brand.updateMany({
+            where: { id, reviewedAt: null },
+            data: { reviewedAt: new Date() }
+        });
+
+        if (result.count === 0) return { success: false, error: "Esta marca ya fue revisada." };
 
         revalidatePath("/inventory/brands");
         return { success: true };

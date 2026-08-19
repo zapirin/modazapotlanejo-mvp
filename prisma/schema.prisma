@@ -259,7 +259,13 @@ model Brand {
   seller   User?     @relation(fields: [sellerId], references: [id])
   products Product[]
 
+  createdAt     DateTime  @default(now())
+  createdByName String?
+  /// Nulo = alta rápida desde el formulario de producto que el admin aún no revisa.
+  reviewedAt    DateTime?
+
   @@unique([sellerId, name])
+  @@index([reviewedAt])
 }
 
 model Product {

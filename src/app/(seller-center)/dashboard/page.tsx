@@ -25,7 +25,7 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
 
     // ADMIN del marketplace: dashboard dedicado, sin datos cruzados de vendedores
     if (isAdmin) {
-        const [activeSellers, pendingApplications, sellersForSubs, marketplaceMetrics, pendingSettlements, recentOrders] = await Promise.all([
+        const [activeSellers, pendingApplications, sellersForSubs, marketplaceMetrics, pendingSettlements, recentOrders, pendingBrands] = await Promise.all([
             prisma.user.count({ where: { role: 'SELLER', isActive: true } }),
             (prisma as any).sellerApplication.count({ where: { status: 'PENDING' } }),
             (prisma.user as any).findMany({
@@ -46,6 +46,7 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
                     buyer: { select: { name: true, businessName: true } },
                 },
             }),
+            prisma.brand.count({ where: { reviewedAt: null } }),
         ]);
 
         // Compute subscription alerts
@@ -73,6 +74,7 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
                 marketplaceCommission={marketplaceMetrics?._sum?.commissionAmount || 0}
                 marketplaceNet={marketplaceMetrics?._sum?.sellerEarnings || 0}
                 pendingSettlements={pendingSettlements}
+                pendingBrands={pendingBrands}
                 recentOrders={recentOrders}
             />
         );

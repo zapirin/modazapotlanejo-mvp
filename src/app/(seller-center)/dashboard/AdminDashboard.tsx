@@ -13,6 +13,7 @@ interface AdminDashboardProps {
     marketplaceCommission: number;
     marketplaceNet: number;
     pendingSettlements: number;
+    pendingBrands: number;
     recentOrders: any[];
 }
 
@@ -27,6 +28,7 @@ export default function AdminDashboard({
     marketplaceCommission,
     marketplaceNet,
     pendingSettlements,
+    pendingBrands,
     recentOrders,
 }: AdminDashboardProps) {
     const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`;
@@ -82,6 +84,15 @@ export default function AdminDashboard({
                             <h3 className={`text-4xl font-black mt-2 tabular-nums ${pendingSettlements > 0 ? 'text-purple-500' : 'text-foreground'}`}>{pendingSettlements}</h3>
                             <p className="text-xs text-gray-400 font-medium mt-1">Órdenes por liquidar con vendedores</p>
                             <p className="text-xs font-black text-blue-500 mt-3 group-hover:underline">Ir a liquidaciones →</p>
+                        </div>
+                    </Link>
+
+                    <Link href="/inventory/brands" className="group">
+                        <div className={`bg-card border rounded-3xl p-6 shadow-sm hover:shadow-md transition ${pendingBrands > 0 ? 'border-amber-300 dark:border-amber-700' : 'border-border'}`}>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Marcas por revisar</p>
+                            <h3 className={`text-4xl font-black mt-2 tabular-nums ${pendingBrands > 0 ? 'text-amber-500' : 'text-foreground'}`}>{pendingBrands}</h3>
+                            <p className="text-xs text-gray-400 font-medium mt-1">Las crearon vendedores desde un producto</p>
+                            <p className="text-xs font-black text-blue-500 mt-3 group-hover:underline">Revisar ortografía →</p>
                         </div>
                     </Link>
 

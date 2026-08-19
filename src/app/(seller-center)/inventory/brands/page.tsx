@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Dialog } from '@headlessui/react';
-import { getBrands, createBrand, updateBrand, deleteBrand } from "./actions";
+import { getBrands, createBrand, updateBrand, deleteBrand, approveBrand } from "./actions";
 import { getSessionUser } from "@/app/actions/auth";
 
 export default function BrandsPage() {
@@ -34,9 +34,25 @@ export default function BrandsPage() {
         loadBrands();
     }, []);
 
-    const filteredBrands = brands.filter(b => 
-        b.name.toLowerCase().includes(search.toLowerCase())
-    );
+    const filteredBrands = brands
+        .filter(b => b.name.toLowerCase().includes(search.toLowerCase()))
+        .sort((a, b) => {
+            const aPend = !a.reviewedAt ? 0 : 1;
+            const bPend = !b.reviewedAt ? 0 : 1;
+            if (aPend !== bPend) return aPend - bPend;
+            return a.name.localeCompare(b.name);
+        });
+
+    const pendingCount = brands.filter(b => !b.reviewedAt).length;
+
+    const handleApprove = async (id: string) => {
+        const res = await approveBrand(id);
+        if (res.success) {
+            loadBrands();
+        } else {
+            alert(res.error || "No se pudo aprobar la marca");
+        }
+    };
 
     const openCreateModal = () => {
         setModalMode('create');
@@ -104,6 +120,17 @@ export default function BrandsPage() {
                 )}
             </div>
 
+            {user?.role === 'ADMIN' && pendingCount > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-3xl p-6">
+                    <h2 className="font-black text-amber-700 dark:text-amber-400 text-lg">
+                        {pendingCount} marca{pendingCount > 1 ? 's' : ''} por revisar
+                    </h2>
+                    <p className="text-sm text-amber-700/80 dark:text-amber-400/80 font-medium mt-1">
+                        Las crearon vendedores desde el formulario de producto. Corrige la ortografía con Editar, o dale Aprobar si está bien.
+                    </p>
+                </div>
+            )}
+
             {/* Filters */}
             <div className="bg-card p-4 rounded-3xl border border-border shadow-sm flex flex-col md:flex-row gap-4">
                 <div className="flex-1 relative">
@@ -132,30 +159,43 @@ export default function BrandsPage() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {filteredBrands.map(brand => (
-                        <div key={brand.id} className="bg-card border border-border rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all group flex flex-col justify-between">
+                        <div key={brand.id} className={`bg-card border rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all group flex flex-col justify-between ${!brand.reviewedAt ? 'border-amber-300 dark:border-amber-700' : 'border-border'}`}>
                             <div>
                                 <div className="flex justify-between items-start mb-4">
                                     <h3 className="font-black text-xl text-foreground group-hover:text-blue-600 transition-colors uppercase tracking-tight">
                                         {brand.name}
                                     </h3>
                                 </div>
-                                
+
                                 <div className="flex flex-col gap-2 items-start mb-4">
                                     <div className="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-3 py-1 rounded-full text-xs font-bold">
                                         {brand._count.products} Productos
                                     </div>
+                                    {!brand.reviewedAt && (
+                                        <div className="bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-3 py-1 rounded-full text-xs font-bold">
+                                            Por revisar{brand.createdByName ? ` · la creó ${brand.createdByName}` : ''}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
-                            
+
                             {user?.role === 'ADMIN' && (
                                 <div className="flex gap-2 mt-4 pt-4 border-t border-border/50">
-                                    <button 
+                                    {!brand.reviewedAt && (
+                                        <button
+                                            onClick={() => handleApprove(brand.id)}
+                                            className="py-2 px-4 rounded-xl text-sm font-bold text-amber-700 bg-amber-100 hover:bg-amber-500 hover:text-white dark:bg-amber-500/20 dark:text-amber-400 dark:hover:bg-amber-600 dark:hover:text-white transition"
+                                        >
+                                            Aprobar
+                                        </button>
+                                    )}
+                                    <button
                                         onClick={() => openEditModal(brand)}
                                         className="flex-1 py-2 rounded-xl text-sm font-bold bg-gray-100 dark:bg-gray-800 text-foreground hover:bg-gray-200 dark:hover:bg-gray-700 transition"
                                     >
                                         Editar
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={() => handleDelete(brand.id)}
                                         className="py-2 px-4 rounded-xl text-sm font-bold text-red-500 bg-red-50 hover:bg-red-500 hover:text-white dark:bg-red-500/10 dark:hover:bg-red-600 dark:hover:text-white transition"
                                     >
