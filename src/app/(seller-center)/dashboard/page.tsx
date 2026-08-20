@@ -164,7 +164,12 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
                     include: {
                         openedBy: { select: { id: true, name: true } }
                     }
-                } as any
+                } as any,
+                // Para que la reimpresión desde este panel sea igual al ticket
+                // original: quién cobró, el cliente real y el nivel de precio.
+                soldBy: { select: { id: true, name: true } },
+                client: { select: { id: true, name: true } },
+                priceTier: { select: { id: true, name: true } },
             }
         }),
         prisma.sale.findMany({
@@ -368,7 +373,36 @@ export default async function SellerDashboardPage({ searchParams = {} }: { searc
             name: `${i.variant.product.name} (${i.variant.color ?? ''} ${i.variant.size ?? ''})`.replace('()', '').trim(),
             quantity: i.quantity,
             price: i.price
-        }))
+        })),
+        // Forma exacta que espera <SaleTicket>, para reimprimir igual al
+        // ticket original — no se deriva de `cart`, que ya fusionó color y
+        // talla en un solo texto.
+        createdAt: sale.createdAt,
+        paymentSplit: sale.paymentSplit,
+        client: sale.client ? { name: sale.client.name } : null,
+        paymentMethod: sale.paymentMethod ? { name: sale.paymentMethod.name } : null,
+        priceTier: (sale as any).priceTier ? { name: (sale as any).priceTier.name } : null,
+        soldBy: (sale as any).soldBy ? { name: (sale as any).soldBy.name } : null,
+        cashSession: (sale as any).cashSession?.openedBy
+            ? { openedBy: { name: (sale as any).cashSession.openedBy.name } }
+            : null,
+        salesperson: sale.salesperson ? { name: sale.salesperson.name } : null,
+        location: sale.location ? {
+            name: sale.location.name,
+            address: sale.location.address,
+            ticketHeader: sale.location.ticketHeader,
+            ticketFooter: sale.location.ticketFooter,
+        } : null,
+        items: sale.items.map((i: any) => ({
+            id: i.id,
+            quantity: i.quantity,
+            price: i.price,
+            variant: i.variant ? {
+                size: i.variant.size,
+                color: i.variant.color,
+                product: i.variant.product ? { id: i.variant.product.id, name: i.variant.product.name } : null,
+            } : null,
+        })),
     }));
 
     const paymentMethods = await prisma.paymentMethod.findMany({

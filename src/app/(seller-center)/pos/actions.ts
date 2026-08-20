@@ -322,6 +322,8 @@ export async function getSalesBySession(sessionId: string) {
                 soldBy: { select: { id: true, name: true } },
                 salesperson: { select: { id: true, name: true } },
                 priceTier: { select: { id: true, name: true } },
+                // Respaldo del "Cajero:": `soldBy` casi nunca está lleno.
+                cashSession: { select: { openedBy: { select: { name: true } } } },
                 // paymentSplit included as scalar field automatically
             }
         });

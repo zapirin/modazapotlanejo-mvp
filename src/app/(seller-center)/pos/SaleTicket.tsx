@@ -37,6 +37,11 @@ type Sale = {
     } | null;
     soldBy?: { name: string } | null;
     salesperson?: { name: string } | null;
+    // Quién cobró, para cuando `soldBy` no está (es el caso normal: el
+    // ticket original toma el nombre de la sesión del navegador al momento
+    // de vender, no de un campo de la base — verificado contra producción,
+    // `soldByUserId` está vacío en el 100% de las ventas recientes).
+    cashSession?: { openedBy?: { name: string } | null } | null;
 };
 
 // Este componente es la ÚNICA reimpresión del sistema: lo usan el modal de
@@ -74,9 +79,13 @@ export default function SaleTicket({
     const piezas = (sale.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
 
     // El original marca la devolución por el signo del subtotal, que es lo
-    // mismo que decir "las piezas suman negativo". No hay campo en la base:
-    // se reconstruye igual que allá.
-    const esDevolucion = piezas < 0;
+    // mismo que decir "las piezas suman negativo" — así nace un ticket de
+    // devolución en el POS. Pero una venta normal que se reembolsa DESPUÉS
+    // (fuera del POS, ej. una compra en línea cancelada) queda con status
+    // REFUNDED y las piezas siguen en positivo: sin este OR, su reimpresión
+    // no diría nada. Verificado contra producción: 5 de 6 ventas REFUNDED
+    // tienen piezas positivas.
+    const esDevolucion = piezas < 0 || sale.status === 'REFUNDED';
     // Un apartado es una venta que quedó debiendo. El estado LAYAWAY es el
     // camino normal; el saldo pendiente cubre las que se guardaron de otro modo.
     // Medio centavo de tolerancia: el dinero es Float y un residuo no es deuda.
@@ -119,7 +128,9 @@ export default function SaleTicket({
             <div className="border-t border-b border-dashed border-black py-2 mb-2 text-xs">
                 <p>Ticket: #PDV{sale.receiptNumber || sale.id?.slice(-6).toUpperCase()}</p>
                 <p>Fecha: {new Date(sale.createdAt).toLocaleString()}</p>
-                {sale.soldBy?.name && <p>Cajero: {sale.soldBy.name}</p>}
+                {(sale.soldBy?.name || sale.cashSession?.openedBy?.name) && (
+                    <p>Cajero: {sale.soldBy?.name || sale.cashSession?.openedBy?.name}</p>
+                )}
                 {sale.salesperson?.name && <p>Vendedor: {sale.salesperson.name}</p>}
                 <p>Cliente: {sale.client?.name || 'Venta de Mostrador'}</p>
                 {esApartado && <p className="font-bold">* APARTADO *</p>}

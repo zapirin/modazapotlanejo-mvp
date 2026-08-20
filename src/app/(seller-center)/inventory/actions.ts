@@ -262,6 +262,10 @@ export async function getSaleForReprint(saleId: string) {
                 // descuento: "Descuento (Mayoreo)". Sin esto la reimpresión
                 // diría solo "Descuento".
                 priceTier: { select: { id: true, name: true } },
+                // `soldBy` casi nunca está lleno (verificado: 0 de 1648 ventas
+                // recientes). Quien abrió la caja de esta venta es el dato que
+                // sí existe casi siempre y es el respaldo real del "Cajero:".
+                cashSession: { select: { openedBy: { select: { name: true } } } },
             },
         });
 

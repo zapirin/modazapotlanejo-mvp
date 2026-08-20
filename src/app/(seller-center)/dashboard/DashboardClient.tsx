@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { addLayawayPayment, deleteSale, updateSaleNotes, updateSaleDashboard } from '../products/new/actions';
+import { getStoreSettings } from '../settings/actions';
+import SaleTicket from '../pos/SaleTicket';
 import { 
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, Legend, BarChart, Bar
@@ -55,6 +57,15 @@ export default function DashboardClient({
     paymentMethods
 }: DashboardClientProps) {
     const [selectedSale, setSelectedSale] = useState<any>(null);
+    // Nombre, logo, dirección, teléfono y RFC del ticket: se piden solo la
+    // primera vez que se abre una reimpresión, no en cada carga del panel.
+    const [ticketConfig, setTicketConfig] = useState<any>(null);
+    useEffect(() => {
+        if (!selectedSale || ticketConfig) return;
+        getStoreSettings()
+            .then(res => { if (res.success) setTicketConfig(res.data); })
+            .catch(() => { /* sin configuración se imprime igual, solo sin logo */ });
+    }, [selectedSale, ticketConfig]);
     const [selectedLayaway, setSelectedLayaway] = useState<any>(null);
     const [editingSale, setEditingSale] = useState<any>(null);
     const [editNotes, setEditNotes] = useState('');
@@ -745,88 +756,16 @@ export default function DashboardClient({
                         </div>
                         
                         <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900 flex justify-center">
-                            <div id="thermal-receipt" className="bg-white text-black w-[80mm] min-h-[100mm] shadow-md p-4 flex flex-col font-mono text-sm leading-tight relative">
-                                <div className="text-center mb-4">
-                                    <h1 className="font-black text-xl mb-1">MODA ZAPOTLANEJO</h1>
-                                    <p className="text-xs">{selectedSale.locationName}</p>
-                                    <p className="text-xs">COPIA DE TICKET</p>
-                                </div>
-                                
-                                <div className="border-t border-b border-dashed border-black py-2 mb-2 text-xs">
-                                    <p>Ticket: #PDV{selectedSale.receiptNumber}</p>
-                                    <p>Fecha Original: {new Date(selectedSale.date).toLocaleString()}</p>
-                                    <p>Cajero: {selectedSale.sellerName}</p>
-                                    {selectedSale.isLayaway && <p className="font-bold">* APARTADO *</p>}
-                                    {selectedSale.isReturn && <p className="font-bold">* DEVOLUCIÓN *</p>}
-                                </div>
-
-                                <table className="w-full text-xs text-left mb-2">
-                                    <thead>
-                                        <tr className="border-b border-black">
-                                            <th className="py-1 w-8">Cant</th>
-                                            <th className="py-1 text-left">Desc</th>
-                                            <th className="py-1 text-right">Imp</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {selectedSale.cart.map((item: any, idx: number) => {
-                                            const total = item.price * item.quantity;
-                                            return (
-                                                <tr key={idx} className="align-top">
-                                                    <td className="py-1">{item.quantity}</td>
-                                                    <td className="py-1 break-words pr-1">{item.name} <br/><span className="text-[10px]">${item.price.toFixed(2)}</span></td>
-                                                    <td className="py-1 text-right">${total.toFixed(2)}</td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-
-                                {selectedSale.discount > 0 && (
-                                    <div className="flex justify-between items-center text-xs mb-1">
-                                        <span>Subtotal:</span>
-                                        <span>${selectedSale.subtotal.toFixed(2)}</span>
-                                    </div>
-                                )}
-                                {selectedSale.discount > 0 && (
-                                    <div className="flex justify-between items-center text-xs mb-2">
-                                        <span>Descuento:</span>
-                                        <span>-${selectedSale.discount.toFixed(2)}</span>
-                                    </div>
-                                )}
-
-                                <div className="flex justify-between items-center font-black text-lg border-t border-black pt-2 mb-2">
-                                    <span>TOTAL:</span>
-                                    <span>${selectedSale.total.toFixed(2)}</span>
-                                </div>
-
-                                {selectedSale.isLayaway && (
-                                    <>
-                                        <div className="flex justify-between items-center text-xs mt-2 border-t border-black pt-1">
-                                            <span>Enganche:</span>
-                                            <span>${(selectedSale.amountPaid || 0).toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-xs">
-                                            <span>Resta por pagar:</span>
-                                            <span className="font-bold">${(selectedSale.balance || 0).toFixed(2)}</span>
-                                        </div>
-                                        {selectedSale.dueDate && (
-                                            <div className="flex justify-between items-center text-[10px] mt-1 text-gray-700">
-                                                <span>Vence:</span>
-                                                <span>{new Date(selectedSale.dueDate).toLocaleDateString()}</span>
-                                            </div>
-                                        )}
-                                    </>
-                                )}
-
-                                <div className="text-xs mb-4 mt-2">
-                                    <p>{selectedSale.isLayaway ? 'Abono Registrado vía:' : 'Pago:'} {selectedSale.paymentMethodName}</p>
-                                </div>
-
-                                <div className="text-center text-[10px] mt-auto border-t border-dashed border-black pt-4">
-                                    <p>¡GRACIAS POR SU COMPRA!</p>
-                                </div>
-                            </div>
+                            <SaleTicket
+                                sale={selectedSale}
+                                elementId="thermal-receipt"
+                                isReprint
+                                logoUrl={ticketConfig?.logoUrl}
+                                storeName={ticketConfig?.storeName}
+                                address={ticketConfig?.address}
+                                phone={ticketConfig?.phone}
+                                taxId={ticketConfig?.taxId}
+                            />
                         </div>
 
                         <div className="p-4 bg-card border-t border-border flex gap-3 rounded-b-3xl">
