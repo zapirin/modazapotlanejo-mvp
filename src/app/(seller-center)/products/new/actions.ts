@@ -7,6 +7,8 @@ import { getSessionUser } from '@/app/actions/auth';
 import { sendLowInventoryAlert, sendDigitalTicketEmail } from "@/lib/email/templates";
 import { earnPoints, redeemPoints, pointsToMXN, getProgram, revertLoyaltyMovements } from "@/lib/loyalty";
 import { postProductToSocialMedia } from "@/lib/socialMedia";
+import { getBrands as getBrandsCanonical } from "@/app/(seller-center)/inventory/brands/actions";
+import { getCategories as getCategoriesCanonical, createSubcategory as createSubcategoryCanonical } from "@/app/(seller-center)/inventory/categories/actions";
 
 // ---------------------------------------------------------------------------
 // HELPER: Resolver el sellerId efectivo para cajeros
@@ -1603,18 +1605,11 @@ export async function deletePaymentMethod(id: string) {
     }
 }
 
+// Delega a la única implementación (Ajustes → Categorías), para no tener dos
+// copias de la misma consulta que alguien corrija por separado.
 export async function getCategories() {
     try {
-        const categories = await prisma.category.findMany({
-            include: { subcategories: true },
-            orderBy: { name: 'asc' }
-        });
-        const seen = new Set();
-        return categories.filter(cat => {
-            if (seen.has(cat.name)) return false;
-            seen.add(cat.name);
-            return true;
-        });
+        return await getCategoriesCanonical();
     } catch (error) {
         return [];
     }
@@ -1654,11 +1649,11 @@ export async function getPOSCategories() {
     }
 }
 
+// Delega a la única implementación (Ajustes → Marcas), para no tener dos
+// copias de la misma consulta que alguien corrija por separado.
 export async function getBrands() {
     try {
-        return await prisma.brand.findMany({
-            orderBy: { name: 'asc' }
-        });
+        return await getBrandsCanonical();
     } catch (error) {
         return [];
     }
@@ -1686,35 +1681,20 @@ export async function createBrand(name: string) {
     }
 }
 
+// Delega el alta a la única implementación (Ajustes → Categorías): el
+// permiso de admin y la regla de duplicados viven ahí. Aquí solo se traduce
+// el slug de la categoría a su id, y "ya existe" se trata como éxito — el
+// vendedor solo quería usar esa subcategoría, no le importa si ya estaba.
 export async function createSubcategory(name: string, categorySlug: string) {
     try {
-        const user = await getSessionUser();
-        if (user?.role !== 'ADMIN') return { success: false, error: "No tienes permisos para realizar esta acción" };
-
         if (!name.trim() || !categorySlug) return { success: false, error: "Nombre y Categoría requeridos" };
 
-        let category = await prisma.category.findUnique({ where: { slug: categorySlug } });
-        if (!category) {
-            category = await prisma.category.create({
-                data: { name: categorySlug.charAt(0).toUpperCase() + categorySlug.slice(1), slug: categorySlug }
-            });
-        }
+        const category = await prisma.category.findUnique({ where: { slug: categorySlug } });
+        if (!category) return { success: false, error: "Categoría no encontrada." };
 
-        const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        const existing = await prisma.subcategory.findFirst({
-            where: { slug, categoryId: category.id }
-        });
-
-        if (existing) return { success: true, subcategory: existing };
-
-        const subcategory = await prisma.subcategory.create({
-            data: {
-                name: name.trim(),
-                slug,
-                categoryId: category.id
-            }
-        });
-        return { success: true, subcategory };
+        const res: any = await createSubcategoryCanonical({ name: name.trim(), categoryId: category.id });
+        if (!res.success && res.subcategory) return { success: true, subcategory: res.subcategory };
+        return res;
     } catch (e: any) {
         return { success: false, error: e.message };
     }

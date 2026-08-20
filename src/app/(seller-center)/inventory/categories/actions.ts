@@ -136,9 +136,12 @@ export async function createSubcategory(data: { name: string, categoryId: string
             }
         });
 
-        if (existing) return { success: false, error: "Ya existe esta subcategoría con este nombre en esta categoría" };
+        // Se devuelve la existente junto con el error: el formulario de
+        // producto la usa para tratar "ya existe" como éxito, sin repetir
+        // aquí la búsqueda.
+        if (existing) return { success: false, error: "Ya existe esta subcategoría con este nombre en esta categoría", subcategory: existing };
 
-        await prisma.subcategory.create({
+        const subcategory = await prisma.subcategory.create({
             data: {
                 name: data.name.trim(),
                 slug: tempSlug,
@@ -147,7 +150,7 @@ export async function createSubcategory(data: { name: string, categoryId: string
         });
 
         revalidatePath("/inventory/categories");
-        return { success: true };
+        return { success: true, subcategory };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
