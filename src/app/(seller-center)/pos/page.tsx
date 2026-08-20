@@ -9,6 +9,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { searchProducts, getPriceTiers, getPaymentMethods, getPOSCategories, getProductsByCategory, getAllPOSProducts, processSale, getSuspendedSales, suspendSale, deleteSuspendedSale, createLayaway, getSaleById, updateSale, sendDigitalTicketAction } from '../products/new/actions';
 import { getCurrentCashSession, openCashSession, addCashMovement, closeCashSession, createTransfer, getAllowedLocations, checkSellerPOSAccess, getSalesBySession, getSalespersons, getTransferById } from './actions';
 import TransferTicket from './TransferTicket';
+import SaleTicket from './SaleTicket';
 import { getStoreSettings, getLocationsSettings, getRequireSalesperson } from '../settings/actions';
 import { createClient, searchClients, getClientById } from '../clients/actions';
 import { getLoyaltyForPosClient } from '@/app/actions/loyalty';
@@ -4375,70 +4376,16 @@ function POSContent() {
                         {reprintSale ? (
                             <div className="flex flex-col flex-1 overflow-hidden">
                                 <div className="flex-1 overflow-y-auto p-6 bg-gray-100 dark:bg-gray-900 flex justify-center">
-                                    <div id="reprint-receipt" className="bg-white text-black w-[80mm] min-h-[100mm] shadow-md p-4 flex flex-col font-mono text-sm leading-tight shrink-0">
-                                        <div className="text-center mb-4 flex flex-col items-center">
-                                            {globalConfig?.logoUrl ? (
-                                                <img src={globalConfig.logoUrl} alt="Logo" className="h-16 object-contain mb-2 grayscale" />
-                                            ) : (
-                                                <h1 className="font-black text-xl mb-1 uppercase">
-                                                    {reprintSale.location?.name || globalConfig?.storeName || 'PUNTO DE VENTA'}
-                                                </h1>
-                                            )}
-                                            {globalConfig?.logoUrl && reprintSale.location?.name && (
-                                                <h2 className="font-bold text-sm uppercase mb-1">{reprintSale.location.name}</h2>
-                                            )}
-                                            {reprintSale.location?.ticketHeader && <p className="text-xs font-bold mt-1">{reprintSale.location.ticketHeader}</p>}
-                                            <p className="text-xs">{reprintSale.location?.address || globalConfig?.address || 'Zapotlanejo, Jalisco'}</p>
-                                        </div>
-                                        <hr className="border-dashed border-gray-400 my-2" />
-                                        <div className="flex justify-between text-xs">
-                                            <span>REIMPRESIÓN</span>
-                                            <span className="font-bold">Ticket: #PDV{reprintSale.receiptNumber || reprintSale.id?.slice(-6).toUpperCase()}</span>
-                                        </div>
-                                        <div className="text-xs mb-1">{new Date(reprintSale.createdAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</div>
-                                        {reprintSale.client?.name && <div className="text-xs mb-1">Cliente: {reprintSale.client.name}</div>}
-                                        <hr className="border-dashed border-gray-400 my-2" />
-                                        <table className="w-full text-xs mb-2">
-                                            <thead><tr className="border-b border-gray-300"><th className="text-left pb-1">Artículo</th><th className="text-center pb-1">Cant</th><th className="text-right pb-1">Importe</th></tr></thead>
-                                            <tbody>
-                                                {reprintSale.items?.map((item: any, idx: number) => (
-                                                    <tr key={idx} className="border-b border-dashed border-gray-200">
-                                                        <td className="py-1 pr-1">
-                                                            <span>{item.variant?.product?.name || 'Producto'}</span>
-                                                            {(item.variant?.size || item.variant?.color) && (
-                                                                <div className="text-[9px] text-gray-500">{[item.variant.color, item.variant.size].filter(Boolean).join(' / ')}</div>
-                                                            )}
-                                                        </td>
-                                                        <td className="text-center py-1">{item.quantity}</td>
-                                                        <td className="text-right py-1">${(item.price * item.quantity).toFixed(2)}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                        <hr className="border-dashed border-gray-400 my-1" />
-                                        {reprintSale.discount > 0 && (
-                                            <div className="flex justify-between text-xs"><span>Descuento</span><span>-${reprintSale.discount.toFixed(2)}</span></div>
-                                        )}
-                                        <div className="flex justify-between font-black text-base mt-1"><span>TOTAL</span><span>${reprintSale.total.toFixed(2)}</span></div>
-                                        {(() => {
-                                            const split = reprintSale.paymentSplit ? (() => { try { return JSON.parse(reprintSale.paymentSplit); } catch { return null; } })() : null;
-                                            if (split?.length > 0) {
-                                                return split.map((p: any, i: number) => (
-                                                    <div key={i} className="text-xs mt-0.5">Pago {i + 1}: {p.method} — ${p.amount.toFixed(2)}</div>
-                                                ));
-                                            }
-                                            return reprintSale.paymentMethod?.name
-                                                ? <div className="text-xs mt-1">Pago: {reprintSale.paymentMethod.name}{reprintSale.amountPaid ? ` — $${reprintSale.amountPaid.toFixed(2)}` : ''}</div>
-                                                : null;
-                                        })()}
-                                        {(reprintSale.amountPaid || 0) > reprintSale.total && (
-                                            <div className="text-xs">Cambio: ${((reprintSale.amountPaid || 0) - reprintSale.total).toFixed(2)}</div>
-                                        )}
-                                        {reprintSale.location?.ticketFooter && (
-                                            <><hr className="border-dashed border-gray-400 my-2" /><p className="text-xs text-center">{reprintSale.location.ticketFooter}</p></>
-                                        )}
-                                        <p className="text-[9px] text-center text-gray-400 mt-3">*** REIMPRESIÓN ***</p>
-                                    </div>
+                                    <SaleTicket
+                                        sale={reprintSale}
+                                        elementId="reprint-receipt"
+                                        isReprint
+                                        logoUrl={globalConfig?.logoUrl}
+                                        storeName={globalConfig?.storeName}
+                                        address={globalConfig?.address}
+                                        phone={globalConfig?.phone}
+                                        taxId={globalConfig?.taxId}
+                                    />
                                 </div>
                                 <div className="p-4 border-t border-border bg-card flex gap-3 shrink-0">
                                     <button

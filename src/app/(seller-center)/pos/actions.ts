@@ -316,6 +316,12 @@ export async function getSalesBySession(sessionId: string) {
                 paymentMethod: { select: { id: true, name: true } },
                 client: { select: { id: true, name: true } },
                 location: { select: { id: true, name: true, address: true, ticketHeader: true, ticketFooter: true } },
+                // Los tickets del día se reimprimen con el mismo componente que
+                // el ticket original, que imprime cajero, vendedor de piso y el
+                // nombre del nivel de precio junto al descuento.
+                soldBy: { select: { id: true, name: true } },
+                salesperson: { select: { id: true, name: true } },
+                priceTier: { select: { id: true, name: true } },
                 // paymentSplit included as scalar field automatically
             }
         });

@@ -258,6 +258,10 @@ export async function getSaleForReprint(saleId: string) {
                 location: { select: { id: true, name: true, address: true, ticketHeader: true, ticketFooter: true } },
                 soldBy: { select: { id: true, name: true } },
                 salesperson: { select: { id: true, name: true } },
+                // El ticket original imprime el nombre del nivel junto al
+                // descuento: "Descuento (Mayoreo)". Sin esto la reimpresión
+                // diría solo "Descuento".
+                priceTier: { select: { id: true, name: true } },
             },
         });
 

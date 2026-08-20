@@ -79,6 +79,9 @@ export default function SaleTicketModal({
                         isReprint
                         logoUrl={config?.logoUrl}
                         storeName={config?.storeName}
+                        address={config?.address}
+                        phone={config?.phone}
+                        taxId={config?.taxId}
                     />
                 </div>
                 <div className="p-4 bg-card border-t border-border flex gap-3 rounded-b-3xl">
