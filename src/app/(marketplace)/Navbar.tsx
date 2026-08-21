@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
@@ -35,6 +35,25 @@ export default function Navbar({
     const [isDark, setIsDark] = useState(false);
     const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
     const [expandedNavCategories, setExpandedNavCategories] = useState<Record<string, boolean>>({});
+    const desktopNavRef = useRef<HTMLDivElement>(null);
+
+    // Cierra Categorías/Marcas al tocar o hacer clic fuera. Sin esto, el menú
+    // solo se cerraba con `onMouseLeave`, que no existe en pantallas táctiles:
+    // en una tablet se quedaba abierto para siempre tras el primer toque.
+    useEffect(() => {
+        if (!activeDropdown) return;
+        const cerrarSiEsAfuera = (e: MouseEvent | TouchEvent) => {
+            if (desktopNavRef.current && !desktopNavRef.current.contains(e.target as Node)) {
+                setActiveDropdown(null);
+            }
+        };
+        document.addEventListener('mousedown', cerrarSiEsAfuera);
+        document.addEventListener('touchstart', cerrarSiEsAfuera);
+        return () => {
+            document.removeEventListener('mousedown', cerrarSiEsAfuera);
+            document.removeEventListener('touchstart', cerrarSiEsAfuera);
+        };
+    }, [activeDropdown]);
 
     useEffect(() => {
         // Check initial state from localStorage or DOM
@@ -149,7 +168,7 @@ export default function Navbar({
                     </Link>
 
                     {/* Desktop Nav */}
-                    <div className="hidden lg:flex items-center gap-6">
+                    <div ref={desktopNavRef} className="hidden lg:flex items-center gap-6">
                         {navLinks.map((link) => (
                             <div key={link.name} className="relative">
                                 {link.isDropdown ? (
